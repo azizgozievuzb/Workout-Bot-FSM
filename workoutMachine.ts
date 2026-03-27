@@ -10,8 +10,8 @@ export const workoutFlowMachine = createMachine({
   context: {
     difficulty: null as 'EASY' | 'MEDIUM' | 'HARD' | null,
     currentExerciseId: null as number | null,
-    hasDoneToday: false, // Флаг из БД
-    aiScore: 0, // Оценка ИИ (0-100%)
+    hasDoneToday: false,
+    aiScore: 0,
     starsEarned: 0
   },
   states: {
@@ -21,7 +21,6 @@ export const workoutFlowMachine = createMachine({
       }
     },
 
-    // 1. Проверка лимита: Можно ли тренироваться сегодня?
     checkDailyLimit: {
       always: [
         { target: 'alreadyDone', guard: ({ context }: any) => context.hasDoneToday },
@@ -29,7 +28,6 @@ export const workoutFlowMachine = createMachine({
       ]
     },
 
-    // 2. Лимит исчерпан: Показываем факт и блокируем вход
     alreadyDone: {
       on: {
         GET_INTERESTING_FACT: {
@@ -40,7 +38,6 @@ export const workoutFlowMachine = createMachine({
       }
     },
 
-    // 3. Выбор сложности: Кнопки 🟢🟡🔴
     selectDifficulty: {
       on: {
         CHOOSE_EASY: {
@@ -58,20 +55,44 @@ export const workoutFlowMachine = createMachine({
       }
     },
 
-    // 4. Демонстрация задания (Текст + GIF)
+    // 4. Показ упражнения + Таймер на раздумья (15 сек)
     showExercise: {
+      after: {
+        15000: 'nudgeUser' // Если через 15 сек не нажала "Готова"
+      },
       on: {
         I_READY: 'waitForProof'
       }
     },
 
-    // 5. ОЖИДАНИЕ ПРУФА: Бот ждет видео (до 1 мин)
+    // 4a. Подгонялка (если засмотрелась на видео)
+    nudgeUser: {
+      entry: 'sendHurryUpMessage',
+      on: {
+        I_READY: 'waitForProof'
+      }
+    },
+
+    // 5. ОЖИДАНИЕ ПРУФА: Таймер на запись (60-120 сек)
     waitForProof: {
+      entry: 'startSubmissionTimer',
+      after: {
+        120000: 'submissionTimeout' // 2 минуты на съемку и загрузку
+      },
       on: {
         RECEIVE_VIDEO: {
           target: 'aiEvaluation',
           actions: 'saveVideoId'
         }
+      }
+    },
+
+    // 5a. Время вышло (не успела отправить)
+    submissionTimeout: {
+      entry: 'sendSlowpokeMessage',
+      on: {
+        RETRY: 'showExercise',
+        CANCEL: 'idle'
       }
     },
 
@@ -83,11 +104,11 @@ export const workoutFlowMachine = createMachine({
           target: 'rewardCalculations',
           actions: assign({ aiScore: ({ event }: any) => event.output.score })
         },
-        onError: 'rewardCalculations' // Если ИИ упал, все равно даем базу
+        onError: 'rewardCalculations'
       }
     },
 
-    // 7. РАСЧЕТ НАГРАД: Начисление Звезд + Бонусов
+    // 7. РАСЧЕТ НАГРАД
     rewardCalculations: {
       entry: [
         'calculateBaseStars',
@@ -96,7 +117,7 @@ export const workoutFlowMachine = createMachine({
       always: 'showFinalSuccess'
     },
 
-    // 8. ФИНАЛ: Салют, комплименты, обновление Огонька 🔥
+    // 8. ФИНАЛ
     showFinalSuccess: {
       entry: 'updateUserStreak',
       on: {
@@ -105,4 +126,5 @@ export const workoutFlowMachine = createMachine({
     }
   }
 });
+
 
