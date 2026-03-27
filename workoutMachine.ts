@@ -1,8 +1,8 @@
 import { createMachine, assign } from 'xstate';
 
 /**
- * WorkoutFlow Machine (PRO Mini App - Offline Stable):
- * Архитектура без лагов. Загрузка в начале, Вердикт в конце.
+ * WorkoutFlow Machine (PRO Mini App - Resilience Edition):
+ * Архитектура со "щитом" от звонков и не затухающим экраном.
  */
 export const workoutFlowMachine = createMachine({
   id: 'WorkoutFlow',
@@ -10,11 +10,10 @@ export const workoutFlowMachine = createMachine({
   context: {
     difficulty: null as 'LIGHT' | 'STRONG' | 'GOD_MODE' | null,
     exercisesInRound: [] as any[],
-    currentRound: 1,
-    totalRounds: 2,
     currentIndex: 0,
     hasDoneToday: false,
-    starsAccumulated: 0
+    starsAccumulated: 0,
+    pausedFromState: '' // Запоминаем, откуда ушли на паузу
   },
   states: {
     idle: {
@@ -40,8 +39,9 @@ export const workoutFlowMachine = createMachine({
       }
     },
 
-    // 1. ЗАГРУЗКА (Предварительная): Скачиваем всё видео в кэш телефона
+    // 1. ПОДГОТОВКА И ПРАВА: Запрос Камеры + Включение WakeLock (Экран не гаснет)
     preloading: {
+      entry: ['requestCameraPermissions', 'enableWakeLock'], 
       invoke: {
         src: 'preloadMediaAndScenarios',
         onDone: 'preparationStep',
@@ -49,60 +49,67 @@ export const workoutFlowMachine = createMachine({
       }
     },
 
-    // -----------------------------------------------------
-    // ЛОКАЛЬНЫЙ ЦИКЛ ПЕРЕКЛЮЧЕНИЙ (Работает без интернета!)
-    // -----------------------------------------------------
+    // --- ЛОКАЛЬНЫЙ ЦИКЛ С ГЛОБАЛЬНОЙ ПАУЗОЙ ---
 
     preparationStep: {
-      after: {
-        10000: 'activeWorkout'
-      },
-      on: { READY: 'activeWorkout' }
+      after: { 10000: 'activeWorkout' },
+      on: { 
+        READY: 'activeWorkout',
+        APP_MINIMIZED: { target: 'globalPaused', actions: assign({ pausedFromState: 'preparationStep' }) }
+      }
     },
 
     activeWorkout: {
       entry: 'startLocalRecording',
-      after: {
-        // Таймер берется из загруженного сценария (например 60000ms или 240000ms)
-        EXERCISE_DURATION: 'restPhase'
-      },
-      on: { ABORT: 'selectDifficulty' }
+      after: { EXERCISE_DURATION: 'restPhase' },
+      on: { 
+        ABORT: 'selectDifficulty',
+        APP_MINIMIZED: { target: 'globalPaused', actions: assign({ pausedFromState: 'activeWorkout' }) }
+      }
     },
 
     restPhase: {
       entry: 'stopLocalRecording',
-      after: {
-        30000: 'checkNext'
-      },
-      on: { SKIP: 'checkNext' }
+      after: { 30000: 'checkNext' },
+      on: { 
+        SKIP: 'checkNext',
+        APP_MINIMIZED: { target: 'globalPaused', actions: assign({ pausedFromState: 'restPhase' }) }
+      }
+    },
+
+    // 2. ГЛОБАЛЬНАЯ ПАУЗА (Срабатывает при звонке или сворачивании)
+    globalPaused: {
+      entry: 'pauseAllMedia',
+      on: {
+        RESUME: [
+          { target: 'preparationStep', guard: ({ context }: any) => context.pausedFromState === 'preparationStep' },
+          { target: 'activeWorkout', guard: ({ context }: any) => context.pausedFromState === 'activeWorkout' },
+          { target: 'restPhase', guard: ({ context }: any) => context.pausedFromState === 'restPhase' }
+        ]
+      }
     },
 
     checkNext: {
       always: [
-        // Еще есть упражнения? -> назад к подготовке
         { target: 'preparationStep', guard: 'hasMoreExercises' },
-        // Все сделано? -> Кнопка "ЗАКОНЧИТЬ ТРЕНИРОВКУ"
         { target: 'awaitingFinalClick' }
       ]
     },
-
-    // -----------------------------------------------------
-    // ФИНАЛЬНАЯ СТАДИЯ (Когда она нажала "Законить")
-    // -----------------------------------------------------
 
     awaitingFinalClick: {
       on: { FINISH_WORKOUT: 'verdictProcessing' }
     },
 
+    // 3. ФИНАЛ: Выключаем WakeLock (Экран теперь может гаснуть)
     verdictProcessing: {
-      description: 'Экран: "Подожди вердикта, выкладываем видео и зовем ИИ..."',
+      exit: 'disableWakeLock',
       invoke: {
-        src: 'uploadAndAnalyzeProcess', // Загрузка всех видео + Gemini API
+        src: 'uploadAndAnalyzeProcess',
         onDone: {
           target: 'success',
           actions: assign({ starsAccumulated: ({ event }: any) => event.output.stars })
         },
-        onError: 'success' // Даже если ошибка - даем базу
+        onError: 'success'
       }
     },
 
@@ -112,3 +119,4 @@ export const workoutFlowMachine = createMachine({
     }
   }
 });
+
