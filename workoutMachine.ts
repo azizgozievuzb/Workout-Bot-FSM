@@ -1,25 +1,25 @@
 import { createMachine, assign } from 'xstate';
 
 /**
- * WorkoutFlow Machine:
- * Многоуровневый цикл тренировки (Сессия из нескольких упражнений)
+ * WorkoutFlow Machine (PRO Mini App Edition):
+ * Блюпринт для 35-минутной тренировки с кругами и авто-камерой.
  */
 export const workoutFlowMachine = createMachine({
   id: 'WorkoutFlow',
   initial: 'idle',
   context: {
-    difficulty: null as 'EASY' | 'MEDIUM' | 'HARD' | null,
-    exercisesLeft: 3, // Количество упражнений в сессии (например, 3)
+    difficulty: null as 'LIGHT' | 'STRONG' | 'GOD_MODE' | null,
+    roundsCount: 2, // Количество кругов (например, 2 круга)
+    currentRound: 1,
+    exercisesInRound: [] as any[], // Список упражнений для текущей сложности
     currentExerciseIndex: 0,
-    aiScore: 0,
+    isMirrorModeOn: true, // Фронталка всегда включена в UI
     totalStars: 0,
     hasDoneToday: false
   },
   states: {
     idle: {
-      on: {
-        USER_CLICKS_START: 'checkDailyLimit'
-      }
+      on: { USER_CLICKS_START: 'checkDailyLimit' }
     },
 
     checkDailyLimit: {
@@ -30,93 +30,106 @@ export const workoutFlowMachine = createMachine({
     },
 
     alreadyDone: {
-      on: {
-        GET_INTERESTING_FACT: { target: 'alreadyDone' },
-        BACK_TO_MENU: 'idle'
+      on: { 
+        GET_FACTS: { target: 'alreadyDone' },
+        BACK: 'idle' 
       }
     },
 
+    // 1. Выбор уровня (Влияет на интенсивность и количество упражнений в 35 мин)
     selectDifficulty: {
       on: {
-        CHOOSE_EASY: { target: 'startSession', actions: assign({ difficulty: 'EASY', exercisesLeft: 3 }) },
-        CHOOSE_MEDIUM: { target: 'startSession', actions: assign({ difficulty: 'MEDIUM', exercisesLeft: 4 }) },
-        CHOOSE_HARD: { target: 'startSession', actions: assign({ difficulty: 'HARD', exercisesLeft: 5 }) }
+        CHOOSE_LIGHT: { target: 'loadSession', actions: assign({ difficulty: 'LIGHT' }) },
+        CHOOSE_STRONG: { target: 'loadSession', actions: assign({ difficulty: 'STRONG' }) },
+        CHOOSE_GOD: { target: 'loadSession', actions: assign({ difficulty: 'GOD_MODE' }) }
       }
     },
 
-    // 4. Начало сессии: Инициализация списка упражнений
-    startSession: {
-      always: 'showExercise'
+    // 2. Загрузка данных сессии из БД (список 4х минутных и 1 минутных заданий)
+    loadSession: {
+      always: 'preparationStep'
     },
 
-    // 5. Показ упражнения + ВИДИМЫЙ таймер (отправка видео-отсчета 15с)
-    showExercise: {
-      entry: 'sendVisibleCountdownVideo', // Действие: отправить кружок 15..14..13
+    // 3. ПОДГОТОВКА (10 сек): Показ превью следующего видео
+    preparationStep: {
+      entry: 'showExercisePreview',
       after: {
-        17000: 'performingSession' // Авто-переход через 17с (с запасом на прогрузку)
+        10000: 'activeExercise' // Авто-старт через 10 секунд
+      },
+      on: { SKIP_PREP: 'activeExercise' }
+    },
+
+    // 4. АКТИВНАЯ ФАЗА (Тренировка вместе с тренером)
+    // В Mini App: Видео сверху, камера снизу.
+    activeExercise: {
+      entry: 'startAutorecording', // Автоматически начинаем писать "пруф"
+      after: {
+        // Длительность берется из настроек конкретного упражнения (60 сек или 240 сек)
+        EXERCISE_DURATION: 'handleExerciseEnd'
       },
       on: {
-        I_READY: 'performingSession'
+        // Если она каким-то образом прервала видео раньше
+        STOP_MANUALLY: 'restPhase'
       }
     },
 
-    // 6. АКТИВНАЯ ФАЗА: Она выполняет упражнение вместе с видео (90 сек)
-    performingSession: {
-      description: 'Экран WebApp: сверху инструктор, снизу камера девушки',
+    handleExerciseEnd: {
+      entry: 'stopAutorecording',
+      always: 'restPhase'
+    },
+
+    // 5. ОТДЫХ (30 сек): "Спящий режим" приложения
+    restPhase: {
+      entry: 'showRestScreen',
       after: {
-        90000: 'submissionTimeout' // Если через 90с видео не получено
+        30000: 'checkNextStep'
       },
-      on: {
-        RECEIVE_VIDEO: {
-          target: 'aiEvaluation',
-          actions: 'saveVideoId'
-        }
-      }
+      on: { SKIP_REST: 'checkNextStep' }
     },
 
-    submissionTimeout: {
-      entry: 'sendSlowMsg',
-      on: { RETRY: 'showExercise', CANCEL: 'idle' }
-    },
-
-    // 7. Проверка ИИ (Проверка текущего упражнения)
-    aiEvaluation: {
-      invoke: {
-        src: 'analyzeVideoWithGemini',
-        onDone: {
-          target: 'rewardCalculations',
-          actions: assign({ aiScore: ({ event }: any) => event.output.score })
-        },
-        onError: 'rewardCalculations'
-      }
-    },
-
-    // 8. Расчет за упражнение и ПРОВЕРКА ЦИКЛА
-    rewardCalculations: {
-      entry: ['calculateStarsForStep', 'incrementExerciseIndex'],
+    // 6. ПРОВЕРКА ЦИКЛА: Круги и следующее упражнение
+    checkNextStep: {
       always: [
-        { target: 'restPhase', guard: ({ context }: any) => context.currentExerciseIndex < context.exercisesLeft },
-        { target: 'showFinalSuccess' }
+        // Еще есть задания в текущем круге
+        { 
+          target: 'preparationStep', 
+          guard: ({ context }: any) => context.currentExerciseIndex < context.exercisesInRound.length 
+        },
+        // Круг закончен, но есть следующий круг
+        { 
+          target: 'preparationStep', 
+          guard: ({ context }: any) => context.currentRound < context.roundsCount,
+          actions: 'startNextRound' 
+        },
+        // Вся тренировка (35 мин) окончена
+        { target: 'uploadResults' }
       ]
     },
 
-    // 9. ОТДЫХ: Короткая пауза между упражнениями (например, 30 сек)
-    restPhase: {
-      after: {
-        30000: 'showExercise'
-      },
-      on: {
-        SKIP_REST: 'showExercise'
+    // 7. ЗАГРУЗКА ОТЧЕТОВ И АНАЛИЗ
+    uploadResults: {
+      invoke: {
+        src: 'uploadVideoSnippets',
+        onDone: 'aiFinalEvaluation',
+        onError: 'showFinalSuccess'
       }
     },
 
-    // 10. ФИНАЛ: Общие итоги за все упражнения сразу
+    aiFinalEvaluation: {
+      invoke: {
+        src: 'analyzeFullSessionWithGemini',
+        onDone: 'showFinalSuccess'
+      }
+    },
+
+    // 8. ИТОГИ: Начисление наград и комплименты
     showFinalSuccess: {
       entry: 'updateUserStreakAndLeague',
       on: { CLOSE: 'idle' }
     }
   }
 });
+
 
 
 
