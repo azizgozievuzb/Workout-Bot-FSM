@@ -1,61 +1,108 @@
-import { createMachine } from 'xstate';
+import { createMachine, assign } from 'xstate';
 
-export const workoutMachine = createMachine({
-  id: 'WorkoutMachine',
+/**
+ * WorkoutFlow Machine:
+ * Основной игровой цикл тренировки (Блюпринт)
+ */
+export const workoutFlowMachine = createMachine({
+  id: 'WorkoutFlow',
   initial: 'idle',
+  context: {
+    difficulty: null as 'EASY' | 'MEDIUM' | 'HARD' | null,
+    currentExerciseId: null as number | null,
+    hasDoneToday: false, // Флаг из БД
+    aiScore: 0, // Оценка ИИ (0-100%)
+    starsEarned: 0
+  },
   states: {
     idle: {
       on: {
-        START_WORKOUT: [
-          {
-            target: 'workoutBlocked',
-            guard: 'hasDoneWorkoutToday'
-          },
-          {
-            target: 'choosingDifficulty'
-          }
-        ]
+        USER_CLICKS_START: 'checkDailyLimit'
       }
     },
-    workoutBlocked: {
-      description: 'Отправляем интересный ИИ-факт про фитнес/ПП и блокируем повторный старт',
+
+    // 1. Проверка лимита: Можно ли тренироваться сегодня?
+    checkDailyLimit: {
+      always: [
+        { target: 'alreadyDone', guard: ({ context }: any) => context.hasDoneToday },
+        { target: 'selectDifficulty' }
+      ]
+    },
+
+    // 2. Лимит исчерпан: Показываем факт и блокируем вход
+    alreadyDone: {
       on: {
+        GET_INTERESTING_FACT: {
+          target: 'alreadyDone',
+          actions: 'showRandomHealthFact'
+        },
         BACK_TO_MENU: 'idle'
       }
     },
-    choosingDifficulty: {
+
+    // 3. Выбор сложности: Кнопки 🟢🟡🔴
+    selectDifficulty: {
       on: {
-        SELECT_EASY: 'showingExercise',
-        SELECT_MEDIUM: 'showingExercise',
-        SELECT_HARD: 'showingExercise'
+        CHOOSE_EASY: {
+          target: 'showExercise',
+          actions: assign({ difficulty: 'EASY' })
+        },
+        CHOOSE_MEDIUM: {
+          target: 'showExercise',
+          actions: assign({ difficulty: 'MEDIUM' })
+        },
+        CHOOSE_HARD: {
+          target: 'showExercise',
+          actions: assign({ difficulty: 'HARD' })
+        }
       }
     },
-    showingExercise: {
-      description: 'Отправка текста и GIF с сегодняшним упражнением',
+
+    // 4. Демонстрация задания (Текст + GIF)
+    showExercise: {
       on: {
-        READY_TO_PROVE: 'waitingForVideo'
+        I_READY: 'waitForProof'
       }
     },
-    waitingForVideo: {
-      description: 'Асинхронное ожидание. Бот ждет кружок или видео в Telegram',
+
+    // 5. ОЖИДАНИЕ ПРУФА: Бот ждет видео (до 1 мин)
+    waitForProof: {
       on: {
-        VIDEO_RECEIVED: 'aiEvaluation'
+        RECEIVE_VIDEO: {
+          target: 'aiEvaluation',
+          actions: 'saveVideoId'
+        }
       }
     },
+
+    // 6. ПРОВЕРКА ИИ: Gemini анализирует старания
     aiEvaluation: {
-      description: 'Google Gemini анализирует старания с видео',
-      on: {
-        EFFORT_ABOVE_50: 'successReward',
-        EFFORT_BELOW_50: 'softReward'
+      invoke: {
+        src: 'analyzeVideoWithGemini',
+        onDone: {
+          target: 'rewardCalculations',
+          actions: assign({ aiScore: ({ event }: any) => event.output.score })
+        },
+        onError: 'rewardCalculations' // Если ИИ упал, все равно даем базу
       }
     },
-    successReward: {
-      description: 'Начисляем базовые звезды + Бонус + Стрик. Выдаем комплимент.',
-      type: 'final'
+
+    // 7. РАСЧЕТ НАГРАД: Начисление Звезд + Бонусов
+    rewardCalculations: {
+      entry: [
+        'calculateBaseStars',
+        { type: 'applyAiBonus', guard: ({ context }: any) => context.aiScore >= 50 }
+      ],
+      always: 'showFinalSuccess'
     },
-    softReward: {
-      description: 'Без штрафов. Начисляем только базу и подбадриваем.',
-      type: 'final'
+
+    // 8. ФИНАЛ: Салют, комплименты, обновление Огонька 🔥
+    showFinalSuccess: {
+      entry: 'updateUserStreak',
+      on: {
+        CLOSE: 'idle'
+      }
     }
   }
 });
+
