@@ -1,25 +1,24 @@
 import { createMachine, assign } from 'xstate';
 
 /**
- * WorkoutFlow Machine (PRO Mini App Edition):
- * Блюпринт для 35-минутной тренировки с кругами и авто-камерой.
+ * WorkoutFlow Machine (PRO Mini App - Offline Stable):
+ * Архитектура без лагов. Загрузка в начале, Вердикт в конце.
  */
 export const workoutFlowMachine = createMachine({
   id: 'WorkoutFlow',
   initial: 'idle',
   context: {
     difficulty: null as 'LIGHT' | 'STRONG' | 'GOD_MODE' | null,
-    roundsCount: 2, // Количество кругов (например, 2 круга)
+    exercisesInRound: [] as any[],
     currentRound: 1,
-    exercisesInRound: [] as any[], // Список упражнений для текущей сложности
-    currentExerciseIndex: 0,
-    isMirrorModeOn: true, // Фронталка всегда включена в UI
-    totalStars: 0,
-    hasDoneToday: false
+    totalRounds: 2,
+    currentIndex: 0,
+    hasDoneToday: false,
+    starsAccumulated: 0
   },
   states: {
     idle: {
-      on: { USER_CLICKS_START: 'checkDailyLimit' }
+      on: { START: 'checkDailyLimit' }
     },
 
     checkDailyLimit: {
@@ -30,106 +29,86 @@ export const workoutFlowMachine = createMachine({
     },
 
     alreadyDone: {
-      on: { 
-        GET_FACTS: { target: 'alreadyDone' },
-        BACK: 'idle' 
-      }
+      on: { GET_FACTS: 'alreadyDone', BACK: 'idle' }
     },
 
-    // 1. Выбор уровня (Влияет на интенсивность и количество упражнений в 35 мин)
     selectDifficulty: {
       on: {
-        CHOOSE_LIGHT: { target: 'loadSession', actions: assign({ difficulty: 'LIGHT' }) },
-        CHOOSE_STRONG: { target: 'loadSession', actions: assign({ difficulty: 'STRONG' }) },
-        CHOOSE_GOD: { target: 'loadSession', actions: assign({ difficulty: 'GOD_MODE' }) }
+        CHOOSE_LIGHT: { target: 'preloading', actions: assign({ difficulty: 'LIGHT' }) },
+        CHOOSE_STRONG: { target: 'preloading', actions: assign({ difficulty: 'STRONG' }) },
+        CHOOSE_GOD: { target: 'preloading', actions: assign({ difficulty: 'GOD_MODE' }) }
       }
     },
 
-    // 2. Загрузка данных сессии из БД (список 4х минутных и 1 минутных заданий)
-    loadSession: {
-      always: 'preparationStep'
+    // 1. ЗАГРУЗКА (Предварительная): Скачиваем всё видео в кэш телефона
+    preloading: {
+      invoke: {
+        src: 'preloadMediaAndScenarios',
+        onDone: 'preparationStep',
+        onError: 'selectDifficulty'
+      }
     },
 
-    // 3. ПОДГОТОВКА (10 сек): Показ превью следующего видео
+    // -----------------------------------------------------
+    // ЛОКАЛЬНЫЙ ЦИКЛ ПЕРЕКЛЮЧЕНИЙ (Работает без интернета!)
+    // -----------------------------------------------------
+
     preparationStep: {
-      entry: 'showExercisePreview',
       after: {
-        10000: 'activeExercise' // Авто-старт через 10 секунд
+        10000: 'activeWorkout'
       },
-      on: { SKIP_PREP: 'activeExercise' }
+      on: { READY: 'activeWorkout' }
     },
 
-    // 4. АКТИВНАЯ ФАЗА (Тренировка вместе с тренером)
-    // В Mini App: Видео сверху, камера снизу.
-    activeExercise: {
-      entry: 'startAutorecording', // Автоматически начинаем писать "пруф"
+    activeWorkout: {
+      entry: 'startLocalRecording',
       after: {
-        // Длительность берется из настроек конкретного упражнения (60 сек или 240 сек)
-        EXERCISE_DURATION: 'handleExerciseEnd'
+        // Таймер берется из загруженного сценария (например 60000ms или 240000ms)
+        EXERCISE_DURATION: 'restPhase'
       },
-      on: {
-        // Если она каким-то образом прервала видео раньше
-        STOP_MANUALLY: 'restPhase'
-      }
+      on: { ABORT: 'selectDifficulty' }
     },
 
-    handleExerciseEnd: {
-      entry: 'stopAutorecording',
-      always: 'restPhase'
-    },
-
-    // 5. ОТДЫХ (30 сек): "Спящий режим" приложения
     restPhase: {
-      entry: 'showRestScreen',
+      entry: 'stopLocalRecording',
       after: {
-        30000: 'checkNextStep'
+        30000: 'checkNext'
       },
-      on: { SKIP_REST: 'checkNextStep' }
+      on: { SKIP: 'checkNext' }
     },
 
-    // 6. ПРОВЕРКА ЦИКЛА: Круги и следующее упражнение
-    checkNextStep: {
+    checkNext: {
       always: [
-        // Еще есть задания в текущем круге
-        { 
-          target: 'preparationStep', 
-          guard: ({ context }: any) => context.currentExerciseIndex < context.exercisesInRound.length 
-        },
-        // Круг закончен, но есть следующий круг
-        { 
-          target: 'preparationStep', 
-          guard: ({ context }: any) => context.currentRound < context.roundsCount,
-          actions: 'startNextRound' 
-        },
-        // Вся тренировка (35 мин) окончена
-        { target: 'uploadResults' }
+        // Еще есть упражнения? -> назад к подготовке
+        { target: 'preparationStep', guard: 'hasMoreExercises' },
+        // Все сделано? -> Кнопка "ЗАКОНЧИТЬ ТРЕНИРОВКУ"
+        { target: 'awaitingFinalClick' }
       ]
     },
 
-    // 7. ЗАГРУЗКА ОТЧЕТОВ И АНАЛИЗ
-    uploadResults: {
+    // -----------------------------------------------------
+    // ФИНАЛЬНАЯ СТАДИЯ (Когда она нажала "Законить")
+    // -----------------------------------------------------
+
+    awaitingFinalClick: {
+      on: { FINISH_WORKOUT: 'verdictProcessing' }
+    },
+
+    verdictProcessing: {
+      description: 'Экран: "Подожди вердикта, выкладываем видео и зовем ИИ..."',
       invoke: {
-        src: 'uploadVideoSnippets',
-        onDone: 'aiFinalEvaluation',
-        onError: 'showFinalSuccess'
+        src: 'uploadAndAnalyzeProcess', // Загрузка всех видео + Gemini API
+        onDone: {
+          target: 'success',
+          actions: assign({ starsAccumulated: ({ event }: any) => event.output.stars })
+        },
+        onError: 'success' // Даже если ошибка - даем базу
       }
     },
 
-    aiFinalEvaluation: {
-      invoke: {
-        src: 'analyzeFullSessionWithGemini',
-        onDone: 'showFinalSuccess'
-      }
-    },
-
-    // 8. ИТОГИ: Начисление наград и комплименты
-    showFinalSuccess: {
-      entry: 'updateUserStreakAndLeague',
+    success: {
+      entry: 'updateGlobalDatabase',
       on: { CLOSE: 'idle' }
     }
   }
 });
-
-
-
-
