@@ -1,41 +1,51 @@
 import { createMachine, assign } from 'xstate';
 
 /**
- * AdminControlMachine: Интерфейс для вас.
- * Управление видео-библиотекой и сценариями тренировок.
+ * AdminControlMachine: Суперадмин (Только вы).
+ * Управление парами, видео-библиотекой и глобальной статистикой.
  */
 export const adminMachine = createMachine({
   id: 'AdminPanel',
-  initial: 'idle',
+  initial: 'dashboard',
   context: {
-    selectedLevel: 1, // 1, 2 или 3
+    selectedLevel: 1,
     videoSlots: {
-      cardio: [null, null], // 2 постоянных кардио
-      variable: [null, null, null, null, null, null] // 6 сменных слотов
-    }
+      cardio: [null, null],
+      variable: [null, null, null, null, null, null]
+    },
+    couples: [] as any[],
+    globalStats: null as any
   },
   states: {
-    idle: {
+    // 1. ГЛАВНЫЙ ЭКРАН АДМИНА
+    dashboard: {
       on: {
-        VIEW_LEVEL: { target: 'editLevelMode', actions: assign({ selectedLevel: ({ event }: any) => event.level }) }
+        MANAGE_EXERCISES: 'selectLevel',
+        MANAGE_COUPLES: 'coupleManagement',
+        VIEW_STATS: 'globalStatistics',
+        LOGOUT: { target: '#AdminPanel', actions: 'exitToParent' }
       }
     },
 
-    // 1. РЕЖИМ РЕДАКТИРОВАНИЯ УРОВНЯ
+    // --- УПРАВЛЕНИЕ УПРАЖНЕНИЯМИ ---
+
+    // 2. Выбор уровня сложности
+    selectLevel: {
+      on: {
+        SELECT: { target: 'editLevelMode', actions: assign({ selectedLevel: ({ event }: any) => event.level }) },
+        BACK: 'dashboard'
+      }
+    },
+
+    // 3. Редактирование слотов
     editLevelMode: {
       on: {
-        // Загрузка нового видео в конкретный слот
-        UPLOAD_TO_SLOT: { target: 'uploadingVideo' },
-        
-        // Массовое обновление (перемешать)
-        SHUFFLE_EXERCISES: { target: 'idle', actions: 'shuffleVariableSlots' },
-        
+        UPLOAD_TO_SLOT: 'uploadingVideo',
         SAVE_CHANGES: 'savingToDB',
-        BACK: 'idle'
+        BACK: 'selectLevel'
       }
     },
 
-    // 2. ПРОЦЕСС ЗАГРУЗКИ В ОБЛАКО (Supabase/S3)
     uploadingVideo: {
       invoke: {
         src: 'uploadToStorage',
@@ -44,13 +54,59 @@ export const adminMachine = createMachine({
       }
     },
 
-    // 3. СОХРАНЕНИЕ В ГЛОБАЛЬНУЮ БАЗУ (Обновление сценария для Mini App)
     savingToDB: {
       invoke: {
         src: 'saveToSupabase',
-        onDone: 'idle',
+        onDone: 'dashboard',
         onError: 'editLevelMode'
       }
+    },
+
+    // --- УПРАВЛЕНИЕ ПАРАМИ ---
+
+    // 4. Список пар (Whitelist)
+    coupleManagement: {
+      invoke: {
+        src: 'fetchAllCouples',
+        onDone: {
+          target: 'coupleList',
+          actions: assign({ couples: ({ event }: any) => event.output })
+        },
+        onError: 'dashboard'
+      }
+    },
+
+    coupleList: {
+      on: {
+        ADD_COUPLE: 'addingCouple',
+        REMOVE_COUPLE: { target: 'coupleList', actions: 'removeCoupleFromList' },
+        BACK: 'dashboard'
+      }
+    },
+
+    addingCouple: {
+      on: {
+        CONFIRM: { target: 'coupleList', actions: 'appendCoupleToList' },
+        CANCEL: 'coupleList'
+      }
+    },
+
+    // --- ГЛОБАЛЬНАЯ СТАТИСТИКА ---
+
+    // 5. Обзор всех пользователей
+    globalStatistics: {
+      invoke: {
+        src: 'fetchGlobalStats',
+        onDone: {
+          target: 'showingStats',
+          actions: assign({ globalStats: ({ event }: any) => event.output })
+        },
+        onError: 'dashboard'
+      }
+    },
+
+    showingStats: {
+      on: { BACK: 'dashboard' }
     }
   }
 });

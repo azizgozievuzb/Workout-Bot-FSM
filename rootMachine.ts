@@ -1,49 +1,77 @@
 import { createMachine } from 'xstate';
 
 /**
- * RootAppMachine: Главный управляющий модуль приложения.
- * Переключает глобальные режимы: Меню, Тренировка, Магазин, Админка.
+ * RootAppMachine: Главный управляющий модуль.
+ * 3 роли: PLAYER (Игрок), RESPONSIBLE (Ответственный), ADMIN (Суперадмин).
  */
 export const rootMachine = createMachine({
   id: 'RootApp',
-  initial: 'authenticating',
+  initial: 'checkingAuth',
   states: {
-    // 1. Проверка: это Игрок или Админ?
-    authenticating: {
-      on: {
-        IS_USER: 'mainMenu',
-        IS_ADMIN: 'adminPanel'
+    // 1. Проверка: зарегистрирован ли пользователь?
+    checkingAuth: {
+      always: [
+        { target: 'adminPanel', guard: 'isAdmin' },
+        { target: 'onboarding', guard: 'isNewUser' },
+        { target: 'playerMenu', guard: 'isPlayer' },
+        { target: 'responsibleMenu', guard: 'isResponsible' }
+      ]
+    },
+
+    // 2. Первый вход: Сбор роли, имени, связка пары
+    onboarding: {
+      invoke: {
+        src: 'onboardingMachine',
+        onDone: 'checkingAuth' // После онбординга — повторная проверка роли
       }
     },
 
-    // 2. Главное меню игрока
-    mainMenu: {
+    // 3. Главное меню ИГРОКА (Девушка)
+    playerMenu: {
       on: {
         START_WORKOUT: 'workoutMode',
-        GO_SHOP: 'shopMode'
+        GO_SHOP: 'shopMode',
+        VIEW_STATS: 'playerMenu'
       }
     },
 
-    // 3. ПОДМОДУЛЬ: РЕЖИМ ТРЕНИРОВКИ (35 мин)
+    // 4. ПОДМОДУЛЬ: ТРЕНИРОВКА (35 мин)
     workoutMode: {
-      // Здесь мы вызываем (invoke) нашу WorkoutFlowMachine
+      invoke: {
+        src: 'workoutFlowMachine',
+        onDone: 'playerMenu'
+      },
       on: {
-        WORKOUT_FINISHED: 'mainMenu',
-        WORKOUT_CANCELLED: 'mainMenu'
+        WORKOUT_FINISHED: 'playerMenu',
+        WORKOUT_CANCELLED: 'playerMenu'
       }
     },
 
-    // 4. ПОДМОДУЛЬ: МАГАЗИН
+    // 5. ПОДМОДУЛЬ: МАГАЗИН
     shopMode: {
-      on: { BACK: 'mainMenu' }
+      invoke: {
+        src: 'shopMachine',
+        onDone: 'playerMenu'
+      },
+      on: { BACK: 'playerMenu' }
     },
 
-    // 5. ПОДМОДУЛЬ: АДМИН-ПАНЕЛЬ
+    // 6. Меню ОТВЕТСТВЕННОГО (Парень)
+    responsibleMenu: {
+      invoke: {
+        src: 'responsibleMachine',
+        onDone: 'responsibleMenu'
+      },
+      on: { LOGOUT: 'checkingAuth' }
+    },
+
+    // 7. СУПЕРАДМИН (Только вы)
     adminPanel: {
-      on: { 
-        LOGOUT: 'authenticating',
-        RELOAD_EXERCISES: { target: 'adminPanel', actions: 'refreshDB' }
-      }
+      invoke: {
+        src: 'adminMachine',
+        onDone: 'adminPanel'
+      },
+      on: { LOGOUT: 'checkingAuth' }
     }
   }
 });
