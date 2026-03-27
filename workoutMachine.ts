@@ -2,17 +2,18 @@ import { createMachine, assign } from 'xstate';
 
 /**
  * WorkoutFlow Machine:
- * Основной игровой цикл тренировки (Блюпринт)
+ * Многоуровневый цикл тренировки (Сессия из нескольких упражнений)
  */
 export const workoutFlowMachine = createMachine({
   id: 'WorkoutFlow',
   initial: 'idle',
   context: {
     difficulty: null as 'EASY' | 'MEDIUM' | 'HARD' | null,
-    currentExerciseId: null as number | null,
-    hasDoneToday: false,
+    exercisesLeft: 3, // Количество упражнений в сессии (например, 3)
+    currentExerciseIndex: 0,
     aiScore: 0,
-    starsEarned: 0
+    totalStars: 0,
+    hasDoneToday: false
   },
   states: {
     idle: {
@@ -30,54 +31,40 @@ export const workoutFlowMachine = createMachine({
 
     alreadyDone: {
       on: {
-        GET_INTERESTING_FACT: {
-          target: 'alreadyDone',
-          actions: 'showRandomHealthFact'
-        },
+        GET_INTERESTING_FACT: { target: 'alreadyDone' },
         BACK_TO_MENU: 'idle'
       }
     },
 
     selectDifficulty: {
       on: {
-        CHOOSE_EASY: {
-          target: 'showExercise',
-          actions: assign({ difficulty: 'EASY' })
-        },
-        CHOOSE_MEDIUM: {
-          target: 'showExercise',
-          actions: assign({ difficulty: 'MEDIUM' })
-        },
-        CHOOSE_HARD: {
-          target: 'showExercise',
-          actions: assign({ difficulty: 'HARD' })
-        }
+        CHOOSE_EASY: { target: 'startSession', actions: assign({ difficulty: 'EASY', exercisesLeft: 3 }) },
+        CHOOSE_MEDIUM: { target: 'startSession', actions: assign({ difficulty: 'MEDIUM', exercisesLeft: 4 }) },
+        CHOOSE_HARD: { target: 'startSession', actions: assign({ difficulty: 'HARD', exercisesLeft: 5 }) }
       }
     },
 
-    // 4. Показ упражнения + Таймер на раздумья (15 сек)
+    // 4. Начало сессии: Инициализация списка упражнений
+    startSession: {
+      always: 'showExercise'
+    },
+
+    // 5. Показ упражнения + ВИДИМЫЙ таймер (отправка видео-отсчета 15с)
     showExercise: {
+      entry: 'sendVisibleCountdownVideo', // Действие: отправить кружок 15..14..13
       after: {
-        15000: 'nudgeUser' // Если через 15 сек не нажала "Готова"
+        17000: 'performingSession' // Авто-переход через 17с (с запасом на прогрузку)
       },
       on: {
-        I_READY: 'waitForProof'
+        I_READY: 'performingSession'
       }
     },
 
-    // 4a. Подгонялка (если засмотрелась на видео)
-    nudgeUser: {
-      entry: 'sendHurryUpMessage',
-      on: {
-        I_READY: 'waitForProof'
-      }
-    },
-
-    // 5. ОЖИДАНИЕ ПРУФА: Таймер на запись (60-120 сек)
-    waitForProof: {
-      entry: 'startSubmissionTimer',
+    // 6. АКТИВНАЯ ФАЗА: Она выполняет упражнение вместе с видео (90 сек)
+    performingSession: {
+      description: 'Экран WebApp: сверху инструктор, снизу камера девушки',
       after: {
-        120000: 'submissionTimeout' // 2 минуты на съемку и загрузку
+        90000: 'submissionTimeout' // Если через 90с видео не получено
       },
       on: {
         RECEIVE_VIDEO: {
@@ -87,16 +74,12 @@ export const workoutFlowMachine = createMachine({
       }
     },
 
-    // 5a. Время вышло (не успела отправить)
     submissionTimeout: {
-      entry: 'sendSlowpokeMessage',
-      on: {
-        RETRY: 'showExercise',
-        CANCEL: 'idle'
-      }
+      entry: 'sendSlowMsg',
+      on: { RETRY: 'showExercise', CANCEL: 'idle' }
     },
 
-    // 6. ПРОВЕРКА ИИ: Gemini анализирует старания
+    // 7. Проверка ИИ (Проверка текущего упражнения)
     aiEvaluation: {
       invoke: {
         src: 'analyzeVideoWithGemini',
@@ -108,23 +91,32 @@ export const workoutFlowMachine = createMachine({
       }
     },
 
-    // 7. РАСЧЕТ НАГРАД
+    // 8. Расчет за упражнение и ПРОВЕРКА ЦИКЛА
     rewardCalculations: {
-      entry: [
-        'calculateBaseStars',
-        { type: 'applyAiBonus', guard: ({ context }: any) => context.aiScore >= 50 }
-      ],
-      always: 'showFinalSuccess'
+      entry: ['calculateStarsForStep', 'incrementExerciseIndex'],
+      always: [
+        { target: 'restPhase', guard: ({ context }: any) => context.currentExerciseIndex < context.exercisesLeft },
+        { target: 'showFinalSuccess' }
+      ]
     },
 
-    // 8. ФИНАЛ
-    showFinalSuccess: {
-      entry: 'updateUserStreak',
+    // 9. ОТДЫХ: Короткая пауза между упражнениями (например, 30 сек)
+    restPhase: {
+      after: {
+        30000: 'showExercise'
+      },
       on: {
-        CLOSE: 'idle'
+        SKIP_REST: 'showExercise'
       }
+    },
+
+    // 10. ФИНАЛ: Общие итоги за все упражнения сразу
+    showFinalSuccess: {
+      entry: 'updateUserStreakAndLeague',
+      on: { CLOSE: 'idle' }
     }
   }
 });
+
 
 
