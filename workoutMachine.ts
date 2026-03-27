@@ -1,122 +1,97 @@
 import { createMachine, assign } from 'xstate';
 
 /**
- * WorkoutFlow Machine (PRO Mini App - Resilience Edition):
- * Архитектура со "щитом" от звонков и не затухающим экраном.
+ * WorkoutFlow Machine (PRO Mini App - Strict Submodule):
+ * Режим "Жесткая Дисциплина". Никаких пауз. Только работа.
  */
 export const workoutFlowMachine = createMachine({
   id: 'WorkoutFlow',
   initial: 'idle',
   context: {
     difficulty: null as 'LIGHT' | 'STRONG' | 'GOD_MODE' | null,
-    exercisesInRound: [] as any[],
+    exercisesList: [] as any[], // 2 Кардио + 6 Переменных слотов
     currentIndex: 0,
     hasDoneToday: false,
-    starsAccumulated: 0,
-    pausedFromState: '' // Запоминаем, откуда ушли на паузу
+    starsAccumulated: 0
   },
   states: {
     idle: {
-      on: { START: 'checkDailyLimit' }
+      on: { START: 'loading' }
     },
 
-    checkDailyLimit: {
-      always: [
-        { target: 'alreadyDone', guard: ({ context }: any) => context.hasDoneToday },
-        { target: 'selectDifficulty' }
-      ]
-    },
-
-    alreadyDone: {
-      on: { GET_FACTS: 'alreadyDone', BACK: 'idle' }
-    },
-
-    selectDifficulty: {
-      on: {
-        CHOOSE_LIGHT: { target: 'preloading', actions: assign({ difficulty: 'LIGHT' }) },
-        CHOOSE_STRONG: { target: 'preloading', actions: assign({ difficulty: 'STRONG' }) },
-        CHOOSE_GOD: { target: 'preloading', actions: assign({ difficulty: 'GOD_MODE' }) }
-      }
-    },
-
-    // 1. ПОДГОТОВКА И ПРАВА: Запрос Камеры + Включение WakeLock (Экран не гаснет)
-    preloading: {
-      entry: ['requestCameraPermissions', 'enableWakeLock'], 
+    // 1. ЗАГРУЗКА И ПОДГОТОВКА (Оффлайн-кэш)
+    loading: {
       invoke: {
-        src: 'preloadMediaAndScenarios',
-        onDone: 'preparationStep',
-        onError: 'selectDifficulty'
+        src: 'fetchAdminScenarios',
+        onDone: {
+          target: 'activeTraining',
+          actions: assign({ exercisesList: ({ event }: any) => event.output.list })
+        },
+        onError: 'idle'
       }
     },
 
-    // --- ЛОКАЛЬНЫЙ ЦИКЛ С ГЛОБАЛЬНОЙ ПАУЗОЙ ---
-
-    preparationStep: {
-      after: { 10000: 'activeWorkout' },
-      on: { 
-        READY: 'activeWorkout',
-        APP_MINIMIZED: { target: 'globalPaused', actions: assign({ pausedFromState: 'preparationStep' }) }
-      }
-    },
-
-    activeWorkout: {
-      entry: 'startLocalRecording',
-      after: { EXERCISE_DURATION: 'restPhase' },
-      on: { 
-        ABORT: 'selectDifficulty',
-        APP_MINIMIZED: { target: 'globalPaused', actions: assign({ pausedFromState: 'activeWorkout' }) }
-      }
-    },
-
-    restPhase: {
-      entry: 'stopLocalRecording',
-      after: { 30000: 'checkNext' },
-      on: { 
-        SKIP: 'checkNext',
-        APP_MINIMIZED: { target: 'globalPaused', actions: assign({ pausedFromState: 'restPhase' }) }
-      }
-    },
-
-    // 2. ГЛОБАЛЬНАЯ ПАУЗА (Срабатывает при звонке или сворачивании)
-    globalPaused: {
-      entry: 'pauseAllMedia',
+    // 2. АКТИВНЫЙ ТРЕНИРОВОЧНЫЙ ЦИКЛ (35 МИНУТ)
+    activeTraining: {
+      initial: 'preparation',
       on: {
-        RESUME: [
-          { target: 'preparationStep', guard: ({ context }: any) => context.pausedFromState === 'preparationStep' },
-          { target: 'activeWorkout', guard: ({ context }: any) => context.pausedFromState === 'activeWorkout' },
-          { target: 'restPhase', guard: ({ context }: any) => context.pausedFromState === 'restPhase' }
-        ]
+        // ЛЮБОЕ сворачивание приложения = ОТМЕНА (без сохранения)
+        APP_MINIMIZED: 'cancelled',
+        FORCE_STOP: 'cancelled'
+      },
+      states: {
+        // Подготовка: 10 сек (Превью)
+        preparation: {
+          after: { 10000: 'active' },
+          on: { READY: 'active' }
+        },
+        // Работа: (1 мин или 4 мин) - Камера пишет всегда
+        active: {
+          entry: 'startAutorecording',
+          after: { EXERCISE_DURATION: 'rest' } 
+        },
+        // Отдых: 30 сек
+        rest: {
+          entry: 'stopAutorecording',
+          after: { 30000: 'checkNext' },
+          on: { SKIP: 'checkNext' }
+        },
+        // Цикл
+        checkNext: {
+          always: [
+            { target: 'preparation', guard: 'hasMore' },
+            { target: '#WorkoutFlow.finished' }
+          ]
+        }
       }
     },
 
-    checkNext: {
-      always: [
-        { target: 'preparationStep', guard: 'hasMoreExercises' },
-        { target: 'awaitingFinalClick' }
-      ]
+    // 3. ФИНАЛ: Остановка и Вердикт
+    finished: {
+      on: { FINISH_WORKOUT: 'verdict' }
     },
 
-    awaitingFinalClick: {
-      on: { FINISH_WORKOUT: 'verdictProcessing' }
-    },
-
-    // 3. ФИНАЛ: Выключаем WakeLock (Экран теперь может гаснуть)
-    verdictProcessing: {
-      exit: 'disableWakeLock',
+    verdict: {
       invoke: {
-        src: 'uploadAndAnalyzeProcess',
+        src: 'uploadToGeminiAI',
         onDone: {
           target: 'success',
-          actions: assign({ starsAccumulated: ({ event }: any) => event.output.stars })
+          actions: assign({ starsAccumulated: 100 }) // Пример
         },
         onError: 'success'
       }
     },
 
     success: {
-      entry: 'updateGlobalDatabase',
       on: { CLOSE: 'idle' }
+    },
+
+    // 4. ТУПИК: Проваленная тренировка (за звонок или выход)
+    cancelled: {
+      entry: 'showDisappointmentMessage',
+      on: { BACK: 'idle' }
     }
   }
 });
+
 
