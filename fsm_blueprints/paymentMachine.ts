@@ -51,22 +51,22 @@ export const paymentMachine = setup({
     // Ветка 1: Промокоды
     promoCodeInput: {
       on: {
-        TYPE_CODE: { actions: 'assignCode' },
+        TYPE_CODE: { actions: "assignCode" },
         SUBMIT_PROMO: 'validatingPromo',
         BACK: 'methodSelection'
       }
     },
     validatingPromo: {
       invoke: {
-        src: 'checkPromoInDB',
+        src: "checkPromoInDB",
         onDone: 'success',
-        onError: { target: 'promoCodeInput', actions: 'setError' }
+        onError: { target: 'promoCodeInput', actions: "setError" }
       }
     },
     // Ветка 2: HOT PAY
     waitingForHotPay: {
       on: {
-        HOTPAY_WEBHOOK_RECEIVED: { target: 'success', actions: 'assignTx' },
+        HOTPAY_WEBHOOK_RECEIVED: { target: 'success', actions: "assignTx" },
         BACK: 'methodSelection'
       }
     },

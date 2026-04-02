@@ -44,6 +44,7 @@ export const rootMachine = setup({
     logSystemError: () => console.error('Ошибка доступа к данным пользователя'),
   },
 }).createMachine({
+  /** @xstate-layout N4IgpgJg5mDOIC5QCcD2qAuBZAhgYwAsBLAOzADoiIAbMAYgGUAVAQQCUmB9FgBR4G0ADAF1EoAA6pYRDEVQkxIAB6IAzAHYALOVW69+vQBoQAT0QAmAJyCAvjeNpMuQqQqEweANakoAVVhgyACSJABmqHQQ8hSkAG6onhSO2PjEZOTuXj7+gSHhCHGoeDiy8kLC5YqS0qUKSMqIAGzmguQAHAadqsZmCI26dg7oKS7pmd4kfgHBYRGBaMjk4tQl4cgAtuTJzmluBB4TU7mzBSTxxbXllfXVMnJ1oCoIqpraHV36PU0D9iDbqa4tqgAK6ySZ0HDUADuOBMsGuEikd3kiiejXU5h0H0+pkQbUaAEZBn9hjtAWhQT4IdDYfCCaIbkjaqimuZ1ORLJyudyuV8EJYAKyqYn-UZJEFgqDUmFw-jmBmImr3FkINoE7Q8zWcvkEwSaRoi0kA9IUyXS2n8VQKkC3Zn1J6WVTkAmNV1u91unUE1RtQ1OY3iyngyEy+Gaa225X2xAE3XtbF6Al8lq2X6i3ZLFYmQIMYEAI1geGQRHEtQAwvsvObZSIqkyo488doPS3PbiEN7zOY-SMM8tYTn84Xi6X7hWDtW6RH6yjowgrOodZpveQBT2yelxLD1mASBgAGLUVBQug8FgATSwAFEAHJcBi+Mtlq8MBgIm0zh4NPqCHUCwRrmmRpiuQ8yoMgdBsFeTBsOe76RrOjbziu7wJkm7aNAKBrEiQqAQHAijpq4dZKoh34ALSaG0fLkQS+LrgGlA0GAJHIl+TyaFYOqWL6QH+iB4zZNMeSoKxdpIaoAqLu2miqKmQz8Rmpo+GJDbfuogjUe26iNJYDEgf22bILmBZFiW5aVp4qlkU8HQ6uYcn6X2267geR5QtZ7ExrGOqNJogEKb2gKGYEWC7sCh7Hp5KqEkuBLdnxQXpPIeaoDgyAQD4kUeYypFeaqGl8oKRKJRuSRwJIJDSHmtDZdFc5tFoXoaE5gI4BA6ykHVuVsTFBKWDqeqaK16Rgcg9VIXRjR8jpel2DYQA */
   id: 'rootMachine',
   initial: 'idle',
   context: {
@@ -56,21 +57,21 @@ export const rootMachine = setup({
       on: {
         START_APP: {
           target: 'checkingUserInfo',
-          actions: 'saveUserId'
+          actions: "saveUserId"
         }
       }
     },
     // Проверка Роли + Статуса Подписки за один запрос
     checkingUserInfo: {
       invoke: {
-        src: 'fetchUserInfo', // Запрос в БД (Роль + Подписка)
+        src: "fetchUserInfo", // Запрос в БД (Роль + Подписка)
         onDone: {
           target: 'routing',
-          actions: 'saveRoleAndSubscription'
+          actions: "saveRoleAndSubscription"
         },
         onError: {
           target: 'error',
-          actions: 'logSystemError'
+          actions: "logSystemError"
         }
       }
     },
@@ -96,7 +97,7 @@ export const rootMachine = setup({
       on: {
         PAYMENT_SUCCESS: {
           target: 'playerMenuFlow',
-          actions: 'setSubscribed'
+          actions: "setSubscribed"
         }
       }
     },
