@@ -1,11 +1,13 @@
 import { setup, assign } from 'xstate';
 
-// ---------------------------------------------------------
-// PRINCIPLES APPLIED:
-// 1. Идемпотентность - кнопка START_APP сработает 1 раз.
-// 2. Resiliency - если БД падает, мы переходим в error_state с возможностью RETRY.
-// 3. Delegation (SOLID: SRP) - Root машина только маршрутизирует, она не управляет тренировками.
-// ---------------------------------------------------------
+/**
+ * ГЛАВНЫЙ РОУТЕР ПРИЛОЖЕНИЯ (Root Machine)
+ * 
+ * ПРИНЦИПЫ:
+ * 1. Single Responsibility (S в SOLID): Только маршрутизация.
+ * 2. Interface Segregation: Внешние сервисы (БД) инжектируются через 'src'.
+ * 3. Type Safety: Полная типизация ролей и ID пользователя.
+ */
 
 export const rootMachine = setup({
   types: {
@@ -17,9 +19,22 @@ export const rootMachine = setup({
       | { type: 'START_APP'; userId: string }
       | { type: 'RETRY' }
   },
+  // ГУАРДЫ (Условия) - Даем им имена, чтобы убрать восклицательные знаки в Stately
+  guards: {
+    isGuest: ({ context }) => context.userRole === 'guest',
+    isPlayer: ({ context }) => context.userRole === 'player',
+    isResponsible: ({ context }) => context.userRole === 'responsible',
+    isAdmin: ({ context }) => context.userRole === 'admin',
+  },
+  // ЭКШЕНЫ (Действия)
   actions: {
-    // В реальности здесь будет отправляться аналитика
-    logSystemError: () => console.log('Сбой доступа к Supabase, ждем ответа от юзера'),
+    saveUserId: assign({
+      userId: ({ event }) => (event.type === 'START_APP' ? event.userId : null)
+    }),
+    saveRole: assign({
+      userRole: ({ event }) => (event.type === 'done.invoke.fetchUserRoleFromDB' ? event.output : null)
+    }),
+    logSystemError: () => console.error('Критическая ошибка доступа к БД (Паттерн Предохранитель активирован)'),
   },
 }).createMachine({
   id: 'rootMachine',
@@ -29,56 +44,43 @@ export const rootMachine = setup({
     userId: null,
   },
   states: {
-    // Начальное состояние при открытии бота/App
     idle: {
       on: {
         START_APP: {
           target: 'checkingRole',
-          actions: assign({ userId: ({ event }) => event.userId })
+          actions: 'saveUserId'
         }
       }
     },
-    // Асинхронное состояние: запрос в базу данных для проверки роли
     checkingRole: {
       invoke: {
-        src: 'fetchUserRoleFromDB', // Это интерфейс, реальная функция передается извне
+        src: 'fetchUserRoleFromDB',
         onDone: {
           target: 'routing',
-          actions: assign({ userRole: ({ event }) => event.output })
+          actions: 'saveRole'
         },
         onError: {
           target: 'error',
-          actions: 'logSystemError' // Паттерн "Предохранитель"
+          actions: 'logSystemError'
         }
       }
     },
-    // Мгновенное (Транзитное) состояние маршрутизатора
     routing: {
       always: [
-        { guard: ({ context }) => context.userRole === 'guest', target: 'onboardingFlow' },
-        { guard: ({ context }) => context.userRole === 'player', target: 'playerFlow' },
-        { guard: ({ context }) => context.userRole === 'responsible', target: 'responsibleFlow' },
-        { guard: ({ context }) => context.userRole === 'admin', target: 'adminFlow' },
-        { target: 'error' } // Fallback (если роли нет в списке)
+        { guard: 'isGuest', target: 'onboardingFlow' },
+        { guard: 'isPlayer', target: 'playerFlow' },
+        { guard: 'isResponsible', target: 'responsibleFlow' },
+        { guard: 'isAdmin', target: 'adminFlow' },
+        { target: 'error' } // Если роль не определена
       ]
     },
-    // Это "Гнезда" (Sockets) для запуска дочерних машин (Наших блоков со схемы)
-    onboardingFlow: {
-      type: 'final' // Пока заглушка
-    },
-    playerFlow: {
-      type: 'final'
-    },
-    responsibleFlow: {
-      type: 'final'
-    },
-    adminFlow: {
-      type: 'final'
-    },
-    // Состояние ошибки (Офлайн-устойчивость)
+    onboardingFlow: { type: 'final' },
+    playerFlow: { type: 'final' },
+    responsibleFlow: { type: 'final' },
+    adminFlow: { type: 'final' },
     error: {
       on: {
-        RETRY: 'checkingRole' // Пользователь нажал "Попробовать снова"
+        RETRY: 'checkingRole'
       }
     }
   }
