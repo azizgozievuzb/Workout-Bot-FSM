@@ -1,9 +1,9 @@
 import { setup, assign } from 'xstate';
 
 /**
- * ПЛАТЕЖНАЯ МАШИНА (Clean Visual Version)
+ * PAYMENT MACHINE v4 (Final Visual Clean)
  * 
- * Очищенная структура для корректного отображения в Stately без "каши".
+ * Группируем состояния для идеального рендеринга в Stately.
  */
 
 export const paymentMachine = setup({
@@ -20,14 +20,14 @@ export const paymentMachine = setup({
       | { type: 'USE_STARS' }
       | { type: 'TYPE_CODE'; code: string }
       | { type: 'SUBMIT_PROMO' }
-      | { type: 'STARS_PAYMENT_RECEIVED' } 
-      | { type: 'HOTPAY_WEBHOOK_RECEIVED'; txId: string }
+      | { type: 'STARS_SUCCESS' } 
+      | { type: 'HOTPAY_SUCCESS'; txId: string }
       | { type: 'BACK' }
   },
   actions: {
     assignCode: assign({ enteredCode: ({ event }) => event.type === 'TYPE_CODE' ? event.code : '' }),
-    assignTx: assign({ transactionId: ({ event }) => event.type === 'HOTPAY_WEBHOOK_RECEIVED' ? event.txId : null }),
-    setError: assign({ errorMessage: "Ошибка платежа. Попробуйте снова." }),
+    assignTx: assign({ transactionId: ({ event }) => event.type === 'HOTPAY_SUCCESS' ? event.txId : null }),
+    setError: assign({ errorMessage: "Error occurred" }),
     clearContext: assign({ method: 'none', errorMessage: null, enteredCode: '' })
   }
 }).createMachine({
@@ -40,44 +40,63 @@ export const paymentMachine = setup({
     errorMessage: null,
   },
   states: {
-    // Центральный узел
+    // Главное меню выбора
     methodSelection: {
       on: {
-        USE_PROMOCODE: 'promoCodeInput',
-        USE_HOTPAY: 'waitingForHotPay',
-        USE_STARS: 'waitingForStars'
+        USE_PROMOCODE: { target: 'promoCodeBranch' },
+        USE_HOTPAY: { target: 'hotpayBranch' },
+        USE_STARS: { target: 'starsBranch' }
       }
     },
-    // Ветка 1: Промокоды
-    promoCodeInput: {
-      on: {
-        TYPE_CODE: { actions: 'assignCode' },
-        SUBMIT_PROMO: 'validatingPromo',
-        BACK: 'methodSelection'
+
+    // Ветка 1: Промокод (Изолированный блок)
+    promoCodeBranch: {
+      initial: 'input',
+      states: {
+        input: {
+          on: {
+            TYPE_CODE: { actions: 'assignCode' },
+            SUBMIT_PROMO: { target: 'validating' },
+            BACK: { target: '#paymentMachine.methodSelection' }
+          }
+        },
+        validating: {
+          invoke: {
+            src: 'checkPromoInDB',
+            onDone: { target: '#paymentMachine.success' },
+            onError: { target: 'input', actions: 'setError' }
+          }
+        }
       }
     },
-    validatingPromo: {
-      invoke: {
-        src: 'checkPromoInDB',
-        onDone: 'success',
-        onError: { target: 'promoCodeInput', actions: 'setError' }
-      }
-    },
+
     // Ветка 2: HOT PAY
-    waitingForHotPay: {
-      on: {
-        HOTPAY_WEBHOOK_RECEIVED: { target: 'success', actions: 'assignTx' },
-        BACK: 'methodSelection'
+    hotpayBranch: {
+      initial: 'waiting',
+      states: {
+        waiting: {
+          on: {
+            HOTPAY_SUCCESS: { target: '#paymentMachine.success', actions: 'assignTx' },
+            BACK: { target: '#paymentMachine.methodSelection' }
+          }
+        }
       }
     },
-    // Ветка 3: Telegram Stars
-    waitingForStars: {
-      on: {
-        STARS_PAYMENT_RECEIVED: 'success',
-        BACK: 'methodSelection'
+
+    // Ветка 3: Stars
+    starsBranch: {
+      initial: 'waiting',
+      states: {
+        waiting: {
+          on: {
+            STARS_SUCCESS: { target: '#paymentMachine.success' },
+            BACK: { target: '#paymentMachine.methodSelection' }
+          }
+        }
       }
     },
-    // Финальное состояние
+
+    // Единый финиш
     success: {
       type: 'final'
     }
