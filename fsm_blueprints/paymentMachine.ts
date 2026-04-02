@@ -1,12 +1,9 @@
 import { setup, assign } from 'xstate';
 
 /**
- * УНИВЕРСАЛЬНАЯ МАШИНА ОПЛАТЫ (Payment Machine v3 - FULL)
+ * ПЛАТЕЖНАЯ МАШИНА (Clean Visual Version)
  * 
- * ПОДДЕРЖИВАЕМЫЕ МЕТОДЫ:
- * 1. Промокоды (Тестовый режим)
- * 2. HOT PAY (NEAR Protocol / Crypto)
- * 3. Telegram Stars (Встроенная оплата AppStore/PlayStore)
+ * Очищенная структура для корректного отображения в Stately без "каши".
  */
 
 export const paymentMachine = setup({
@@ -18,21 +15,20 @@ export const paymentMachine = setup({
       errorMessage: string | null;
     },
     events: {} as
-      | { type: 'CHOOSE_METHOD'; method: 'promo' | 'hotpay' | 'stars' }
+      | { type: 'USE_PROMOCODE' }
+      | { type: 'USE_HOTPAY' }
+      | { type: 'USE_STARS' }
       | { type: 'TYPE_CODE'; code: string }
       | { type: 'SUBMIT_PROMO' }
-      | { type: 'START_HOTPAY' }
-      | { type: 'START_STARS' }
       | { type: 'STARS_PAYMENT_RECEIVED' } 
       | { type: 'HOTPAY_WEBHOOK_RECEIVED'; txId: string }
-      | { type: 'CANCEL' }
+      | { type: 'BACK' }
   },
   actions: {
-    setMethod: assign({ method: ({ event }) => event.type === 'CHOOSE_METHOD' ? event.method : 'none' }),
     assignCode: assign({ enteredCode: ({ event }) => event.type === 'TYPE_CODE' ? event.code : '' }),
     assignTx: assign({ transactionId: ({ event }) => event.type === 'HOTPAY_WEBHOOK_RECEIVED' ? event.txId : null }),
-    setError: assign({ errorMessage: "Оплата не удалась. Попробуйте еще раз." }),
-    clearError: assign({ errorMessage: null })
+    setError: assign({ errorMessage: "Ошибка платежа. Попробуйте снова." }),
+    clearContext: assign({ method: 'none', errorMessage: null, enteredCode: '' })
   }
 }).createMachine({
   id: 'paymentMachine',
@@ -44,47 +40,46 @@ export const paymentMachine = setup({
     errorMessage: null,
   },
   states: {
-    // 1. Экран выбора способа оплаты (3 Кнопки)
+    // Центральный узел
     methodSelection: {
       on: {
-        CHOOSE_METHOD: [
-          { target: 'promoCodeInput', guard: ({ event }) => event.method === 'promo' },
-          { target: 'waitingForHotPay', guard: ({ event }) => event.method === 'hotpay' },
-          { target: 'waitingForStars', guard: ({ event }) => event.method === 'stars' }
-        ]
+        USE_PROMOCODE: 'promoCodeInput',
+        USE_HOTPAY: 'waitingForHotPay',
+        USE_STARS: 'waitingForStars'
       }
     },
-    // Ветка ПРОМОКОДОВ
+    // Ветка 1: Промокоды
     promoCodeInput: {
       on: {
         TYPE_CODE: { actions: 'assignCode' },
-        SUBMIT_PROMO: { target: 'validatingPromo' },
-        CANCEL: { target: 'methodSelection' }
+        SUBMIT_PROMO: 'validatingPromo',
+        BACK: 'methodSelection'
       }
     },
     validatingPromo: {
       invoke: {
         src: 'checkPromoInDB',
-        onDone: { target: 'success' },
+        onDone: 'success',
         onError: { target: 'promoCodeInput', actions: 'setError' }
       }
     },
-    // Ветка HOT PAY (NEAR Crypto)
+    // Ветка 2: HOT PAY
     waitingForHotPay: {
-      entry: 'initiateHotPayIntent',
       on: {
         HOTPAY_WEBHOOK_RECEIVED: { target: 'success', actions: 'assignTx' },
-        CANCEL: { target: 'methodSelection' }
+        BACK: 'methodSelection'
       }
     },
-    // Ветка TELEGRAM STARS
+    // Ветка 3: Telegram Stars
     waitingForStars: {
-      entry: 'createStarsInvoice', // Генерируем инвойс через API Telegram
       on: {
-        STARS_PAYMENT_RECEIVED: { target: 'success' },
-        CANCEL: { target: 'methodSelection' }
+        STARS_PAYMENT_RECEIVED: 'success',
+        BACK: 'methodSelection'
       }
     },
-    success: { type: 'final' }
+    // Финальное состояние
+    success: {
+      type: 'final'
+    }
   }
 });
