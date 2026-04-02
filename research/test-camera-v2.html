@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Gemini Quality Test (1080p vs 480p)</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; background: #000; color: #fff; margin: 0; padding: 20px; display: flex; flex-direction: column; min-height: 100vh; }
+        #video-preview { width: 100%; border-radius: 12px; background: #111; transform: scaleX(-1); aspect-ratio: 3/4; object-fit: cover; }
+        .controls { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin: 20px 0; }
+        .btn-res { padding: 10px; border: 1px solid #444; border-radius: 8px; background: #222; color: #fff; font-size: 14px; text-align: center; }
+        .btn-res.active { background: #007aff; border-color: #007aff; font-weight: bold; }
+        #start-btn { width: 100%; padding: 20px; border-radius: 12px; background: #ff3b30; color: white; font-size: 18px; font-weight: bold; border: none; }
+        #start-btn:disabled { background: #333; color: #666; }
+        #logger { background: #111; padding: 10px; border-radius: 8px; flex-grow: 1; margin-top: 20px; font-size: 12px; overflow-y: auto; font-family: monospace; border: 1px solid #333; }
+        .timer { font-size: 40px; text-align: center; margin: 10px 0; }
+    </style>
+</head>
+<body>
+
+    <video id="video-preview" autoplay playsinline muted></video>
+    
+    <div class="controls">
+        <div class="btn-res" id="res-480" onclick="setRes(640, 480)">480p</div>
+        <div class="btn-res" id="res-720" onclick="setRes(1280, 720)">720p</div>
+        <div class="btn-res active" id="res-1080" onclick="setRes(1920, 1080)">1080p</div>
+    </div>
+
+    <div class="timer" id="timer">00:00</div>
+    <button id="start-btn">ЗАПИСАТЬ ТЕСТ (10 СЕК)</button>
+
+    <div id="logger">--- СИСТЕМНЫЙ ЛОГ ---<br></div>
+
+    <script>
+        let currentWidth = 1920, currentHeight = 1080;
+        let stream, mediaRecorder, chunks = [];
+        const logger = document.getElementById('logger');
+        const timerEl = document.getElementById('timer');
+        const video = document.getElementById('video-preview');
+
+        function log(msg) { logger.innerHTML += `[${new Date().toLocaleTimeString()}] ${msg}<br>`; logger.scrollTop = logger.scrollHeight; }
+
+        function setRes(w, h) {
+            currentWidth = w; currentHeight = h;
+            document.querySelectorAll('.btn-res').forEach(b => b.classList.remove('active'));
+            document.getElementById(`res-${h}`).classList.add('active');
+            log(`🎯 Выбрано разрешение: ${w}x${h}`);
+            startCamera();
+        }
+
+        async function startCamera() {
+            if (stream) stream.getTracks().forEach(t => t.stop());
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { width: { ideal: currentWidth }, height: { ideal: currentHeight }, facingMode: "user" },
+                    audio: true
+                });
+                video.srcObject = stream;
+                log("✅ Камера готова");
+            } catch (err) { log(`❌ Ошибка камеры: ${err.message}`); }
+        }
+
+        async function upload(blob, filename) {
+            log(`📤 Отправка ${filename} (${Math.round(blob.size/1024)} KB)...`);
+            const formData = new FormData();
+            formData.append('video', blob, filename);
+            try {
+                const res = await fetch('/upload', { method: 'POST', body: formData });
+                const text = await res.text();
+                log(`💚 ${text}`);
+            } catch (err) { log(`❌ Ошибка загрузки: ${err.message}`); }
+        }
+
+        document.getElementById('start-btn').onclick = async () => {
+            document.getElementById('start-btn').disabled = true;
+            chunks = [];
+            mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/mp4' });
+            mediaRecorder.ondataavailable = e => chunks.push(e.data);
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(chunks, { type: 'video/mp4' });
+                upload(blob, `test_${currentHeight}p.mp4`);
+            };
+            
+            mediaRecorder.start();
+            let left = 10;
+            log(`🔴 Запись ${currentHeight}p...`);
+            const it = setInterval(() => {
+                left--;
+                timerEl.innerText = `00:${left.toString().padStart(2, '0')}`;
+                if (left <= 0) {
+                    clearInterval(it);
+                    mediaRecorder.stop();
+                    document.getElementById('start-btn').disabled = false;
+                    log("✅ Запись завершена");
+                }
+            }, 1000);
+        };
+
+        startCamera();
+    </script>
+</body>
+</html>

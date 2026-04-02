@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Workout Camera Stress Test</title>
+    <style>
+        :root {
+            --bg-color: #000;
+            --text-color: #fff;
+            --accent-color: #007aff;
+            --danger-color: #ff3b30;
+            --success-color: #34c759;
+        }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            background: var(--bg-color); 
+            color: var(--text-color); 
+            margin: 0; 
+            padding: env(safe-area-inset-top) 20px env(safe-area-inset-bottom) 20px;
+            overflow-x: hidden; 
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+        #video-container {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 3/4;
+            background: #111;
+            border-radius: 20px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+        #video-preview { 
+            width: 100%; 
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1); 
+        }
+        #status-bar { 
+            padding: 12px; 
+            border-radius: 12px; 
+            margin: 15px 0; 
+            font-weight: 700; 
+            text-align: center; 
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.3s ease;
+        }
+        .recording { background: var(--danger-color); animation: blink 1s infinite; }
+        .rest { background: var(--success-color); color: #000; }
+        .idle { background: #333; }
+        
+        .timer { 
+            font-size: 64px; 
+            text-align: center; 
+            margin: 5px 0; 
+            font-variant-numeric: tabular-nums; 
+            font-weight: 200;
+        }
+        
+        #controls {
+            margin-top: auto;
+            padding-bottom: 20px;
+        }
+        
+        button { 
+            width: 100%; 
+            padding: 18px; 
+            border-radius: 16px; 
+            border: none; 
+            background: var(--accent-color); 
+            color: white; 
+            font-size: 18px; 
+            font-weight: 600; 
+        }
+        button:disabled {
+            background: #222;
+            color: #555;
+        }
+
+        #logger { 
+            background: #111; 
+            padding: 12px; 
+            border-radius: 12px; 
+            height: 120px; 
+            overflow-y: auto; 
+            font-size: 11px; 
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; 
+            border: 1px solid #222;
+            margin-top: 15px;
+        }
+        .log-entry { margin-bottom: 4px; border-bottom: 1px solid #222; padding-bottom: 2px; }
+        .log-time { color: #888; margin-right: 6px; }
+
+        @keyframes blink { 
+            0% { opacity: 1; } 
+            50% { opacity: 0.7; } 
+            100% { opacity: 1; } 
+        }
+    </style>
+</head>
+<body>
+
+    <div id="video-container">
+        <video id="video-preview" autoplay playsinline muted></video>
+    </div>
+    
+    <div id="status-bar" class="idle">Готов к тесту</div>
+    <div class="timer" id="timer">00:00</div>
+    
+    <div id="logger">
+        <div class="log-entry"><span class="log-time">System:</span> Ожидание запуска...</div>
+    </div>
+
+    <div id="controls">
+        <button id="start-btn">Начать тест на iPhone</button>
+    </div>
+
+    <script>
+        const video = document.getElementById('video-preview');
+        const startBtn = document.getElementById('start-btn');
+        const statusBar = document.getElementById('status-bar');
+        const timerEl = document.getElementById('timer');
+        const logger = document.getElementById('logger');
+
+        let mediaRecorder;
+        let recordedChunks = [];
+        let wakeLock = null;
+        let stream = null;
+
+        function log(msg) {
+            const now = new Date();
+            const time = now.toLocaleTimeString('ru-RU', { hour12: false });
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.innerHTML = `<span class="log-time">${time}</span> ${msg}`;
+            logger.appendChild(entry);
+            logger.scrollTop = logger.scrollHeight;
+        }
+
+        async function toggleWakeLock(active) {
+            if (!('wakeLock' in navigator)) {
+                log("⚠️ WakeLock не поддерживается");
+                return;
+            }
+            try {
+                if (active) {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    log("✅ WakeLock активен");
+                    wakeLock.addEventListener('release', () => log("ℹ️ WakeLock снят"));
+                } else if (wakeLock) {
+                    await wakeLock.release();
+                    wakeLock = null;
+                }
+            } catch (err) {
+                log(`❌ WakeLock Error: ${err.message}`);
+            }
+        }
+
+        async function initCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        facingMode: "user",
+                        width: { ideal: 640 },
+                        height: { ideal: 480 }
+                    }, 
+                    audio: true 
+                });
+                video.srcObject = stream;
+                log("✅ Камера подключена");
+                return true;
+            } catch (err) {
+                log(`❌ Ошибка камеры: ${err.name}`);
+                alert("Нужен доступ к камере и микрофону!");
+                return false;
+            }
+        }
+
+        function formatTime(seconds) {
+            const m = Math.floor(seconds / 60);
+            const s = seconds % 60;
+            return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+        }
+
+        async function runPhase(name, durationSec, shouldRecord) {
+            return new Promise(async (resolve) => {
+                log(`🔹 Фаза: ${name} (${durationSec}с)`);
+                statusBar.innerText = name;
+                
+                // Если сейчас ОТДЫХ — выключаем камеру совсем
+                if (!shouldRecord) {
+                    statusBar.className = 'rest';
+                    if (stream) {
+                        stream.getTracks().forEach(track => track.stop());
+                        video.srcObject = null;
+                        stream = null;
+                        log("⏸ Камера полностью СТОП (светодиод должен погаснуть)");
+                    }
+                } else {
+                    statusBar.className = 'recording';
+                    // Пытаемся АВТОМАТИЧЕСКИ включить камеру перед записью
+                    log("⏳ Попытка автоматического включения камеры...");
+                    const ok = await initCamera();
+                    if (!ok) {
+                        log("❌ ОШИБКА: Автостарт не сработал. Нажми на видео, если зависло.");
+                    }
+                }
+                
+                let timeLeft = durationSec;
+                let phaseStartTime = Date.now();
+                let phaseEndTime = phaseStartTime + (durationSec * 1000);
+                
+                if (shouldRecord && stream) {
+                    try {
+                        recordedChunks = [];
+                        let options = { mimeType: 'video/mp4' };
+                        if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                            options = { mimeType: 'video/webm' };
+                        }
+                        mediaRecorder = new MediaRecorder(stream, options);
+                        log(`🎥 Запись пошла (${mediaRecorder.mimeType})`);
+                        mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) recordedChunks.push(e.data); };
+                        mediaRecorder.start();
+                    } catch(e) {
+                        log(`❌ Ошибка записи: ${e.message}`);
+                    }
+                }
+
+                const updateTimer = () => {
+                    let now = Date.now();
+                    let timeLeftDisp = Math.max(0, Math.ceil((phaseEndTime - now) / 1000));
+                    timerEl.innerText = formatTime(timeLeftDisp);
+                    
+                    if (now >= phaseEndTime) {
+                        clearInterval(interval);
+                        if (shouldRecord && mediaRecorder && mediaRecorder.state !== 'inactive') {
+                            mediaRecorder.stop();
+                            log("✅ Видео сохранено");
+                        }
+                        resolve();
+                    }
+                };
+
+                updateTimer();
+                const interval = setInterval(updateTimer, 500);
+            });
+        }
+
+        startBtn.onclick = async () => {
+            const ok = await initCamera();
+            if (!ok) return;
+
+            startBtn.disabled = true;
+            startBtn.innerText = "Тест запущен...";
+            
+            await toggleWakeLock(true);
+
+            // ОДИН КРУГ (по твоему описанию)
+            const cycle = [
+                { name: "Тренировка", time: 240, record: true },  // 4 мин
+                { name: "Отдых", time: 30, record: false },
+                { name: "Тренировка", time: 60, record: true },   // 1 мин
+                { name: "Отдых", time: 30, record: false },
+                { name: "Тренировка", time: 60, record: true },   // 1 мин
+                { name: "Отдых", time: 30, record: false },
+                { name: "Тренировка", time: 60, record: true },   // 1 мин
+                { name: "Отдых", time: 30, record: false },
+                { name: "Тренировка", time: 240, record: true },  // 4 мин
+                { name: "Отдых", time: 30, record: false },
+                { name: "Тренировка", time: 60, record: true },   // 1 мин
+                { name: "Отдых", time: 30, record: false },
+                { name: "Тренировка", time: 60, record: true },   // 1 мин
+                { name: "Отдых", time: 30, record: false },
+                { name: "Тренировка", time: 60, record: true },   // 1 мин
+                { name: "Отдых", time: 30, record: false }
+            ];
+
+            log("🚀 Начинаем симуляцию (всего ~18 минут)");
+
+            for (let i = 0; i < cycle.length; i++) {
+                const phase = cycle[i];
+                // Если мы хотим проверить "экран погас", на фазе отдыха можно временно отключать WakeLock
+                // Но я оставлю его включенным, чтобы проверить выживет ли камера.
+                await runPhase(`${phase.name} ${Math.floor(i/2)+1}`, phase.time, phase.record);
+            }
+
+            log("🏁 ТЕСТ 1 КРУГА ЗАВЕРШЕН!");
+            statusBar.innerText = "Готово";
+            statusBar.className = "idle";
+            startBtn.disabled = false;
+            startBtn.innerText = "Запустить еще раз";
+            await toggleWakeLock(false);
+        };
+
+        // Слушаем фоновый режим
+        document.addEventListener('visibilitychange', () => {
+            log(`📱 Состояние: ${document.visibilityState.toUpperCase()}`);
+            if (document.visibilityState === 'visible' && !wakeLock && startBtn.disabled) {
+                toggleWakeLock(true); // Перезапуск если вернулись
+            }
+        });
+
+    </script>
+</body>
+</html>

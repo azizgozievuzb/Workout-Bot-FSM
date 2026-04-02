@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Архитектура Проекта (Крупная)</title>
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    </script>
+    <style>
+        body { 
+            background-color: #0d1117; 
+            margin: 0; 
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        .mermaid {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .mermaid svg {
+            width: 95vw !important;
+            height: 95vh !important;
+            max-width: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="mermaid">
+graph TD
+    %% Base Styles
+    classDef root fill:#1A1A1D,stroke:#FFFFFF,stroke-width:3px,color:#FFFFFF,rx:8px,ry:8px,font-size:24px;
+    classDef player fill:#1A2421,stroke:#43B581,stroke-width:3px,color:#FFFFFF,rx:8px,ry:8px,font-size:20px;
+    classDef responsible fill:#2A1B38,stroke:#9B59B6,stroke-width:3px,color:#FFFFFF,rx:8px,ry:8px,font-size:20px;
+    classDef admin fill:#331A1A,stroke:#E74C3C,stroke-width:3px,color:#FFFFFF,rx:8px,ry:8px,font-size:20px;
+    classDef system fill:#332900,stroke:#F1C40F,stroke-width:3px,color:#FFFFFF,rx:8px,ry:8px,font-size:20px;
+    classDef decision fill:#2C2F33,stroke:#F39C12,stroke-width:3px,color:#FFFFFF,font-size:20px;
+    classDef default fill:#2C2F33,stroke:#7289DA,stroke-width:3px,color:#FFFFFF,rx:8px,ry:8px,font-size:20px;
+    
+    %% Nodes
+    Root["RootApp<br>(Главное Приложение)"]:::root
+    Onboarding["Onboarding<br>(Регистрация)"]:::default
+    
+    %% Player Flow
+    subgraph Player["🟢 Игрок (Player)"]
+        PlayerMenu["Player Menu<br>(Меню Игрока)"]:::player
+        Shop["Shop<br>(Магазин)"]:::player
+        DailyLimit{"Daily Limit?<br>(Дневной лимит?)"}:::decision
+        FunFacts["Fun Facts AI<br>(Интересные факты)"]:::player
+        WorkoutFlow["WorkoutFlow 35min<br>(Тренировка 35 мин)"]:::player
+        AIVerdict["AI Verdict<br>(Вердикт ИИ)"]:::player
+        StarsStreak["Stars + Streak<br>(Звёзды + Стрик)"]:::player
+    end
+
+    %% Responsible Flow
+    subgraph Responsible["🟣 Ответственный (Responsible)"]
+        ResponsiblePanel["Responsible Panel<br>(Панель Ответственного)"]:::responsible
+        FillShop["Fill Shop Items<br>(Пополнение магазина)"]:::responsible
+        ViewProgress["View Progress -24h<br>(Прогресс -24ч)"]:::responsible
+    end
+
+    %% Admin Flow
+    subgraph Admin["🔴 Администратор (Admin)"]
+        AdminPanel["Admin Panel<br>(Панель Админа)"]:::admin
+        ManageCouples["Manage Couples<br>(Управление парами)"]:::admin
+        ManageExercises["Manage Exercises<br>(Управление упражнениями)"]:::admin
+    end
+
+    %% System Elements
+    Scheduler["⚙️ Scheduler<br>(Планировщик)"]:::system
+
+    %% Connections
+    Root --> Onboarding
+    Root --> PlayerMenu
+    Root --> ResponsiblePanel
+    Root --> AdminPanel
+
+    %% Player Connections
+    PlayerMenu --> DailyLimit
+    PlayerMenu --> Shop
+    DailyLimit -- "Нет (No)" --> WorkoutFlow
+    DailyLimit -- "Да (Yes)" --> FunFacts
+    WorkoutFlow --> AIVerdict
+    AIVerdict --> StarsStreak
+
+    %% Responsible Connections
+    ResponsiblePanel --> FillShop
+    ResponsiblePanel --> ViewProgress
+
+    %% Admin Connections
+    AdminPanel --> ManageCouples
+    AdminPanel --> ManageExercises
+
+    %% Scheduler Connections
+    Scheduler -. "00:00 reset" .-> DailyLimit
+    Scheduler -. "Evening reminder" .-> PlayerMenu
+    Scheduler -->|Авто-проверка?| AIVerdict
+    </div>
+</body>
+</html>

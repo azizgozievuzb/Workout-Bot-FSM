@@ -1,0 +1,16 @@
+::ffff:127.0.0.1 - - [02/Apr/2026 06:21:43] "GET /test-camera.html HTTP/1.1" 200 -
+::ffff:127.0.0.1 - - [02/Apr/2026 06:21:44] code 404, message File not found
+::ffff:127.0.0.1 - - [02/Apr/2026 06:21:44] "GET /favicon.ico HTTP/1.1" 404 -
+::ffff:127.0.0.1 - - [02/Apr/2026 06:33:01] code 404, message File not found
+::ffff:127.0.0.1 - - [02/Apr/2026 06:33:01] "GET /apple-touch-icon-precomposed.png HTTP/1.1" 404 -
+::ffff:127.0.0.1 - - [02/Apr/2026 06:33:02] code 404, message File not found
+::ffff:127.0.0.1 - - [02/Apr/2026 06:33:02] "GET /apple-touch-icon.png HTTP/1.1" 404 -
+::ffff:127.0.0.1 - - [02/Apr/2026 06:33:02] code 404, message File not found
+::ffff:127.0.0.1 - - [02/Apr/2026 06:33:02] "GET /favicon.ico HTTP/1.1" 404 -
+::ffff:127.0.0.1 - - [02/Apr/2026 06:33:17] "GET /test-camera.html HTTP/1.1" 200 -
+::ffff:127.0.0.1 - - [02/Apr/2026 06:33:20] "GET /test-camera.html HTTP/1.1" 200 -
+::ffff:127.0.0.1 - - [02/Apr/2026 06:33:22] code 404, message File not found
+::ffff:127.0.0.1 - - [02/Apr/2026 06:33:22] "GET /favicon.ico HTTP/1.1" 404 -
+::ffff:127.0.0.1 - - [02/Apr/2026 06:39:58] "GET /test-camera.html HTTP/1.1" 200 -
+::ffff:127.0.0.1 - - [02/Apr/2026 06:39:59] code 404, message File not found
+::ffff:127.0.0.1 - - [02/Apr/2026 06:39:59] "GET /favicon.ico HTTP/1.1" 404 -
