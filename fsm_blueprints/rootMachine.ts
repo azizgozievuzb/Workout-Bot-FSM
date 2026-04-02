@@ -1,13 +1,10 @@
 import { setup, assign } from 'xstate';
 
 /**
- * ROOT MACHINE v3 (Global Logic: Language + Pair + Gender)
+ * ROOT MACHINE v3.1 (Visual Clean Version)
  * 
- * ПОЛНЫЙ ЦИКЛ ПЕРВОГО ЗАПУСКА:
- * 1. Выбор языка (RU/EN/UZ)
- * 2. Выбор роли (Self/Gift)
- * 3. Выбор пола контента (🚺 Her / 🚹 Him)
- * 4. Проверка и оплата
+ * Упрощенная линейная структура для идеального отображения в Stately.
+ * Никаких перехлестов: Язык -> Роль -> Гендер -> Роутинг.
  */
 
 export const rootMachine = setup({
@@ -15,7 +12,7 @@ export const rootMachine = setup({
     context: {} as {
       lang: 'ru' | 'uz' | 'en' | null;
       userRole: 'player' | 'responsible' | 'admin' | null;
-      targetGender: 'male' | 'female' | null; // Тот, КТО будет тренироваться
+      targetGender: 'male' | 'female' | null;
       userId: string | null;
       hasActiveSub: boolean;
     },
@@ -32,7 +29,14 @@ export const rootMachine = setup({
     assignRole: assign({ userRole: ({ event }) => event.type === 'SET_ROLE' ? event.role : null }),
     assignGender: assign({ targetGender: ({ event }) => event.type === 'SET_GENDER' ? event.gender : null }),
     saveUserID: assign({ userId: ({ event }) => event.type === 'START_APP' ? event.userId : null }),
-    setError: assign({ userRole: null }) // Сброс при критической ошибке
+  },
+  guards: {
+    isNewUser: ({ event }) => event.type === 'done.invoke.fetchProfile' && event.output === null,
+    userExists: ({ event }) => event.type === 'done.invoke.fetchProfile' && event.output !== null,
+    needsPayment: ({ context }) => context.userRole === 'responsible' && !context.hasActiveSub,
+    needsToWait: ({ context }) => context.userRole === 'player' && !context.hasActiveSub,
+    isAdmin: ({ context }) => context.userRole === 'admin',
+    isReady: ({ context }) => context.hasActiveSub
   }
 }).createMachine({
   id: 'rootMachine',
@@ -45,77 +49,61 @@ export const rootMachine = setup({
     hasActiveSub: false,
   },
   states: {
-    // 1. Старт и первичная проверка
     idle: {
       on: {
         START_APP: {
-          target: 'checkingProfileInDB',
+          target: 'checkingProfile',
           actions: 'saveUserID'
         }
       }
     },
 
-    // 2. Ищем юзера в БД (У него уже настроен язык и роль?)
-    checkingProfileInDB: {
+    // 💡 ТУТ НАЧИНАЕТСЯ ОЧИЩЕННАЯ ВЕРТИКАЛЬНАЯ ЛОГИКА
+    checkingProfile: {
       invoke: {
         src: 'fetchProfile',
         onDone: [
-          { target: 'routing', guard: ({ event }) => event.output !== null },
-          { target: 'languageSelection' } // Если новый юзер -> Начинаем Онбординг
+          { target: 'routing', guard: 'userExists' },
+          { target: 'languageSelection', guard: 'isNewUser' }
         ],
         onError: 'error'
       }
     },
 
-    // --- БЛОК ОНБОРДИНГА (Новый юзер) ---
     languageSelection: {
       on: { SET_LANG: { target: 'roleSelection', actions: 'assignLang' } }
     },
 
     roleSelection: {
-      on: {
-        SET_ROLE: [
-          { target: 'genderSelection', actions: 'assignRole', guard: ({ event }) => event.role === 'responsible' },
-          { target: 'genderSelection', actions: 'assignRole', guard: ({ event }) => event.role === 'player' }
-        ]
-      }
+      on: { SET_ROLE: { target: 'genderSelection', actions: 'assignRole' } }
     },
 
     genderSelection: {
       on: { SET_GENDER: { target: 'routing', actions: 'assignGender' } }
     },
 
-    // 3. Главный Светофор (Routing)
     routing: {
       always: [
-        { guard: ({ context }) => context.userRole === 'admin', target: 'adminFlow' },
-        { 
-          guard: ({ context }) => context.userRole === 'responsible' && !context.hasActiveSub, 
-          target: 'paymentFlow' 
-        },
-        { 
-          guard: ({ context }) => context.userRole === 'player' && !context.hasActiveSub, 
-          target: 'blockedScreen' 
-        },
-        { target: 'mainAppFlow' } // Финал: Всё оплачено, роль ясна
+        { guard: 'isAdmin', target: 'adminFlow' },
+        { guard: 'needsPayment', target: 'paymentFlow' },
+        { guard: 'needsToWait', target: 'blockedScreen' },
+        { target: 'mainAppFlow' } // Состояние, когда всё хорошо
       ]
     },
 
-    // --- БЛОКИ ТУПИКОВ / ОЖИДАНИЯ ---
     paymentFlow: {
       on: { PAYMENT_OK: { target: 'mainAppFlow', actions: assign({ hasActiveSub: true }) } }
     },
 
     blockedScreen: {
-      // Игрок ждет, пока Ответственный оплатит (Бот пришлет сигнал от партнерского аккаунта)
       on: { PAYMENT_OK: 'mainAppFlow' }
     },
 
     adminFlow: { type: 'final' },
-    mainAppFlow: { type: 'final' }, // Кнопки тренировки, магазин и т.д.
+    mainAppFlow: { type: 'final' },
 
     error: {
-      on: { RETRY: 'checkingProfileInDB' }
+      on: { RETRY: 'checkingProfile' }
     }
   }
 });
