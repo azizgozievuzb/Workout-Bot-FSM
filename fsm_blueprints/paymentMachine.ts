@@ -1,12 +1,12 @@
 import { setup, assign } from 'xstate';
 
 /**
- * УНИВЕРСАЛЬНАЯ МАШИНА ОПЛАТЫ (Payment Machine v2)
+ * УНИВЕРСАЛЬНАЯ МАШИНА ОПЛАТЫ (Payment Machine v3 - FULL)
  * 
  * ПОДДЕРЖИВАЕМЫЕ МЕТОДЫ:
  * 1. Промокоды (Тестовый режим)
- * 2. HOT PAY (NEAR Protocol / Crypto) - Через итенты
- * 3. Telegram Stars (В планах)
+ * 2. HOT PAY (NEAR Protocol / Crypto)
+ * 3. Telegram Stars (Встроенная оплата AppStore/PlayStore)
  */
 
 export const paymentMachine = setup({
@@ -22,6 +22,8 @@ export const paymentMachine = setup({
       | { type: 'TYPE_CODE'; code: string }
       | { type: 'SUBMIT_PROMO' }
       | { type: 'START_HOTPAY' }
+      | { type: 'START_STARS' }
+      | { type: 'STARS_PAYMENT_RECEIVED' } 
       | { type: 'HOTPAY_WEBHOOK_RECEIVED'; txId: string }
       | { type: 'CANCEL' }
   },
@@ -29,8 +31,8 @@ export const paymentMachine = setup({
     setMethod: assign({ method: ({ event }) => event.type === 'CHOOSE_METHOD' ? event.method : 'none' }),
     assignCode: assign({ enteredCode: ({ event }) => event.type === 'TYPE_CODE' ? event.code : '' }),
     assignTx: assign({ transactionId: ({ event }) => event.type === 'HOTPAY_WEBHOOK_RECEIVED' ? event.txId : null }),
-    setError: assign({ errorMessage: "Ошибка платежа. Попробуйте снова или свяжитесь с поддержкой." }),
-    clearError: assign({ errorMessage: null, method: 'none' })
+    setError: assign({ errorMessage: "Оплата не удалась. Попробуйте еще раз." }),
+    clearError: assign({ errorMessage: null })
   }
 }).createMachine({
   id: 'paymentMachine',
@@ -42,16 +44,17 @@ export const paymentMachine = setup({
     errorMessage: null,
   },
   states: {
-    // 1. Экран выбора способа оплаты
+    // 1. Экран выбора способа оплаты (3 Кнопки)
     methodSelection: {
       on: {
         CHOOSE_METHOD: [
           { target: 'promoCodeInput', guard: ({ event }) => event.method === 'promo' },
-          { target: 'waitingForHotPay', guard: ({ event }) => event.method === 'hotpay' }
+          { target: 'waitingForHotPay', guard: ({ event }) => event.method === 'hotpay' },
+          { target: 'waitingForStars', guard: ({ event }) => event.method === 'stars' }
         ]
       }
     },
-    // 2. Ветка промокодов
+    // Ветка ПРОМОКОДОВ
     promoCodeInput: {
       on: {
         TYPE_CODE: { actions: 'assignCode' },
@@ -66,14 +69,19 @@ export const paymentMachine = setup({
         onError: { target: 'promoCodeInput', actions: 'setError' }
       }
     },
-    // 3. Ветка HOT PAY (NEAR Protocol)
+    // Ветка HOT PAY (NEAR Crypto)
     waitingForHotPay: {
-      entry: 'initiateHotPayIntent', // Открываем виджет/ссылку HOT Wallet
+      entry: 'initiateHotPayIntent',
       on: {
-        HOTPAY_WEBHOOK_RECEIVED: {
-          target: 'success',
-          actions: 'assignTx'
-        },
+        HOTPAY_WEBHOOK_RECEIVED: { target: 'success', actions: 'assignTx' },
+        CANCEL: { target: 'methodSelection' }
+      }
+    },
+    // Ветка TELEGRAM STARS
+    waitingForStars: {
+      entry: 'createStarsInvoice', // Генерируем инвойс через API Telegram
+      on: {
+        STARS_PAYMENT_RECEIVED: { target: 'success' },
         CANCEL: { target: 'methodSelection' }
       }
     },
