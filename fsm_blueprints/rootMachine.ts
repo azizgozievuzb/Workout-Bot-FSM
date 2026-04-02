@@ -1,113 +1,121 @@
 import { setup, assign } from 'xstate';
 
 /**
- * УЛУЧШЕННЫЙ РОУТЕР ПРИЛОЖЕНИЯ (Root Machine v2)
+ * ROOT MACHINE v3 (Global Logic: Language + Pair + Gender)
  * 
- * ДОБАВЛЕНО:
- * 1. Проверка подписки (Subscription Flow).
- * 2. Изолированный блок Платежей (Payment Flow).
- * 
- * ПРИНЦИПЫ:
- * - Разделение ответственности: Платежи — это отдельный домен.
- * - Устойчивость: При ошибке оплаты возвращаемся в безопасное состояние.
+ * ПОЛНЫЙ ЦИКЛ ПЕРВОГО ЗАПУСКА:
+ * 1. Выбор языка (RU/EN/UZ)
+ * 2. Выбор роли (Self/Gift)
+ * 3. Выбор пола контента (🚺 Her / 🚹 Him)
+ * 4. Проверка и оплата
  */
 
 export const rootMachine = setup({
   types: {
     context: {} as {
-      userRole: 'guest' | 'player' | 'responsible' | 'admin' | null;
+      lang: 'ru' | 'uz' | 'en' | null;
+      userRole: 'player' | 'responsible' | 'admin' | null;
+      targetGender: 'male' | 'female' | null; // Тот, КТО будет тренироваться
       userId: string | null;
-      hasActiveSubscription: boolean;
+      hasActiveSub: boolean;
     },
     events: {} as
+      | { type: 'SET_LANG'; lang: 'ru' | 'uz' | 'en' }
+      | { type: 'SET_ROLE'; role: 'player' | 'responsible' | 'admin' }
+      | { type: 'SET_GENDER'; gender: 'male' | 'female' }
       | { type: 'START_APP'; userId: string }
+      | { type: 'PAYMENT_OK' }
       | { type: 'RETRY' }
-      | { type: 'PAYMENT_SUCCESS' } // Событие от внешней платежной машины
-  },
-  guards: {
-    isGuest: ({ context }) => context.userRole === 'guest',
-    isPlayer: ({ context }) => context.userRole === 'player',
-    isResponsible: ({ context }) => context.userRole === 'responsible',
-    isAdmin: ({ context }) => context.userRole === 'admin',
-    noSubscription: ({ context }) => !context.hasActiveSubscription,
-    hasSubscription: ({ context }) => context.hasActiveSubscription,
   },
   actions: {
-    saveUserId: assign({
-      userId: ({ event }) => (event.type === 'START_APP' ? event.userId : null)
-    }),
-    saveRoleAndSubscription: assign({
-      userRole: ({ event }) => (event.type === 'done.invoke.fetchUserInfo' ? event.output.role : null),
-      hasActiveSubscription: ({ event }) => (event.type === 'done.invoke.fetchUserInfo' ? event.output.hasSub : false)
-    }),
-    setSubscribed: assign({ hasActiveSubscription: true }),
-    logSystemError: () => console.error('Ошибка доступа к данным пользователя'),
-  },
+    assignLang: assign({ lang: ({ event }) => event.type === 'SET_LANG' ? event.lang : null }),
+    assignRole: assign({ userRole: ({ event }) => event.type === 'SET_ROLE' ? event.role : null }),
+    assignGender: assign({ targetGender: ({ event }) => event.type === 'SET_GENDER' ? event.gender : null }),
+    saveUserID: assign({ userId: ({ event }) => event.type === 'START_APP' ? event.userId : null }),
+    setError: assign({ userRole: null }) // Сброс при критической ошибке
+  }
 }).createMachine({
   id: 'rootMachine',
   initial: 'idle',
   context: {
+    lang: null,
     userRole: null,
+    targetGender: null,
     userId: null,
-    hasActiveSubscription: false,
+    hasActiveSub: false,
   },
   states: {
+    // 1. Старт и первичная проверка
     idle: {
       on: {
         START_APP: {
-          target: 'checkingUserInfo',
-          actions: 'saveUserId'
+          target: 'checkingProfileInDB',
+          actions: 'saveUserID'
         }
       }
     },
-    // Проверка Роли + Статуса Подписки за один запрос
-    checkingUserInfo: {
+
+    // 2. Ищем юзера в БД (У него уже настроен язык и роль?)
+    checkingProfileInDB: {
       invoke: {
-        src: 'fetchUserInfo', // Запрос в БД (Роль + Подписка)
-        onDone: {
-          target: 'routing',
-          actions: 'saveRoleAndSubscription'
-        },
-        onError: {
-          target: 'error',
-          actions: 'logSystemError'
-        }
+        src: 'fetchProfile',
+        onDone: [
+          { target: 'routing', guard: ({ event }) => event.output !== null },
+          { target: 'languageSelection' } // Если новый юзер -> Начинаем Онбординг
+        ],
+        onError: 'error'
       }
     },
+
+    // --- БЛОК ОНБОРДИНГА (Новый юзер) ---
+    languageSelection: {
+      on: { SET_LANG: { target: 'roleSelection', actions: 'assignLang' } }
+    },
+
+    roleSelection: {
+      on: {
+        SET_ROLE: [
+          { target: 'genderSelection', actions: 'assignRole', guard: ({ event }) => event.role === 'responsible' },
+          { target: 'genderSelection', actions: 'assignRole', guard: ({ event }) => event.role === 'player' }
+        ]
+      }
+    },
+
+    genderSelection: {
+      on: { SET_GENDER: { target: 'routing', actions: 'assignGender' } }
+    },
+
+    // 3. Главный Светофор (Routing)
     routing: {
       always: [
-        { guard: 'isGuest', target: 'onboardingFlow' },
-        { guard: 'isAdmin', target: 'adminFlow' },
-        { guard: 'isResponsible', target: 'responsibleFlow' },
-        // Если это Игрок -> Переходим к проверке подписки
-        { guard: 'isPlayer', target: 'playerSubscriptionCheck' },
-        { target: 'error' }
+        { guard: ({ context }) => context.userRole === 'admin', target: 'adminFlow' },
+        { 
+          guard: ({ context }) => context.userRole === 'responsible' && !context.hasActiveSub, 
+          target: 'paymentFlow' 
+        },
+        { 
+          guard: ({ context }) => context.userRole === 'player' && !context.hasActiveSub, 
+          target: 'blockedScreen' 
+        },
+        { target: 'mainAppFlow' } // Финал: Всё оплачено, роль ясна
       ]
     },
-    // Проверка подписки для Игрока
-    playerSubscriptionCheck: {
-      always: [
-        { guard: 'hasSubscription', target: 'playerMenuFlow' },
-        { guard: 'noSubscription', target: 'paymentFlow' }
-      ]
-    },
-    // ИЗОЛИРОВАННЫЙ БЛОК ПЛАТЕЖЕЙ (Здесь будет активация кодов)
+
+    // --- БЛОКИ ТУПИКОВ / ОЖИДАНИЯ ---
     paymentFlow: {
-      on: {
-        PAYMENT_SUCCESS: {
-          target: 'playerMenuFlow',
-          actions: 'setSubscribed'
-        }
-      }
+      on: { PAYMENT_OK: { target: 'mainAppFlow', actions: assign({ hasActiveSub: true }) } }
     },
-    playerMenuFlow: { type: 'final' },
-    onboardingFlow: { type: 'final' },
-    responsibleFlow: { type: 'final' },
+
+    blockedScreen: {
+      // Игрок ждет, пока Ответственный оплатит (Бот пришлет сигнал от партнерского аккаунта)
+      on: { PAYMENT_OK: 'mainAppFlow' }
+    },
+
     adminFlow: { type: 'final' },
+    mainAppFlow: { type: 'final' }, // Кнопки тренировки, магазин и т.д.
+
     error: {
-      on: {
-        RETRY: 'checkingUserInfo'
-      }
+      on: { RETRY: 'checkingProfileInDB' }
     }
   }
 });
