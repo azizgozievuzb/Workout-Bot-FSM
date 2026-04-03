@@ -20,6 +20,7 @@ export const workoutGateMachine = setup({
     },
     events: {} as
       | { type: 'CONTINUE' }
+      | { type: 'OPEN_SHOP' }
       | { type: 'I_AM_READY' }
       | { type: 'BACK_TO_MENU' }
       | { type: 'WORKOUT_SUCCESS'; data: any } 
@@ -67,7 +68,20 @@ export const workoutGateMachine = setup({
     // 2. Экран с рейтингом (Global / 3-Day), стрик-окном и плашкой буста
     greetings: {
       meta: { "@statelyai.color": "green" },
-      on: { CONTINUE: 'equipmentCheck', BACK_TO_MENU: 'exitGate' }
+      on: { 
+        CONTINUE: 'equipmentCheck', 
+        OPEN_SHOP: 'playerShop',
+        BACK_TO_MENU: 'exitGate' 
+      }
+    },
+
+    // Ветка Магазина Игрока
+    playerShop: {
+      meta: { "@statelyai.color": "blue" },
+      invoke: {
+        src: 'playerShopMachine',
+        onDone: 'fetchingData' // После возврата из магазина перепроверяем баланс и данные
+      }
     },
     
     // 3. Напоминание подготовить стул или другой инвентарь

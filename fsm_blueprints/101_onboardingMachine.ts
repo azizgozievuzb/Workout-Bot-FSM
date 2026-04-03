@@ -1,10 +1,10 @@
 import { setup, assign } from 'xstate';
 
 /**
- * 101_ONBOARDING_MACHINE
+ * 101_ONBOARDING_MACHINE (V2 - With Photo Requirement)
  * 
- * Идеальная матрешка регистрации: вызывается из 000_rootMachine для любого нового пользователя.
- * После её завершения (пользователь выбрал язык, роль, привязал партнера) контроль возвращается в родителя.
+ * Матрешка регистрации.
+ * Версия 2: Добавлен обязательный шаг загрузки селфи (для системы аватарок и рамок из Магазина).
  */
 
 export const onboardingMachine = setup({
@@ -15,6 +15,7 @@ export const onboardingMachine = setup({
       gender: 'male' | 'female' | null;
       startingWindow: [number, number, number] | null; 
       pairingCode: string | null;
+      hasProfilePhoto: boolean;
     },
     events: {} as
       | { type: 'SET_LANG'; lang: 'ru' | 'uz' | 'en' }
@@ -22,6 +23,7 @@ export const onboardingMachine = setup({
       | { type: 'SET_GENDER'; gender: 'male' | 'female' }
       | { type: 'SURVEY_ANSWER' } 
       | { type: 'SURVEY_COMPLETE'; window: [number, number, number] }
+      | { type: 'PHOTO_UPLOADED' } // <-- НОВЫЙ ИВЕНТ
       | { type: 'PAIRING_CODE_CREATED'; code: string }
       | { type: 'ENTER_PAIRING_CODE'; code: string }
       | { type: 'PAIRING_SUCCESS' } 
@@ -31,6 +33,7 @@ export const onboardingMachine = setup({
     assignRole: assign({ role: ({ event }) => event.type === 'SET_ROLE' ? event.role : null }),
     assignGender: assign({ gender: ({ event }) => event.type === 'SET_GENDER' ? event.gender : null }),
     assignWindow: assign({ startingWindow: ({ event }) => event.type === 'SURVEY_COMPLETE' ? event.window : null }),
+    setPhotoUploaded: assign({ hasProfilePhoto: true }), // <-- НОВЫЙ ЭКШЕН
     assignCode: assign({ pairingCode: ({ event }) => event.type === 'PAIRING_CODE_CREATED' ? event.code : null })
   },
   guards: {
@@ -45,7 +48,8 @@ export const onboardingMachine = setup({
     role: null,
     gender: null,
     startingWindow: null,
-    pairingCode: null
+    pairingCode: null,
+    hasProfilePhoto: false
   },
   states: {
     languageSelection: {
@@ -78,19 +82,26 @@ export const onboardingMachine = setup({
     playerSurvey: {
       meta: { "@statelyai.color": "yellow" },
       on: {
-        SURVEY_ANSWER: 'playerSurvey', // Можно крутиться тут, отвечая на вопросы
-        SURVEY_COMPLETE: { target: 'playerPairing', actions: 'assignWindow' } // Бэкенд возвращает стартовое окно
+        SURVEY_ANSWER: 'playerSurvey', 
+        SURVEY_COMPLETE: { target: 'playerProfilePhoto', actions: 'assignWindow' } // <-- Изменено: идем на фото
       }
     },
+    
+    // Новое состояние: Требуем селфи для рамок
+    playerProfilePhoto: {
+      meta: { "@statelyai.color": "blue" },
+      on: {
+        PHOTO_UPLOADED: { target: 'playerPairing', actions: 'setPhotoUploaded' }
+      }
+    },
+
     playerPairing: {
       meta: { "@statelyai.color": "orange" },
       invoke: {
         src: 'generatePairToken',
-        // Получаем Share-code от сервера
         onDone: { actions: 'assignCode' }
       },
       on: {
-        // Игрок сидит на экране и ждет. Когда Ответственный вводит код, сервер пушит сокет-событие
         PAIRING_SUCCESS: 'onboardingComplete'
       }
     },
@@ -108,12 +119,11 @@ export const onboardingMachine = setup({
       meta: { "@statelyai.color": "blue" },
       invoke: {
         src: 'validatePairToken',
-        onDone: 'onboardingComplete', // Код подошел! Пара создана
-        onError: 'responsiblePairing' // Код неверный, попробуй еще
+        onDone: 'onboardingComplete', 
+        onError: 'responsiblePairing' 
       }
     },
 
-    // Конец Анбординга. Возврат в Root Machine
     onboardingComplete: {
       meta: { "@statelyai.color": "green" },
       type: 'final' 
