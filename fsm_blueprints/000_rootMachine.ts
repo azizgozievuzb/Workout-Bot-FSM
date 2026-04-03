@@ -19,6 +19,7 @@ export const rootMachine = setup({
       | { type: 'START_APP'; userId: string }
       | { type: 'PAYMENT_OK' }
       | { type: 'RETRY' }
+      | { type: 'done.invoke.fetchProfile'; output: any }
   },
   actions: {
     saveUserID: assign({ userId: ({ event }) => event.type === 'START_APP' ? event.userId : null })
@@ -52,13 +53,14 @@ export const rootMachine = setup({
     },
     checkingProfile: {
       invoke: {
+        // @ts-ignore
         src: "fetchProfile",
         onDone: [
           // Если юзер полностью готов: берем данные и роутим
           { target: "routing", guard: "userFullySetup", actions: assign({
-              userRole: ({ event }) => event.output.userRole,
-              hasActiveSub: ({ event }) => event.output.hasActiveSub,
-              hasPartner: ({ event }) => event.output.hasPartner
+              userRole: ({ event }) => (event as any).output.userRole,
+              hasActiveSub: ({ event }) => (event as any).output.hasActiveSub,
+              hasPartner: ({ event }) => (event as any).output.hasPartner
           })},
           // Иначе шлем в раздевалку анбординга
           { target: "onboardingFlow", guard: "isNewUser" },
@@ -70,6 +72,7 @@ export const rootMachine = setup({
     onboardingFlow: {
       meta: { "@statelyai.color": "blue" },
       invoke: {
+        // @ts-ignore
         src: "onboardingMachine",
         onDone: "checkingProfile" // После успешного Анбординга повторно проверяем профиль
       }

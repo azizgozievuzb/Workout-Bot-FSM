@@ -73,6 +73,7 @@ export const workoutSessionMachine = setup({
       meta: { "@statelyai.color": "orange" },
       // Пока идет отдых, мы параллельно ждем ответ от AI
       invoke: {
+        // @ts-ignore
         src: 'uploadAndAnalyzeVideo',
         // Если AI ответил быстро – просто сохраняем балл в контекст
         onDone: { actions: 'saveAiScore' },

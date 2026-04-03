@@ -76,6 +76,7 @@ export const playerShopMachine = setup({
     processingPurchase: {
       meta: { "@statelyai.color": "yellow" },
       invoke: {
+        // @ts-ignore
         src: 'deductBalanceAndGrantItem',
         onDone: { target: 'purchaseSuccess', actions: ['updateBalance', 'clearSelection'] },
         onError: { target: 'browsingShop', actions: 'clearSelection' }

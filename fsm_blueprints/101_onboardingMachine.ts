@@ -98,6 +98,7 @@ export const onboardingMachine = setup({
     playerPairing: {
       meta: { "@statelyai.color": "orange" },
       invoke: {
+        // @ts-ignore
         src: 'generatePairToken',
         onDone: { actions: 'assignCode' }
       },
@@ -118,6 +119,7 @@ export const onboardingMachine = setup({
     validatingCode: {
       meta: { "@statelyai.color": "blue" },
       invoke: {
+        // @ts-ignore
         src: 'validatePairToken',
         onDone: 'onboardingComplete', 
         onError: 'responsiblePairing' 

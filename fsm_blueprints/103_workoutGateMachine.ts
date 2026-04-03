@@ -46,15 +46,16 @@ export const workoutGateMachine = setup({
     fetchingData: {
       meta: { "@statelyai.color": "blue" },
       invoke: {
+        // @ts-ignore
         src: 'fetchUserWorkoutStats',
         onDone: {
           target: 'greetings',
           actions: assign({
-            globalScore: ({ event }) => event.output.globalScore,
-            threeDayScore: ({ event }) => event.output.threeDayScore,
-            targetThreeDayScore: ({ event }) => event.output.targetThreeDayScore,
-            currentLevelWindow: ({ event }) => event.output.currentLevelWindow,
-            activeBoost: ({ event }) => event.output.activeBoost
+            globalScore: ({ event }) => (event as any).output.globalScore,
+            threeDayScore: ({ event }) => (event as any).output.threeDayScore,
+            targetThreeDayScore: ({ event }) => (event as any).output.targetThreeDayScore,
+            currentLevelWindow: ({ event }) => (event as any).output.currentLevelWindow,
+            activeBoost: ({ event }) => (event as any).output.activeBoost
           })
         },
         onError: 'errorFetchingData'
@@ -79,6 +80,7 @@ export const workoutGateMachine = setup({
     playerShop: {
       meta: { "@statelyai.color": "blue" },
       invoke: {
+        // @ts-ignore
         src: 'playerShopMachine',
         onDone: 'fetchingData' // После возврата из магазина перепроверяем баланс и данные
       }
@@ -94,6 +96,7 @@ export const workoutGateMachine = setup({
     workoutExecution: {
       meta: { "@statelyai.color": "purple" },
       invoke: {
+        // @ts-ignore
         src: 'workoutSessionMachine',
         onDone: { target: 'workoutSummary', actions: 'saveWorkoutResult' },
         // Если игрок принудительно отменил тренировку через Telegram-меню

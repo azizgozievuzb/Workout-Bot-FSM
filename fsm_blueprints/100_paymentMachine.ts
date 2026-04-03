@@ -52,6 +52,7 @@ export const paymentMachine = setup({
     },
     validatingPromo: {
       invoke: {
+        // @ts-ignore
         src: 'checkPromo',
         onDone: 'success',
         onError: { target: 'promoPhase', actions: 'setError' }

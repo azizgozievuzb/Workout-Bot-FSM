@@ -30,10 +30,10 @@ export const responsibleMachine = setup({
   },
   actions: {
     updateStats: assign({
-      playerGlobalScore: ({ event }) => event.stats.globalScore,
-      playerThreeDayScore: ({ event }) => event.stats.threeDayScore,
-      activeBoost: ({ event }) => event.stats.activeBoost,
-      lastPingTimestamp: ({ event }) => event.stats.lastPingTimestamp
+      playerGlobalScore: ({ event }) => (event as any).stats.globalScore,
+      playerThreeDayScore: ({ event }) => (event as any).stats.threeDayScore,
+      activeBoost: ({ event }) => (event as any).stats.activeBoost,
+      lastPingTimestamp: ({ event }) => (event as any).stats.lastPingTimestamp
     }),
     recordPingToken: assign({
       lastPingTimestamp: () => Date.now()
@@ -68,6 +68,7 @@ export const responsibleMachine = setup({
     fetchingPartnerStats: {
       meta: { "@statelyai.color": "blue" },
       invoke: {
+        // @ts-ignore
         src: 'fetchPlayerStatsFromDB',
         onDone: { target: 'responsibleDashboard', actions: 'updateStats' },
         onError: 'responsibleDashboard' // fallback, если ошибка сети
@@ -95,6 +96,7 @@ export const responsibleMachine = setup({
     sendingPush: {
       meta: { "@statelyai.color": "purple" },
       invoke: {
+        // @ts-ignore
         src: 'sendPushToPlayer',
         onDone: { target: 'responsibleDashboard', actions: 'recordPingToken' },
         onError: 'responsibleDashboard'
@@ -120,6 +122,7 @@ export const responsibleMachine = setup({
     processingPayment: {
       meta: { "@statelyai.color": "yellow" },
       invoke: {
+        // @ts-ignore
         src: 'telegramStarsPayment'
       },
       on: {

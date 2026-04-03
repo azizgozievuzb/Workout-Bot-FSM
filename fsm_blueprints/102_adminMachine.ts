@@ -59,6 +59,7 @@ export const adminMachine = setup({
     fetchingStats: {
       meta: { "@statelyai.color": "blue" },
       invoke: {
+        // @ts-ignore
         src: 'fetchSystemStats',
         onDone: { target: 'viewingStats', actions: 'setStats' },
         onError: 'adminDashboard'
@@ -83,6 +84,7 @@ export const adminMachine = setup({
     confirmBan: {
       meta: { "@statelyai.color": "red" },
       invoke: {
+        // @ts-ignore
         src: 'banUserInDB', // Бэкенд банит обоих в связке
         onDone: { target: 'adminDashboard', actions: 'clearSelection' }, 
         onError: 'managingUsers' // Не смогли забанить
