@@ -3,58 +3,46 @@ import { setup, assign } from 'xstate';
 /**
  * 200_WORKOUT_SESSION_MACHINE
  * 
- * Идеальная архитектура Тренировочной Сессии (Цикл из 16 упражнений).
- * - Управляет умными таймерами (Date.now() resilient).
- * - Параллельно обрабатывает ИИ-отправку во время отдыха.
- * - Ведет счетчик упражнений.
+ * Обновленная архитектура Тренировочной Сессии.
+ * - Обязательный отдых без пропуска.
+ * - Нет принудительных повторений, только начисление/вычет баллов AI.
+ * - Поддержка расчета процентов удержания (0-100%).
  */
 
 export const workoutSessionMachine = setup({
   types: {
     context: {} as {
       currentExercise: number; // От 0 до 15
-      globalTimeElapsed: number; // Общее время в секундах
-      aiVerdicts: ('PASS' | 'RETRY' | null)[];
-      attemptsCount: number; // Кол-во попыток на текущее упражнение
+      globalTimeElapsed: number; // Общее время
+      aiScores: number[]; // Оценки от AI процентов качества (0-100%)
       errorMessage: string | null;
     },
     events: {} as
       | { type: 'START_WORKOUT' }
-      | { type: 'TIMER_END' } // Триггер от фронтенда (таймер закончился)
-      | { type: 'SKIP_REST' }
-      | { type: 'AI_VERDICT_PASS' }
-      | { type: 'AI_VERDICT_RETRY'; errorDetails: string }
-      | { type: 'RETRY_EXERCISE' }
-      | { type: 'NEXT_EXERCISE' }
+      | { type: 'TIMER_END' } // Триггер таймера (подхода или отдыха)
+      | { type: 'AI_VERDICT'; score: number } // AI присылает балл
+      | { type: 'NEXT_EXERCISE' } // Пользователь соглашается с результатом и идет дальше
   },
   actions: {
     incrementExercise: assign({
       currentExercise: ({ context }) => context.currentExercise + 1,
-      attemptsCount: 0, // Сбрасываем попытки для нового упражнения
       errorMessage: null
     }),
-    incrementAttempt: assign({
-      attemptsCount: ({ context }) => context.attemptsCount + 1
-    }),
-    savePassVerdict: assign({
-      aiVerdicts: ({ context }) => {
-        const newVerdicts = [...context.aiVerdicts];
-        newVerdicts[context.currentExercise] = 'PASS';
-        return newVerdicts;
+    saveAiScore: assign({
+      aiScores: ({ context, event }) => {
+        if (event.type !== 'AI_VERDICT') return context.aiScores;
+        const newScores = [...context.aiScores];
+        // Сохраняем процент успешности за подход (0, 50, 90, 100...)
+        newScores[context.currentExercise] = event.score;
+        return newScores;
       }
     }),
-    saveRetryVerdict: assign({
-      aiVerdicts: ({ context, event }) => {
-        const newVerdicts = [...context.aiVerdicts];
-        newVerdicts[context.currentExercise] = 'RETRY';
-        return newVerdicts;
-      },
-      errorMessage: ({ event }) => event.type === 'AI_VERDICT_RETRY' ? event.errorDetails : 'Technical error'
+    recordError: assign({
+      errorMessage: "Ошибка: AI не смог проанализировать видео. Начислен 0."
     })
   },
   guards: {
-    isCycleComplete: ({ context }) => context.currentExercise >= 15,
-    hasMoreAttempts: ({ context }) => context.attemptsCount < 2
+    isCycleComplete: ({ context }) => context.currentExercise >= 15
   }
 }).createMachine({
   id: 'workoutSessionMachine',
@@ -62,12 +50,11 @@ export const workoutSessionMachine = setup({
   context: {
     currentExercise: 0,
     globalTimeElapsed: 0,
-    aiVerdicts: Array(16).fill(null),
-    attemptsCount: 0,
+    aiScores: Array(16).fill(0),
     errorMessage: null
   },
   states: {
-    // Начало тренировки
+    // Старт
     idle: {
       on: { START_WORKOUT: 'preparePhase' }
     },
@@ -76,34 +63,28 @@ export const workoutSessionMachine = setup({
       meta: { "@statelyai.color": "blue" },
       on: { TIMER_END: 'exercisingPhase' } 
     },
-    // Само Упражнение (40 секунд таймер, запись камеры)
+    // Само Упражнение (40 секунд таймер)
     exercisingPhase: {
       meta: { "@statelyai.color": "purple" },
       on: { TIMER_END: 'restAndAnalyzingPhase' }
     },
-    // Отдых + Отправка видео в Gemini
+    // Отдых (Обязательный) + Анализ AI
     restAndAnalyzingPhase: {
       meta: { "@statelyai.color": "orange" },
-      // Имитация того, что фронтенд посылает видео и ждет
+      // Пока идет отдых, мы параллельно ждем ответ от AI
       invoke: {
         src: 'uploadAndAnalyzeVideo',
-        onDone: { target: 'verdictPass', actions: 'savePassVerdict' },
-        onError: { target: 'verdictRetry', actions: ['saveRetryVerdict', 'incrementAttempt'] }
+        // Если AI ответил быстро – просто сохраняем балл в контекст
+        onDone: { actions: 'saveAiScore' },
+        onError: { actions: 'recordError' }
       },
-      // Кнопка пропуска отдыха (но мы все равно дождемся ИИ)
-      on: { SKIP_REST: 'waitingForAI' } 
+      // Переход на следующий этап только по таймеру отдыха
+      on: { 
+        TIMER_END: 'aiVerdictReview'
+      } 
     },
-    // Если пропустили отдых, а ИИ еще не ответил
-    waitingForAI: {
-      meta: { "@statelyai.color": "yellow" },
-      invoke: {
-        src: 'uploadAndAnalyzeVideo',
-        onDone: { target: 'verdictPass', actions: 'savePassVerdict' },
-        onError: { target: 'verdictRetry', actions: ['saveRetryVerdict', 'incrementAttempt'] }
-      }
-    },
-    // Оцениваем вердикт
-    verdictPass: {
+    // Показ результата за прошедший подход (баллы)
+    aiVerdictReview: {
       meta: { "@statelyai.color": "green" },
       on: {
         NEXT_EXERCISE: [
@@ -112,27 +93,7 @@ export const workoutSessionMachine = setup({
         ]
       }
     },
-    verdictRetry: {
-      meta: { "@statelyai.color": "red" },
-      // Проверяем, остались ли попытки
-      always: [
-        { target: 'verdictFailedSkip', guard: ({ context }) => !context.hasMoreAttempts }
-      ],
-      // Иначе даем кнопку "Сделать еще раз"
-      on: {
-        RETRY_EXERCISE: { target: 'preparePhase' }
-      }
-    },
-    // Провалил 2 попытки - идем дальше
-    verdictFailedSkip: {
-      meta: { "@statelyai.color": "orange" },
-      on: {
-        NEXT_EXERCISE: [
-          { target: 'finishSession', guard: 'isCycleComplete' },
-          { target: 'preparePhase', actions: 'incrementExercise' }
-        ]
-      }
-    },
+    // Тренировка завершена
     finishSession: {
       meta: { "@statelyai.color": "green" },
       type: 'final'
