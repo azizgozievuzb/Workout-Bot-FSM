@@ -1,49 +1,45 @@
 import { setup, assign } from 'xstate';
 
 /**
- * ROOT MACHINE v4 (Coloured & Structural Clean Edition)
- * 
- * Мы совместили твою ручную расстановку блоков с глубокой логикой.
- * Для каждого состояния добавлены цвета StatelyAI.
+ * 000_ROOT_MACHINE
+ * Главный роутер приложения.
+ * Избавлен от логики анбординга: делегирует это в 101_onboardingMachine.
+ * Его задача — просто направить юзера в нужное место с правильными ключами.
  */
 
 export const rootMachine = setup({
   types: {
     context: {} as {
-      lang: 'ru' | 'uz' | 'en' | null;
       userRole: 'player' | 'responsible' | 'admin' | null;
-      targetGender: 'male' | 'female' | null;
       userId: string | null;
       hasActiveSub: boolean;
+      hasPartner: boolean; 
     },
     events: {} as
-      | { type: 'SET_LANG'; lang: 'ru' | 'uz' | 'en' }
-      | { type: 'SET_ROLE'; role: 'player' | 'responsible' | 'admin' }
-      | { type: 'SET_GENDER'; gender: 'male' | 'female' }
       | { type: 'START_APP'; userId: string }
       | { type: 'PAYMENT_OK' }
       | { type: 'RETRY' }
   },
   actions: {
-    saveUserID: assign({ userId: ({ event }) => event.type === 'START_APP' ? event.userId : null }),
-    assignLang: assign({ lang: ({ event }) => event.type === 'SET_LANG' ? event.lang : null }),
-    assignRole: assign({ userRole: ({ event }) => event.type === 'SET_ROLE' ? event.role : null }),
-    assignGender: assign({ targetGender: ({ event }) => event.type === 'SET_GENDER' ? event.gender : null }),
+    saveUserID: assign({ userId: ({ event }) => event.type === 'START_APP' ? event.userId : null })
   },
   guards: {
-    userExists: ({ event }) => event.type === 'done.invoke.fetchProfile' && event.output !== null,
-    isNewUser: ({ event }) => event.type === 'done.invoke.fetchProfile' && event.output === null,
+    // В базу стучимся: если профиль есть И пара привязана -> всё ок.
+    userFullySetup: ({ event }) => event.type === 'done.invoke.fetchProfile' && event.output !== null && event.output.hasPartner === true,
+    
+    // Если профиля нет или пара не привязана -> отправляем проходить допросник
+    isNewUser: ({ event }) => event.type === 'done.invoke.fetchProfile' && (event.output === null || event.output.hasPartner === false),
+    
     isAdmin: ({ context }) => context.userRole === 'admin',
     needsPayment: ({ context }) => context.userRole === 'responsible' && !context.hasActiveSub,
     needsToWait: ({ context }) => context.userRole === 'player' && !context.hasActiveSub
   }
 }).createMachine({
   context: {
-    lang: null,
     userId: null,
     userRole: null,
     hasActiveSub: false,
-    targetGender: null,
+    hasPartner: false
   },
   meta: {
     gitHubUrl: "https://github.com/azizgozievuzb/Workout-Bot-FSM/blob/main/fsm_blueprints/000_rootMachine.ts",
@@ -52,31 +48,31 @@ export const rootMachine = setup({
   initial: "idle",
   states: {
     idle: {
-      on: {
-        START_APP: { target: "checkingProfile", actions: "saveUserID" },
-      },
+      on: { START_APP: { target: "checkingProfile", actions: "saveUserID" } },
     },
     checkingProfile: {
       invoke: {
         src: "fetchProfile",
         onDone: [
-          { target: "routing", guard: "userExists" },
-          { target: "languageSelection", guard: "isNewUser" },
+          // Если юзер полностью готов: берем данные и роутим
+          { target: "routing", guard: "userFullySetup", actions: assign({
+              userRole: ({ event }) => event.output.userRole,
+              hasActiveSub: ({ event }) => event.output.hasActiveSub,
+              hasPartner: ({ event }) => event.output.hasPartner
+          })},
+          // Иначе шлем в раздевалку анбординга
+          { target: "onboardingFlow", guard: "isNewUser" },
         ],
         onError: "error",
       },
     },
-    languageSelection: {
+    // Вложенная машина Анбординга (Матрешка)
+    onboardingFlow: {
       meta: { "@statelyai.color": "blue" },
-      on: { SET_LANG: { target: "roleSelection", actions: "assignLang" } },
-    },
-    roleSelection: {
-      meta: { "@statelyai.color": "green" },
-      on: { SET_ROLE: { target: "genderSelection", actions: "assignRole" } },
-    },
-    genderSelection: {
-      meta: { "@statelyai.color": "yellow" },
-      on: { SET_GENDER: { target: "routing", actions: "assignGender" } },
+      invoke: {
+        src: "onboardingMachine",
+        onDone: "checkingProfile" // После успешного Анбординга повторно проверяем профиль
+      }
     },
     routing: {
       always: [
@@ -89,11 +85,13 @@ export const rootMachine = setup({
     adminFlow: { type: "final", meta: { "@statelyai.color": "purple" } },
     paymentFlow: {
       meta: { "@statelyai.color": "orange" },
+      // Ответственный оплатил: пускаем в главное меню
       on: { PAYMENT_OK: { target: "mainAppFlow", actions: assign({ hasActiveSub: true }) } },
     },
     blockedScreen: {
       meta: { "@statelyai.color": "red" },
-      on: { PAYMENT_OK: "mainAppFlow" },
+      // Игрок ждет. Как только Ответственный оплатил, Игрок переходит в главное меню
+      on: { PAYMENT_OK: "mainAppFlow" }, 
     },
     mainAppFlow: { type: "final", meta: { "@statelyai.color": "green" } },
     error: {
