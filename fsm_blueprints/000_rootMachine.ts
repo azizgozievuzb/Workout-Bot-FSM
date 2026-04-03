@@ -45,6 +45,7 @@ export const rootMachine = setup({
     hasActiveSub: false,
     targetGender: null,
   },
+  "https://github.com/azizgozievuzb/Workout-Bot-FSM/blob/91f8ef6271c66478b9b06dc04c80bfc5de57b9e2/fsm_blueprints/000_rootMachine.ts",
   id: "rootMachine",
   initial: "idle",
   states: {
