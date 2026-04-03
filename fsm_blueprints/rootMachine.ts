@@ -1,10 +1,10 @@
 import { setup, assign } from 'xstate';
 
 /**
- * ROOT MACHINE v3.1 (Visual Clean Version)
+ * ROOT MACHINE v4 (Coloured & Structural Clean Edition)
  * 
- * Упрощенная линейная структура для идеального отображения в Stately.
- * Никаких перехлестов: Язык -> Роль -> Гендер -> Роутинг.
+ * Мы совместили твою ручную расстановку блоков с глубокой логикой.
+ * Для каждого состояния добавлены цвета StatelyAI.
  */
 
 export const rootMachine = setup({
@@ -25,85 +25,77 @@ export const rootMachine = setup({
       | { type: 'RETRY' }
   },
   actions: {
+    saveUserID: assign({ userId: ({ event }) => event.type === 'START_APP' ? event.userId : null }),
     assignLang: assign({ lang: ({ event }) => event.type === 'SET_LANG' ? event.lang : null }),
     assignRole: assign({ userRole: ({ event }) => event.type === 'SET_ROLE' ? event.role : null }),
     assignGender: assign({ targetGender: ({ event }) => event.type === 'SET_GENDER' ? event.gender : null }),
-    saveUserID: assign({ userId: ({ event }) => event.type === 'START_APP' ? event.userId : null }),
   },
   guards: {
-    isNewUser: ({ event }) => event.type === 'done.invoke.fetchProfile' && event.output === null,
     userExists: ({ event }) => event.type === 'done.invoke.fetchProfile' && event.output !== null,
-    needsPayment: ({ context }) => context.userRole === 'responsible' && !context.hasActiveSub,
-    needsToWait: ({ context }) => context.userRole === 'player' && !context.hasActiveSub,
+    isNewUser: ({ event }) => event.type === 'done.invoke.fetchProfile' && event.output === null,
     isAdmin: ({ context }) => context.userRole === 'admin',
-    isReady: ({ context }) => context.hasActiveSub
+    needsPayment: ({ context }) => context.userRole === 'responsible' && !context.hasActiveSub,
+    needsToWait: ({ context }) => context.userRole === 'player' && !context.hasActiveSub
   }
 }).createMachine({
-  id: 'rootMachine',
-  initial: 'idle',
   context: {
     lang: null,
-    userRole: null,
-    targetGender: null,
     userId: null,
+    userRole: null,
     hasActiveSub: false,
+    targetGender: null,
   },
+  id: "rootMachine",
+  initial: "idle",
   states: {
     idle: {
       on: {
-        START_APP: {
-          target: 'checkingProfile',
-          actions: 'saveUserID'
-        }
-      }
+        START_APP: { target: "checkingProfile", actions: "saveUserID" },
+      },
     },
-
-    // 💡 ТУТ НАЧИНАЕТСЯ ОЧИЩЕННАЯ ВЕРТИКАЛЬНАЯ ЛОГИКА
     checkingProfile: {
       invoke: {
-        src: 'fetchProfile',
+        src: "fetchProfile",
         onDone: [
-          { target: 'routing', guard: 'userExists' },
-          { target: 'languageSelection', guard: 'isNewUser' }
+          { target: "routing", guard: "userExists" },
+          { target: "languageSelection", guard: "isNewUser" },
         ],
-        onError: 'error'
-      }
+        onError: "error",
+      },
     },
-
     languageSelection: {
-      on: { SET_LANG: { target: 'roleSelection', actions: 'assignLang' } }
+      meta: { "@statelyai.color": "blue" },
+      on: { SET_LANG: { target: "roleSelection", actions: "assignLang" } },
     },
-
     roleSelection: {
-      on: { SET_ROLE: { target: 'genderSelection', actions: 'assignRole' } }
+      meta: { "@statelyai.color": "green" },
+      on: { SET_ROLE: { target: "genderSelection", actions: "assignRole" } },
     },
-
     genderSelection: {
-      on: { SET_GENDER: { target: 'routing', actions: 'assignGender' } }
+      meta: { "@statelyai.color": "yellow" },
+      on: { SET_GENDER: { target: "routing", actions: "assignGender" } },
     },
-
     routing: {
       always: [
-        { guard: 'isAdmin', target: 'adminFlow' },
-        { guard: 'needsPayment', target: 'paymentFlow' },
-        { guard: 'needsToWait', target: 'blockedScreen' },
-        { target: 'mainAppFlow' } // Состояние, когда всё хорошо
-      ]
+        { target: "adminFlow", guard: "isAdmin", meta: { "@statelyai.color": "purple" } },
+        { target: "paymentFlow", guard: "needsPayment", meta: { "@statelyai.color": "orange" } },
+        { target: "blockedScreen", guard: "needsToWait", meta: { "@statelyai.color": "red" } },
+        { target: "mainAppFlow", meta: { "@statelyai.color": "green" } },
+      ],
     },
-
+    adminFlow: { type: "final", meta: { "@statelyai.color": "purple" } },
     paymentFlow: {
-      on: { PAYMENT_OK: { target: 'mainAppFlow', actions: assign({ hasActiveSub: true }) } }
+      meta: { "@statelyai.color": "orange" },
+      on: { PAYMENT_OK: { target: "mainAppFlow", actions: assign({ hasActiveSub: true }) } },
     },
-
     blockedScreen: {
-      on: { PAYMENT_OK: 'mainAppFlow' }
+      meta: { "@statelyai.color": "red" },
+      on: { PAYMENT_OK: "mainAppFlow" },
     },
-
-    adminFlow: { type: 'final' },
-    mainAppFlow: { type: 'final' },
-
+    mainAppFlow: { type: "final", meta: { "@statelyai.color": "green" } },
     error: {
-      on: { RETRY: 'checkingProfile' }
-    }
-  }
+      meta: { "@statelyai.color": "red" },
+      on: { RETRY: "checkingProfile" },
+    },
+  },
 });
