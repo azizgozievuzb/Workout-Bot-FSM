@@ -2,27 +2,29 @@
 
 Архитектурные чертежи (XState / Stately Studio) для Telegram Mini App тренировок с геймификацией.
 
-## Модули (7 FSM-машин)
+> **AI-агент:** Не читай этот файл для контекста. Иди в `CLAUDE.md` → `SESSION_STATUS.md`.
+
+## Модули (8 FSM-машин)
 
 | Файл | Назначение |
 |------|-----------|
-| `rootMachine.ts` | Роутинг 3 ролей: Player / Responsible / Admin |
-| `onboardingMachine.ts` | Регистрация, роли, ласковые имена, связка пар |
-| `workoutMachine.ts` | 35-мин тренировка (оффлайн, без пауз, ИИ-вердикт) |
-| `shopMachine.ts` | Магазин: покупка за ⭐️, разблокировка за 🔥 стрики |
-| `responsibleMachine.ts` | Экран "Ответственного": подарки, прогресс партнера |
-| `adminMachine.ts` | Суперадмин: видео-слоты, управление парами |
-| `schedulerMachine.ts` | Планировщик: напоминания, сброс стриков в 00:00 |
+| `000_rootMachine.ts` | Роутер ролей: Player / Responsible / Admin |
+| `100_paymentMachine.ts` | Оплата: Telegram Stars, Промокоды, (Крипто) |
+| `101_onboardingMachine.ts` | Регистрация: язык → роль → пол → опрос → фото → связка пар |
+| `102_adminMachine.ts` | Админ: Users (баны), Content (инфо), Stats (статистика) |
+| `103_workoutGateMachine.ts` | Раздевалка: рейтинг, бусты, → тренировка или магазин |
+| `104_responsibleMachine.ts` | Панель Responsible: прогресс партнёра, пинги, бусты X2 |
+| `105_playerShopMachine.ts` | Магазин Игрока: скипы, аватарки, лутбоксы, троллинг |
+| `200_workoutSessionMachine.ts` | Тренировка: 16 упражнений × 40 сек, камера, AI verdict |
 
 ## Роли
-- **Player** — Тренируется, зарабатывает звезды, покупает подарки
-- **Responsible** — Пополняет магазин подарками, видит прогресс партнера (24ч задержка)
-- **Admin** — Управляет видео-библиотекой и доступом пар
+- **Player** — Тренируется, записывает видео, зарабатывает звёзды, тратит в магазине
+- **Responsible** — Видит прогресс партнёра, покупает бусты X2 за Telegram Stars, отправляет пинги
+- **Admin** — Управляет пользователями (баны), контентом (видеобиблиотека), статистикой
 
-## Стек (планируемый)
-- **Backend**: Python 3.11 + Aiogram 3.x
-- **Frontend (Mini App)**: Vite + React
-- **БД**: Supabase (PostgreSQL)
-- **Кэш/FSM**: Upstash Redis
-- **ИИ**: Google Gemini API
-- **Хостинг**: Railway + Vercel
+## Стек
+- **Backend**: Python 3.11 + Aiogram 3
+- **Frontend (Mini App)**: Vite + React + TypeScript
+- **БД**: Supabase PostgreSQL
+- **AI**: Google Gemini Vision API
+- **Хостинг**: Railway

@@ -1,0 +1,1189 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Workout Bot — Введение</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-card: #12121a;
+            --bg-card-hover: #1a1a28;
+            --bg-accent: #1e1e2e;
+            --text-primary: #e8e8f0;
+            --text-secondary: #8888a8;
+            --text-muted: #55556a;
+            --accent-blue: #6366f1;
+            --accent-purple: #a855f7;
+            --accent-green: #22c55e;
+            --accent-orange: #f59e0b;
+            --accent-red: #ef4444;
+            --accent-pink: #ec4899;
+            --accent-cyan: #06b6d4;
+            --gradient-1: linear-gradient(135deg, #6366f1, #a855f7);
+            --gradient-2: linear-gradient(135deg, #22c55e, #06b6d4);
+            --gradient-3: linear-gradient(135deg, #f59e0b, #ef4444);
+            --gradient-4: linear-gradient(135deg, #ec4899, #a855f7);
+            --border-color: #2a2a3d;
+            --border-glow: rgba(99, 102, 241, 0.3);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.7;
+            scroll-behavior: smooth;
+        }
+
+        /* Animated background */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: 
+                radial-gradient(ellipse at 20% 20%, rgba(99, 102, 241, 0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 80%, rgba(168, 85, 247, 0.06) 0%, transparent 50%),
+                radial-gradient(ellipse at 50% 50%, rgba(34, 197, 94, 0.03) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 0 24px;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Navigation */
+        nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: rgba(10, 10, 15, 0.85);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border-color);
+            z-index: 100;
+            padding: 0 24px;
+        }
+
+        nav .nav-inner {
+            max-width: 900px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 60px;
+        }
+
+        nav .logo {
+            font-weight: 800;
+            font-size: 18px;
+            background: var(--gradient-1);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        nav .nav-links {
+            display: flex;
+            gap: 8px;
+            list-style: none;
+            flex-wrap: wrap;
+        }
+
+        nav .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 500;
+            padding: 6px 12px;
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+
+        nav .nav-links a:hover {
+            color: var(--text-primary);
+            background: var(--bg-accent);
+        }
+
+        /* Hero */
+        .hero {
+            padding: 120px 0 80px;
+            text-align: center;
+        }
+
+        .hero-badge {
+            display: inline-block;
+            padding: 6px 16px;
+            border-radius: 100px;
+            background: rgba(99, 102, 241, 0.1);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            color: var(--accent-blue);
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 24px;
+            letter-spacing: 0.5px;
+        }
+
+        .hero h1 {
+            font-size: clamp(36px, 6vw, 56px);
+            font-weight: 900;
+            line-height: 1.1;
+            margin-bottom: 20px;
+            background: linear-gradient(135deg, #fff 0%, #a8a8c8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .hero p {
+            font-size: 18px;
+            color: var(--text-secondary);
+            max-width: 600px;
+            margin: 0 auto 40px;
+        }
+
+        .hero-stats {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            flex-wrap: wrap;
+        }
+
+        .hero-stat {
+            text-align: center;
+        }
+
+        .hero-stat .number {
+            font-size: 32px;
+            font-weight: 800;
+            background: var(--gradient-1);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .hero-stat .label {
+            font-size: 13px;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        /* Sections */
+        section {
+            padding: 60px 0;
+        }
+
+        .section-label {
+            display: inline-block;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--accent-blue);
+            margin-bottom: 12px;
+        }
+
+        h2 {
+            font-size: 32px;
+            font-weight: 800;
+            margin-bottom: 16px;
+            line-height: 1.2;
+        }
+
+        .section-desc {
+            color: var(--text-secondary);
+            font-size: 16px;
+            margin-bottom: 40px;
+            max-width: 600px;
+        }
+
+        /* Cards */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 28px;
+            margin-bottom: 16px;
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            background: var(--bg-card-hover);
+            border-color: var(--border-glow);
+            transform: translateY(-2px);
+        }
+
+        .card-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            margin-bottom: 16px;
+        }
+
+        .card h3 {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .card p {
+            color: var(--text-secondary);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        /* Two column layout */
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .grid-3 {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 16px;
+        }
+
+        @media (max-width: 768px) {
+            .grid-2, .grid-3 { grid-template-columns: 1fr; }
+            .hero-stats { gap: 24px; }
+        }
+
+        /* Role cards */
+        .role-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 32px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .role-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 3px;
+        }
+
+        .role-card.player::before { background: var(--gradient-2); }
+        .role-card.watcher::before { background: var(--gradient-4); }
+
+        .role-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .role-emoji {
+            font-size: 40px;
+        }
+
+        .role-title {
+            font-size: 24px;
+            font-weight: 800;
+        }
+
+        .role-subtitle {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .feature-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .feature-list li {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .feature-list li .icon {
+            flex-shrink: 0;
+            width: 24px;
+            height: 24px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+        }
+
+        /* Rules table */
+        .rules-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .rules-table th {
+            text-align: left;
+            padding: 12px 16px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .rules-table td {
+            padding: 14px 16px;
+            font-size: 14px;
+            border-bottom: 1px solid rgba(42, 42, 61, 0.5);
+            color: var(--text-secondary);
+        }
+
+        .rules-table tr:hover td {
+            background: rgba(99, 102, 241, 0.03);
+        }
+
+        .rules-table .rule-num {
+            font-weight: 700;
+            color: var(--text-muted);
+            font-size: 13px;
+            width: 40px;
+        }
+
+        .rules-table .status {
+            width: 40px;
+            text-align: center;
+        }
+
+        /* Flow diagram */
+        .flow-container {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 40px;
+            margin: 24px 0;
+        }
+
+        .flow-step {
+            display: flex;
+            align-items: flex-start;
+            gap: 20px;
+            margin-bottom: 28px;
+            position: relative;
+        }
+
+        .flow-step:not(:last-child)::after {
+            content: '';
+            position: absolute;
+            left: 23px;
+            top: 48px;
+            bottom: -28px;
+            width: 2px;
+            background: var(--border-color);
+        }
+
+        .flow-num {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 18px;
+            flex-shrink: 0;
+            color: #fff;
+        }
+
+        .flow-content h4 {
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .flow-content p {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        /* Gamification cards */
+        .gami-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 24px;
+            transition: all 0.3s;
+        }
+
+        .gami-card:hover {
+            border-color: var(--border-glow);
+            transform: translateY(-2px);
+        }
+
+        .gami-emoji {
+            font-size: 32px;
+            margin-bottom: 12px;
+            display: block;
+        }
+
+        .gami-card h4 {
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        .gami-card p {
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        /* Tag */
+        .tag {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+
+        .tag.green { background: rgba(34, 197, 94, 0.1); color: var(--accent-green); }
+        .tag.orange { background: rgba(245, 158, 11, 0.1); color: var(--accent-orange); }
+        .tag.purple { background: rgba(168, 85, 247, 0.1); color: var(--accent-purple); }
+        .tag.red { background: rgba(239, 68, 68, 0.1); color: var(--accent-red); }
+        .tag.blue { background: rgba(99, 102, 241, 0.1); color: var(--accent-blue); }
+
+        /* Tariff cards */
+        .tariff-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 28px;
+            text-align: center;
+            transition: all 0.3s;
+            position: relative;
+        }
+
+        .tariff-card.featured {
+            border-color: var(--accent-purple);
+            box-shadow: 0 0 30px rgba(168, 85, 247, 0.1);
+        }
+
+        .tariff-card .tariff-badge {
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 4px 16px;
+            border-radius: 100px;
+            font-size: 11px;
+            font-weight: 700;
+            background: var(--gradient-4);
+            color: #fff;
+        }
+
+        .tariff-emoji {
+            font-size: 40px;
+            margin-bottom: 12px;
+            display: block;
+        }
+
+        .tariff-name {
+            font-size: 20px;
+            font-weight: 800;
+            margin-bottom: 4px;
+        }
+
+        .tariff-price {
+            font-size: 14px;
+            color: var(--text-muted);
+            margin-bottom: 20px;
+        }
+
+        .tariff-features {
+            list-style: none;
+            text-align: left;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .tariff-features li {
+            font-size: 13px;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .tariff-features li .check {
+            color: var(--accent-green);
+            font-size: 14px;
+        }
+
+        .tariff-features li .cross {
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+
+        /* AI Section */
+        .ai-scale {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        .ai-bar {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .ai-bar .label {
+            font-size: 13px;
+            color: var(--text-secondary);
+            min-width: 200px;
+        }
+
+        .ai-bar .bar-bg {
+            flex: 1;
+            height: 8px;
+            background: var(--bg-accent);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .ai-bar .bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 1s ease;
+        }
+
+        .ai-bar .percent {
+            font-size: 14px;
+            font-weight: 700;
+            min-width: 45px;
+            text-align: right;
+        }
+
+        /* Divider */
+        .divider {
+            height: 1px;
+            background: var(--border-color);
+            margin: 40px 0;
+        }
+
+        /* Quote */
+        .quote {
+            background: var(--bg-card);
+            border-left: 3px solid var(--accent-purple);
+            border-radius: 0 12px 12px 0;
+            padding: 20px 24px;
+            margin: 24px 0;
+            font-style: italic;
+            color: var(--text-secondary);
+            font-size: 15px;
+        }
+
+        /* Footer */
+        footer {
+            padding: 40px 0;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 13px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        /* Scroll animations */
+        .reveal {
+            opacity: 0;
+            transform: translateY(30px);
+            transition: all 0.6s ease;
+        }
+
+        .reveal.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* Synchro streak visual */
+        .streak-visual {
+            display: flex;
+            gap: 6px;
+            margin: 16px 0;
+            flex-wrap: wrap;
+        }
+
+        .streak-day {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 700;
+            border: 1px solid var(--border-color);
+            background: var(--bg-accent);
+            color: var(--text-muted);
+        }
+
+        .streak-day.active {
+            background: rgba(34, 197, 94, 0.15);
+            border-color: var(--accent-green);
+            color: var(--accent-green);
+        }
+
+        .streak-day.reward {
+            background: rgba(245, 158, 11, 0.15);
+            border-color: var(--accent-orange);
+            color: var(--accent-orange);
+        }
+
+        .invite-flow-visual {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .invite-step {
+            background: var(--bg-accent);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 16px 20px;
+            text-align: center;
+            min-width: 120px;
+        }
+
+        .invite-step .emoji { font-size: 28px; display: block; margin-bottom: 6px; }
+        .invite-step .text { font-size: 12px; color: var(--text-secondary); }
+
+        .invite-arrow {
+            font-size: 20px;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+
+<nav>
+    <div class="nav-inner">
+        <div class="logo">💪 Workout Bot</div>
+        <div class="nav-links">
+            <a href="#concept">Концепция</a>
+            <a href="#roles">Роли</a>
+            <a href="#rules">Правила</a>
+            <a href="#flow">Флоу</a>
+            <a href="#tariffs">Тарифы</a>
+            <a href="#gamification">Геймификация</a>
+            <a href="#ai">AI</a>
+            <a href="#leaderboard">Таблица</a>
+        </div>
+    </div>
+</nav>
+
+<div class="container">
+
+    <!-- HERO -->
+    <section class="hero">
+        <div class="hero-badge">📐 Документ видения проекта</div>
+        <h1>Gamified Workout Bot</h1>
+        <p>Telegram-бот с AI-проверкой тренировок, двойной ролевой системой и глубокой геймификацией для мотивации через человеческие отношения.</p>
+        <div class="hero-stats">
+            <div class="hero-stat">
+                <div class="number">12</div>
+                <div class="label">Правил</div>
+            </div>
+            <div class="hero-stat">
+                <div class="number">7</div>
+                <div class="label">Механик</div>
+            </div>
+            <div class="hero-stat">
+                <div class="number">10</div>
+                <div class="label">FSM-модулей</div>
+            </div>
+            <div class="hero-stat">
+                <div class="number">2</div>
+                <div class="label">Роли</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CONCEPT -->
+    <section id="concept" class="reveal">
+        <span class="section-label">Концепция</span>
+        <h2>Что это за проект?</h2>
+        <p class="section-desc">Telegram Mini App, где пользователь выполняет 35-минутную тренировку, снимает себя на камеру, а AI (Gemini Vision) оценивает качество выполнения.</p>
+
+        <div class="card">
+            <h3>🎯 Ключевая идея</h3>
+            <p>Мотивация через <strong>живого человека</strong>. Не просто бот — а система, где кто-то <em>реальный</em> платит за твои тренировки, следит за прогрессом, отправляет стикеры утром и вечером, и дарит подарки за достижения. AI — помощник. Человек — мотиватор.</p>
+        </div>
+
+        <div class="quote">
+            «Смотрящий — это не функция. Смотрящий — это отношения.»
+        </div>
+
+        <div class="grid-2" style="margin-top: 24px;">
+            <div class="card">
+                <h3>🏗️ Платформа</h3>
+                <p>Telegram Mini App (Vite + React фронтенд). Python + Aiogram бэкенд. Supabase PostgreSQL база. Gemini Vision API для анализа видео.</p>
+            </div>
+            <div class="card">
+                <h3>💰 Монетизация</h3>
+                <p>3 способа оплаты: Telegram Stars, промокоды (покупка напрямую у админа) и криптовалюта. Смотрящий <strong>всегда</strong> платит за доступ Игрока. Триальный период — 1 неделя бесплатно.</p>
+            </div>
+        </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ROLES -->
+    <section id="roles" class="reveal">
+        <span class="section-label">Система ролей</span>
+        <h2>Два экрана. Две роли.</h2>
+        <p class="section-desc">Каждый пользователь может быть Игроком, Смотрящим или обоими одновременно. Переключение — одной кнопкой.</p>
+
+        <div class="grid-2">
+            <div class="role-card player">
+                <div class="role-header">
+                    <div class="role-emoji">🏋️</div>
+                    <div>
+                        <div class="role-title">Игрок</div>
+                        <div class="role-subtitle">Тот, кто тренируется</div>
+                    </div>
+                </div>
+                <ul class="feature-list">
+                    <li><span class="icon">🎥</span> Выполняет тренировку на камеру (35 мин)</li>
+                    <li><span class="icon">🤖</span> AI оценивает качество 0–100%</li>
+                    <li><span class="icon">🪙</span> Зарабатывает Золото за тренировки</li>
+                    <li><span class="icon">🛒</span> Тратит Золото в Магазине (подарки от Смотрящего)</li>
+                    <li><span class="icon">🔥</span> Держит стрик (дни подряд)</li>
+                    <li><span class="icon">🏆</span> Может участвовать в турнирной таблице</li>
+                    <li><span class="icon">🩸</span> Дни отдыха — 3/мес (только женщины)</li>
+                </ul>
+            </div>
+
+            <div class="role-card watcher">
+                <div class="role-header">
+                    <div class="role-emoji">👀</div>
+                    <div>
+                        <div class="role-title">Смотрящий</div>
+                        <div class="role-subtitle">Тот, кто следит и мотивирует</div>
+                    </div>
+                </div>
+                <ul class="feature-list">
+                    <li><span class="icon">💳</span> Оплачивает доступ Игрока</li>
+                    <li><span class="icon">📨</span> Отправляет стикеры 2 раза/день</li>
+                    <li><span class="icon">💕</span> Заполняет Шкалу Заботы</li>
+                    <li><span class="icon">🎁</span> Добавляет подарки в Магазин Игрока</li>
+                    <li><span class="icon">🛡️</span> Покупает Стрик-щит (тайно)</li>
+                    <li><span class="icon">📦</span> Записывает Капсулу Времени</li>
+                    <li><span class="icon">🏅</span> Нажимает «Горжусь!»</li>
+                    <li><span class="icon">👥</span> До 3 Игроков (Премиум)</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- RULES -->
+    <section id="rules" class="reveal">
+        <span class="section-label">Бизнес-правила</span>
+        <h2>12 закреплённых правил</h2>
+        <p class="section-desc">Фундамент системы. Ни одно правило не может быть нарушено.</p>
+
+        <div class="card" style="padding: 0; overflow: hidden;">
+            <table class="rules-table">
+                <thead>
+                    <tr><th class="rule-num">#</th><th>Правило</th><th class="status"></th></tr>
+                </thead>
+                <tbody>
+                    <tr><td class="rule-num">1</td><td>Доступ Игрока <strong>всегда</strong> оплачивается Смотрящим</td><td class="status">✅</td></tr>
+                    <tr><td class="rule-num">2</td><td>1 Смотрящий → макс. <strong>1 Игрок</strong> (обычный) / <strong>3 Игрока</strong> (Премиум)</td><td class="status">✅</td></tr>
+                    <tr><td class="rule-num">3</td><td>1 Игрок → всегда ровно <strong>1 Смотрящий</strong></td><td class="status">✅</td></tr>
+                    <tr><td class="rule-num">4</td><td>Без Смотрящего → Игрок <strong>заблокирован</strong></td><td class="status">✅</td></tr>
+                    <tr><td class="rule-num">5</td><td>Смотрящий становится Игроком <strong>только</strong> если другой Смотрящий его добавил</td><td class="status">✅</td></tr>
+                    <tr><td class="rule-num">6</td><td>Регистрация <strong>всегда</strong> начинается как Смотрящий</td><td class="status">✅</td></tr>
+                    <tr><td class="rule-num">7</td><td>Добавление Игрока — через <strong>инвайт-ссылку</strong> (48ч жизни)</td><td class="status">✅</td></tr>
+                    <tr><td class="rule-num">8</td><td>Инвайт отклонён <strong>ИЛИ</strong> истёк → возврат <strong>50%</strong></td><td class="status">✅</td></tr>
+                    <tr><td class="rule-num">9</td><td>Триальный период — <strong>1 неделя</strong></td><td class="status">✅</td></tr>
+                    <tr><td class="rule-num">10</td><td>Дни отдыха (3/мес) — <strong>только женский пол</strong></td><td class="status">✅</td></tr>
+                    <tr><td class="rule-num">11</td><td>Анкета тренировок — <strong>только</strong> при становлении Игроком</td><td class="status">✅</td></tr>
+                    <tr><td class="rule-num">12</td><td>Смотрящий может <strong>отменить ссылку</strong> до принятия → 50% возврат</td><td class="status">✅</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- INVITE FLOW -->
+    <section id="flow" class="reveal">
+        <span class="section-label">Инвайт-система</span>
+        <h2>Как Смотрящий приглашает Игрока</h2>
+        <p class="section-desc">Уникальная ссылка, оплата вперёд, 48 часов на принятие.</p>
+
+        <div class="invite-flow-visual">
+            <div class="invite-step"><span class="emoji">💳</span><span class="text">Выбор тарифа<br>и оплата</span></div>
+            <div class="invite-arrow">→</div>
+            <div class="invite-step"><span class="emoji">🔗</span><span class="text">Генерация<br>ссылки (48ч)</span></div>
+            <div class="invite-arrow">→</div>
+            <div class="invite-step"><span class="emoji">📤</span><span class="text">Отправка<br>Игроку</span></div>
+            <div class="invite-arrow">→</div>
+            <div class="invite-step"><span class="emoji">✅</span><span class="text">Принял →<br>Активация</span></div>
+        </div>
+
+        <div class="flow-container">
+            <div class="flow-step">
+                <div class="flow-num" style="background: var(--gradient-1);">1</div>
+                <div class="flow-content">
+                    <h4>Самостоятельная регистрация → Смотрящий</h4>
+                    <p>Новый юзер открывает бота. Проходит онбординг: язык, пол, фото. Далее — выбор тарифа, оплата, генерация инвайт-ссылки.</p>
+                </div>
+            </div>
+            <div class="flow-step">
+                <div class="flow-num" style="background: var(--gradient-2);">2</div>
+                <div class="flow-content">
+                    <h4>Вход через ссылку → Игрок</h4>
+                    <p>Кто-то кликает инвайт-ссылку. Если новый — полный онбординг + анкета тренировок. Если существующий — только анкета + подтверждение.</p>
+                </div>
+            </div>
+            <div class="flow-step">
+                <div class="flow-num" style="background: var(--gradient-3);">3</div>
+                <div class="flow-content">
+                    <h4>Отклонение / Истечение → 50% возврат</h4>
+                    <p>Неважно, отклонил Игрок или ссылка просто истекла — Смотрящему возвращается 50% оплаты. Всегда одинаково.</p>
+                </div>
+            </div>
+            <div class="flow-step">
+                <div class="flow-num" style="background: var(--gradient-4);">4</div>
+                <div class="flow-content">
+                    <h4>Обе роли одновременно</h4>
+                    <p>Если Азиз — Смотрящий Боба, а Боб — Смотрящий Азиза, у обоих есть переключатель ролей. Каждый платит за своего Игрока. Тарифы могут отличаться.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- TARIFFS -->
+    <section id="tariffs" class="reveal">
+        <span class="section-label">Монетизация</span>
+        <h2>Тарифные планы</h2>
+        <p class="section-desc">Смотрящий выбирает тариф для своего Игрока. Каждый Игрок может быть на разном тарифе.</p>
+
+        <div class="grid-3">
+            <div class="tariff-card">
+                <span class="tariff-emoji">🥉</span>
+                <div class="tariff-name">Базовый</div>
+                <div class="tariff-price">X ⭐ / мес</div>
+                <ul class="tariff-features">
+                    <li><span class="check">✓</span> Видео тренировок</li>
+                    <li><span class="cross">✗</span> Аудио</li>
+                    <li><span class="cross">✗</span> Стартовые баллы</li>
+                    <li><span class="cross">✗</span> Приоритет AI</li>
+                </ul>
+            </div>
+
+            <div class="tariff-card featured">
+                <span class="tariff-badge">Популярный</span>
+                <span class="tariff-emoji">🥈</span>
+                <div class="tariff-name">Стандарт</div>
+                <div class="tariff-price">XX ⭐ / мес</div>
+                <ul class="tariff-features">
+                    <li><span class="check">✓</span> Видео тренировок</li>
+                    <li><span class="check">✓</span> Аудио</li>
+                    <li><span class="cross">✗</span> Стартовые баллы</li>
+                    <li><span class="cross">✗</span> Приоритет AI</li>
+                </ul>
+            </div>
+
+            <div class="tariff-card">
+                <span class="tariff-emoji">🥇</span>
+                <div class="tariff-name">Про</div>
+                <div class="tariff-price">XXX ⭐ / мес</div>
+                <ul class="tariff-features">
+                    <li><span class="check">✓</span> Видео тренировок</li>
+                    <li><span class="check">✓</span> Аудио</li>
+                    <li><span class="check">✓</span> 500 стартовых баллов</li>
+                    <li><span class="check">✓</span> Приоритет AI</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- GAMIFICATION -->
+    <section id="gamification" class="reveal">
+        <span class="section-label">Геймификация</span>
+        <h2>7 механик вовлечённости</h2>
+        <p class="section-desc">Превращают Смотрящего из пассивного наблюдателя в активного участника. Ни одну из этих механик AI заменить не может.</p>
+
+        <div class="grid-2">
+            <div class="gami-card">
+                <span class="gami-emoji">💕</span>
+                <h4>Шкала Заботы</h4>
+                <span class="tag purple">Ежедневно</span>
+                <p style="margin-top: 8px;">Смотрящий отправляет 2 стикера в день (минимум 8ч между ними). Шкала заполняется за ~7 дней. При 100% — открывается возможность подарить буст.</p>
+            </div>
+
+            <div class="gami-card">
+                <span class="gami-emoji">🎁</span>
+                <h4>Кастомные подарки</h4>
+                <span class="tag green">Магазин</span>
+                <p style="margin-top: 8px;">Смотрящий добавляет подарки в Магазин Игрока: творческие (массаж, ужин) или реальные (протеин, гантели). Игрок «покупает» их за Золото.</p>
+            </div>
+
+            <div class="gami-card">
+                <span class="gami-emoji">🏅</span>
+                <h4>Кнопка «Горжусь!»</h4>
+                <span class="tag blue">Таблица</span>
+                <p style="margin-top: 8px;">Смотрящий нажимает «Горжусь!» — это отображается в турнирной таблице: «Азиз гордится 3 Игроками с рейтингом 3100».</p>
+            </div>
+
+            <div class="gami-card">
+                <span class="gami-emoji">🔄</span>
+                <h4>Синхро-стрик</h4>
+                <span class="tag orange">Еженедельно</span>
+                <p style="margin-top: 8px;">Если Игрок тренируется И Смотрящий стикерит каждый день — оба держат синхро-стрик. 7 дней → X2 буст на 1 день. Месяц → ещё X2 на 3 дня.</p>
+
+                <div class="streak-visual" style="margin-top: 12px;">
+                    <div class="streak-day active">Пн</div>
+                    <div class="streak-day active">Вт</div>
+                    <div class="streak-day active">Ср</div>
+                    <div class="streak-day active">Чт</div>
+                    <div class="streak-day active">Пт</div>
+                    <div class="streak-day active">Сб</div>
+                    <div class="streak-day active">Вс</div>
+                    <div class="streak-day reward">🎁</div>
+                </div>
+                <p style="font-size: 12px; color: var(--text-muted);">Итого за месяц: 4 + 3 = 7 дней X2 буста</p>
+            </div>
+
+            <div class="gami-card">
+                <span class="gami-emoji">📦</span>
+                <h4>Капсула Времени</h4>
+                <span class="tag red">Эмоциональный</span>
+                <p style="margin-top: 8px;">Смотрящий записывает текст или видео (до 30 сек), которое откроется строго через 30 дней. Нельзя отменить. Экстремально мощная привязка.</p>
+            </div>
+
+            <div class="gami-card">
+                <span class="gami-emoji">🛡️</span>
+                <h4>Стрик-щит</h4>
+                <span class="tag orange">Покупка</span>
+                <p style="margin-top: 8px;">Смотрящий тайно покупает защиту стрика (1–7 дней, макс. неделя). Игрок узнаёт только при пропуске: «Ваш стрик спасён Смотрящим! 🛡️»</p>
+            </div>
+
+            <div class="gami-card" style="grid-column: 1 / -1;">
+                <span class="gami-emoji">✅</span>
+                <h4>AI — Единственный источник баллов</h4>
+                <span class="tag green">Ключевой принцип</span>
+                <p style="margin-top: 8px;">Баллы <strong>не существуют</strong> до проверки AI. Программа <strong>ничего не начисляет автоматически</strong> — только AI решает, сколько баллов получит упражнение. Нет человека на видео или просто стоит/сидит → AI возвращает <strong>0</strong> → программа начисляет <strong>0 баллов за упражнение</strong>. Это не штраф и не отбирание — баллов просто <em>не было и не будет</em> без реальной тренировки.</p>
+            </div>
+        </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- AI -->
+    <section id="ai" class="reveal">
+        <span class="section-label">Искусственный интеллект</span>
+        <h2>Как начисляются баллы</h2>
+        <p class="section-desc">Баллы за упражнение НЕ начисляются автоматически. Единственный источник баллов — решение AI после анализа видео.</p>
+
+        <div class="card">
+            <h3>⚙️ Как это работает</h3>
+            <p>Игрок записывает видео упражнения → видео отправляется на Gemini Vision → AI анализирует → <strong>возвращает число от 0 до 100</strong> → программа начисляет ровно столько баллов. Без AI — нет баллов.</p>
+        </div>
+
+        <div class="card">
+            <h3>📊 Шкала оценки (итоговые баллы за упражнение)</h3>
+            <div class="ai-scale">
+                <div class="ai-bar">
+                    <div class="label">❌ Человек не найден на видео</div>
+                    <div class="bar-bg"><div class="bar-fill" style="width: 0%; background: var(--accent-red);"></div></div>
+                    <div class="percent" style="color: var(--accent-red);">0</div>
+                </div>
+                <div class="ai-bar">
+                    <div class="label">🧍 Стоит / сидит / не тренируется</div>
+                    <div class="bar-bg"><div class="bar-fill" style="width: 0%; background: var(--accent-red);"></div></div>
+                    <div class="percent" style="color: var(--accent-red);">0</div>
+                </div>
+                <div class="ai-bar">
+                    <div class="label">💪 Попытка, но техника слабая</div>
+                    <div class="bar-bg"><div class="bar-fill" style="width: 30%; background: var(--accent-orange);"></div></div>
+                    <div class="percent" style="color: var(--accent-orange);">30</div>
+                </div>
+                <div class="ai-bar">
+                    <div class="label">👍 Хорошо, есть помарки</div>
+                    <div class="bar-bg"><div class="bar-fill" style="width: 70%; background: var(--accent-blue);"></div></div>
+                    <div class="percent" style="color: var(--accent-blue);">70</div>
+                </div>
+                <div class="ai-bar">
+                    <div class="label">🔥 Идеально выполнено</div>
+                    <div class="bar-bg"><div class="bar-fill" style="width: 100%; background: var(--accent-green);"></div></div>
+                    <div class="percent" style="color: var(--accent-green);">100</div>
+                </div>
+            </div>
+            <p style="margin-top: 16px; font-size: 13px; color: var(--text-muted);">☝️ Это не бонус от AI поверх базовых баллов. Это <strong>вся</strong> оценка за упражнение. AI = единственный арбитр. Программа сама не начисляет ничего.</p>
+        </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- LEADERBOARD -->
+    <section id="leaderboard" class="reveal">
+        <span class="section-label">Социальность</span>
+        <h2>Турнирная таблица</h2>
+        <p class="section-desc">Участие строго по согласию (opt-in). Две категории номинаций.</p>
+
+        <div class="grid-2">
+            <div class="card">
+                <h3>🏋️ Номинации Игрока</h3>
+                <ul class="feature-list" style="margin-top: 12px;">
+                    <li><span class="icon">🏆</span> <strong>Самый сильный</strong> — макс. общих баллов</li>
+                    <li><span class="icon">🔥</span> <strong>Самый стабильный</strong> — длиннейший стрик</li>
+                    <li><span class="icon">⚡</span> <strong>Лучший за неделю</strong> — макс. за 7 дней</li>
+                </ul>
+            </div>
+
+            <div class="card">
+                <h3>👀 Номинации Смотрящего</h3>
+                <ul class="feature-list" style="margin-top: 12px;">
+                    <li><span class="icon">💎</span> <strong>Самый щедрый</strong> — потратил на бусты</li>
+                    <li><span class="icon">📨</span> <strong>Самый заботливый</strong> — больше всех стикеров</li>
+                    <li><span class="icon">🏅</span> <strong>Лучший наставник</strong> — рейтинг Игроков</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="card" style="margin-top: 16px;">
+            <h3>🩸 Дни отдыха</h3>
+            <p>Игроки женского пола могут отметить до <strong>3 дней в месяц</strong> как дни отдыха. Стрик не сбрасывается, баллы = 0 без штрафа. Смотрящий видит статус «День отдыха».</p>
+        </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- TECH STACK -->
+    <section class="reveal">
+        <span class="section-label">Технологии</span>
+        <h2>Стек</h2>
+
+        <div class="grid-2">
+            <div class="card">
+                <div class="card-icon" style="background: rgba(34, 197, 94, 0.1);">🐍</div>
+                <h3>Backend</h3>
+                <p><strong>Python</strong> — язык программирования, на котором пишется вся серверная логика (обработка команд, расчёт баллов, управление стриками).</p>
+                <p style="margin-top: 8px;"><strong>Aiogram 3</strong> — фреймворк для Telegram-ботов. Это «переводчик» между Telegram и нашим кодом. Принимает сообщения от юзеров, обрабатывает кнопки, отправляет ответы.</p>
+                <p style="margin-top: 8px;"><strong>Supabase (PostgreSQL)</strong> — облачная база данных. Хранит всех пользователей, стрики, баллы, подарки, инвайты. Управляется через веб-панель, не нужен отдельный сервер.</p>
+                <p style="margin-top: 8px;"><strong>FSM на XState</strong> — логика поведения бота описана как конечные автоматы (блюпринты в TypeScript). При разработке эти схемы переводятся в Python-код.</p>
+                <p style="margin-top: 12px; font-size: 12px; color: var(--text-muted);">💡 Почему этого достаточно: Aiogram обрабатывает тысячи сообщений, Supabase масштабируется автоматически, Python — самый простой язык для прототипирования и AI-интеграций.</p>
+            </div>
+            <div class="card">
+                <div class="card-icon" style="background: rgba(99, 102, 241, 0.1);">⚛️</div>
+                <h3>Frontend</h3>
+                <p><strong>Vite</strong> — инструмент сборки (как «компилятор» для веб-приложений). Берёт наш код и превращает его в быстро загружающийся сайт. Работает мгновенно, нет задержек при разработке.</p>
+                <p style="margin-top: 8px;"><strong>React</strong> — библиотека для создания интерфейсов. Это то, из чего строятся кнопки, экраны, анимации. Используется в Instagram, Facebook, Netflix. Самый популярный инструмент для веб-приложений.</p>
+                <p style="margin-top: 8px;"><strong>Telegram Mini App</strong> — наш React-сайт открывается прямо внутри Telegram (без браузера). Юзер нажимает кнопку → открывается экран тренировки с камерой, таймерами, прогрессом.</p>
+                <p style="margin-top: 12px; font-size: 12px; color: var(--text-muted);">💡 Vite + React — это как камера + плёнка. Vite собирает, React рисует. Вместе они создают интерфейс тренировки, который работает на любом телефоне.</p>
+            </div>
+            <div class="card">
+                <div class="card-icon" style="background: rgba(245, 158, 11, 0.1);">🤖</div>
+                <h3>AI</h3>
+                <p><strong>Google Gemini Vision API</strong> — самая мощная мультимодальная AI-модель, которая понимает видео. Мы отправляем запись тренировки → Gemini анализирует технику → возвращает оценку 0–100% за каждое упражнение.</p>
+                <p style="margin-top: 8px;">Чисто позитивная система: AI только добавляет баллы. Нет человека = 0 баллов (не минус).</p>
+            </div>
+            <div class="card">
+                <div class="card-icon" style="background: rgba(168, 85, 247, 0.1);">💳</div>
+                <h3>Платежи (3 способа)</h3>
+                <p><strong>⭐ Telegram Stars</strong> — основной способ оплаты. Встроен в Telegram. Юзер покупает Stars и платит ими за тариф.</p>
+                <p style="margin-top: 8px;"><strong>🎟️ Промокоды</strong> — покупаются напрямую у админа (тебя). Смотрящий получает код → вводит в боте → активирует тариф без Stars. Для VIP-клиентов или особых случаев.</p>
+                <p style="margin-top: 8px;"><strong>₿ Криптовалюта</strong> — дополнительный способ оплаты для тех, кому удобнее платить криптой. Конвертация в подписку через бота.</p>
+                <p style="margin-top: 12px; font-size: 12px; color: var(--text-muted);">💡 В любом случае: 1 неделя триал. 50% возврат при отказе. Смотрящий всегда платит за Игрока.</p>
+            </div>
+        </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- MODULES -->
+    <section class="reveal">
+        <span class="section-label">Архитектура</span>
+        <h2>10 FSM-модулей</h2>
+
+        <div class="card" style="padding: 0; overflow: hidden;">
+            <table class="rules-table">
+                <thead>
+                    <tr><th style="width: 60px;">Файл</th><th>Модуль</th><th style="width: 100px;">Статус</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td class="rule-num">000</td><td><strong>rootMachine</strong> — ХАБ с переключателем ролей</td><td><span class="tag orange">Переписать</span></td></tr>
+                    <tr><td class="rule-num">100</td><td><strong>paymentMachine</strong> — Тарифные планы + оплата Stars</td><td><span class="tag orange">Переписать</span></td></tr>
+                    <tr><td class="rule-num">101</td><td><strong>onboardingMachine</strong> — Два пути: Смотрящий / Игрок (через ссылку)</td><td><span class="tag red">Переписать</span></td></tr>
+                    <tr><td class="rule-num">102</td><td><strong>adminMachine</strong> — Панель администратора</td><td><span class="tag green">Без изменений</span></td></tr>
+                    <tr><td class="rule-num">103</td><td><strong>workoutGateMachine</strong> — Меню тренировки</td><td><span class="tag green">Без изменений</span></td></tr>
+                    <tr><td class="rule-num">104</td><td><strong>watcherMachine</strong> — Дашборд Смотрящего (1–3 Игрока)</td><td><span class="tag orange">Расширить</span></td></tr>
+                    <tr><td class="rule-num">105</td><td><strong>playerShopMachine</strong> — Магазин Игрока + подарки</td><td><span class="tag green">Без изменений</span></td></tr>
+                    <tr><td class="rule-num">106</td><td><strong>inviteMachine</strong> — Инвайт-ссылки, 48ч, 50% возврат</td><td><span class="tag blue">Новый</span></td></tr>
+                    <tr><td class="rule-num">107</td><td><strong>leaderboardMachine</strong> — Турнирная таблица</td><td><span class="tag blue">Новый</span></td></tr>
+                    <tr><td class="rule-num">200</td><td><strong>workoutSessionMachine</strong> — Сама тренировка (камера + AI)</td><td><span class="tag green">Без изменений</span></td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <footer>
+        <p>Workout Bot — Документ видения проекта</p>
+        <p style="margin-top: 4px;">Создан: Апрель 2026</p>
+    </footer>
+
+</div>
+
+<script>
+    // Scroll reveal animation
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('visible');
+            }
+        });
+    }, { threshold: 0.1, rootMargin: '0px 0px -50px 0px' });
+
+    document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+    // Smooth scroll for nav links
+    document.querySelectorAll('nav a[href^="#"]').forEach(link => {
+        link.addEventListener('click', (e) => {
+            e.preventDefault();
+            const target = document.querySelector(link.getAttribute('href'));
+            if (target) {
+                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        });
+    });
+</script>
+
+</body>
+</html>
