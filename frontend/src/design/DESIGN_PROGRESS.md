@@ -12,6 +12,15 @@
 - [x] **Secure Gesture**: Hold 0.5s + Swipe Up — единственный триггер.
 - [x] **Speed Optimization**: Переход ускорен с 1.5с до 1.0с (более отзывчиво).
 
+## 🛠️ Restore Points
+Если нужно откатиться к этой версии дизайна, используй следующие данные:
+
+- **Tag**: `backdrop-v3-stable` 🏷️
+- **Git Hash**: `d1414ec` 📦
+- **Command**: `git reset --hard d1414ec` 🛡️
+
+---
+
 ## 🧬 Архитектура
 - `src/design/core/AnimationConfig.ts`: Все токены цветов и таймингов.
 - `src/design/backdrop/`: Компонент Backdrop (AnimatePresence morphing).
