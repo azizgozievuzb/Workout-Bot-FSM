@@ -1,8 +1,8 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, forwardRef } from 'react';
 import { motion, useMotionValue, useSpring, useTransform, AnimatePresence } from 'framer-motion';
 import Starfield from './Starfield';
 import CloudField from './CloudField';
-import GlassCubes from './GlassCubes';
+import GlassCubes, { type GlassCubesHandle } from './GlassCubes';
 import './Backdrop.css';
 
 import womanCosmic from '../../assets/test-faces/woman_cosmic.png';
@@ -21,7 +21,7 @@ interface BackdropProps {
  *   2. Canvas (Starfield / CloudField) — particles fly OVER the face
  *   3. Vignette
  */
-const Backdrop: React.FC<BackdropProps> = ({ theme = 'dark' }) => {
+const Backdrop = forwardRef<GlassCubesHandle, BackdropProps>(({ theme = 'dark' }, ref) => {
     const mouseX = useMotionValue(0.5);
     const mouseY = useMotionValue(0.5);
     const springX = useSpring(mouseX, { stiffness: 25, damping: 30 });
@@ -69,12 +69,14 @@ const Backdrop: React.FC<BackdropProps> = ({ theme = 'dark' }) => {
             }
 
             {/* LAYER 2.5: Glass cubes with energy blobs */}
-            <GlassCubes theme={theme} count={3} />
+            <GlassCubes ref={ref} theme={theme} count={3} />
 
             {/* LAYER 3: Vignette */}
             <div className="ui-vignette" />
         </div>
     );
-};
+});
+
+Backdrop.displayName = 'Backdrop';
 
 export default Backdrop;

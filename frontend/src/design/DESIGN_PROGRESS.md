@@ -82,8 +82,9 @@ git reset --hard design-progress-3
 
 ---
 
-## 🚀 Следующие задачи:
-1. **Face Upgrade**: Заменить тестовые лица на финальные AI-обработанные.
-2. **UI Overlay**: Glassmorphic карточки поверх backdrop.
-3. **Adaptive Glow**: Цвета фона адаптируются под доминантные цвета аватара.
-4. **FSM Integration**: Интеграция `backdrop` ↔ `workoutSessionMachine`.
+## 🚀 Следующие задачи (Для Opus/Cowork):
+1. **Gesture DOM Architecture**: Внедрить стейт-машину на таймерах в `App.tsx`, реализовать `Raycaster` в `GlassCubes` (смотреть blueprint в `GESTURE_ARCHITECTURE.md`).
+2. **UI Overlay**: Верстка стандартных меню Workout, Shop, Dashboard поверх 3D канваса с использованием CSS-glassmorphism.
+3. **Face Upgrade**: Заменить тестовые лица на финальные AI-обработанные.
+4. **Adaptive Glow**: Цвета фона адаптируются под доминантные цвета аватара.
+5. **FSM Integration**: Интеграция `backdrop` ↔ `workoutSessionMachine`.

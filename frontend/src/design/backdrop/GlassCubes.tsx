@@ -1,4 +1,70 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
+
+// --- Hit detection types ---
+export interface HitResult {
+    label: string;
+    index: number;
+}
+
+export interface GlassCubesHandle {
+    checkHit: (x: number, y: number) => HitResult | null;
+}
+
+interface HitRegion {
+    label: string;
+    index: number;
+    z: number; // avg world Z for depth sorting
+    polygon: { x: number; y: number }[]; // convex hull in screen coords
+}
+
+// --- Projection & rotation (pure, no closure deps) ---
+const FOV = 15000;
+const Z_OFF = 100.0;
+
+function projectPt(x: number, y: number, z: number, cx: number, cy: number) {
+    const scale = FOV / (z + Z_OFF);
+    return { sx: cx + x * scale, sy: cy + y * scale, scale };
+}
+
+function rotatePt(
+    px: number, py: number, pz: number,
+    rx: number, ry: number, rz: number
+): [number, number, number] {
+    const y1 = py * Math.cos(rx) - pz * Math.sin(rx);
+    const z1 = py * Math.sin(rx) + pz * Math.cos(rx);
+    const x2 = px * Math.cos(ry) + z1 * Math.sin(ry);
+    const z2 = -px * Math.sin(ry) + z1 * Math.cos(ry);
+    const x3 = x2 * Math.cos(rz) - y1 * Math.sin(rz);
+    const y3 = x2 * Math.sin(rz) + y1 * Math.cos(rz);
+    return [x3, y3, z2];
+}
+
+/** Point-in-convex-polygon (winding number) */
+function pointInPolygon(px: number, py: number, poly: { x: number; y: number }[]): boolean {
+    let inside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        const xi = poly[i].x, yi = poly[i].y;
+        const xj = poly[j].x, yj = poly[j].y;
+        if ((yi > py) !== (yj > py) && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) {
+            inside = !inside;
+        }
+    }
+    return inside;
+}
+
+/** Convex hull (Graham scan) for projected cube vertices */
+function convexHull(points: { x: number; y: number }[]): { x: number; y: number }[] {
+    const pts = [...points].sort((a, b) => a.x - b.x || a.y - b.y);
+    if (pts.length <= 1) return pts;
+    const cross = (o: { x: number; y: number }, a: { x: number; y: number }, b: { x: number; y: number }) =>
+        (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+    const lower: { x: number; y: number }[] = [];
+    for (const p of pts) { while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop(); lower.push(p); }
+    const upper: { x: number; y: number }[] = [];
+    for (const p of pts.reverse()) { while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop(); upper.push(p); }
+    upper.pop(); lower.pop();
+    return lower.concat(upper);
+}
 
 interface Cube {
     // World position
@@ -32,15 +98,30 @@ interface GlassCubesProps {
  * Glass: semi-transparent faces with gradient sheen (liquid glass feel).
  * Energy blob: glowing orb bouncing inside each cube.
  */
-const GlassCubes: React.FC<GlassCubesProps> = ({
+const GlassCubes = forwardRef<GlassCubesHandle, GlassCubesProps>(({
     theme = 'dark',
     count = 3,
     active = true,
-}) => {
+}, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const cubesRef = useRef<Cube[]>([]);
     const rafRef = useRef<number>(0);
     const timeRef = useRef<number>(0);
+    const hitRegionsRef = useRef<HitRegion[]>([]);
+
+    // Expose checkHit to parent via ref
+    useImperativeHandle(ref, () => ({
+        checkHit(x: number, y: number): HitResult | null {
+            // hitRegions are sorted front-to-back (lowest Z first = closest)
+            const regions = hitRegionsRef.current;
+            for (const region of regions) {
+                if (pointInPolygon(x, y, region.polygon)) {
+                    return { label: region.label, index: region.index };
+                }
+            }
+            return null;
+        },
+    }));
 
     // Initialize cubes spread across screen
     useEffect(() => {
@@ -101,35 +182,9 @@ const GlassCubes: React.FC<GlassCubesProps> = ({
         resize();
         window.addEventListener('resize', resize);
 
-        // Project 3D point to 2D screen
-        // Large zOff = camera far away = minimal perspective distortion on rotation
-        const project = (x: number, y: number, z: number, cx: number, cy: number) => {
-            const fov = 15000;
-            const zOff = 100.0;
-            const scale = fov / (z + zOff);
-            return {
-                sx: cx + x * scale,
-                sy: cy + y * scale,
-                scale,
-            };
-        };
-
-        // Rotate point around origin
-        const rotatePoint = (
-            px: number, py: number, pz: number,
-            rx: number, ry: number, rz: number
-        ) => {
-            // X rotation
-            let y1 = py * Math.cos(rx) - pz * Math.sin(rx);
-            let z1 = py * Math.sin(rx) + pz * Math.cos(rx);
-            // Y rotation
-            let x2 = px * Math.cos(ry) + z1 * Math.sin(ry);
-            let z2 = -px * Math.sin(ry) + z1 * Math.cos(ry);
-            // Z rotation
-            let x3 = x2 * Math.cos(rz) - y1 * Math.sin(rz);
-            let y3 = x2 * Math.sin(rz) + y1 * Math.cos(rz);
-            return [x3, y3, z2];
-        };
+        // Use module-level projectPt / rotatePt
+        const project = projectPt;
+        const rotatePoint = rotatePt;
 
         const draw = (now: number) => {
             if (!active) { rafRef.current = requestAnimationFrame(draw); return; }
@@ -143,6 +198,42 @@ const GlassCubes: React.FC<GlassCubesProps> = ({
             const cubes = cubesRef.current;
             const cx = cw / 2;
             const cy = ch / 2;
+
+            // --- COMPUTE HIT REGIONS (before drawing) ---
+            const isDarkTheme = theme === 'dark';
+            const newHitRegions: HitRegion[] = cubes.map((cube, idx) => {
+                const s = cube.size;
+                if (isDarkTheme) {
+                    // 3D cube: project all 8 vertices → convex hull
+                    const verts: [number, number, number][] = [
+                        [-s * 1.5, -s, -s * 0.6], [ s * 1.5, -s, -s * 0.6],
+                        [ s * 1.5,  s, -s * 0.6], [-s * 1.5,  s, -s * 0.6],
+                        [-s * 1.5, -s,  s * 0.6], [ s * 1.5, -s,  s * 0.6],
+                        [ s * 1.5,  s,  s * 0.6], [-s * 1.5,  s,  s * 0.6],
+                    ];
+                    const screenPts = verts.map(([px, py, pz]) => {
+                        const [rx, ry, rz] = rotatePt(px, py, pz, cube.rx, cube.ry, cube.rz);
+                        const p = projectPt(cube.x + rx, cube.y + ry, cube.z + rz, cx, cy);
+                        return { x: p.sx, y: p.sy };
+                    });
+                    return { label: cube.label, index: idx, z: cube.z, polygon: convexHull(screenPts) };
+                } else {
+                    // Ellipsoid: approximate with 12-pt polygon
+                    const pc = projectPt(cube.x, cube.y, cube.z, cx, cy);
+                    const rx = s * 1.5 * pc.scale;
+                    const ry = s * 1.0 * pc.scale;
+                    const N = 12;
+                    const poly: { x: number; y: number }[] = [];
+                    for (let i = 0; i < N; i++) {
+                        const a = (i / N) * Math.PI * 2 + cube.rz;
+                        poly.push({ x: pc.sx + Math.cos(a) * rx, y: pc.sy + Math.sin(a) * ry });
+                    }
+                    return { label: cube.label, index: idx, z: cube.z, polygon: poly };
+                }
+            });
+            // Sort front-to-back (smallest Z = closest to camera)
+            newHitRegions.sort((a, b) => a.z - b.z);
+            hitRegionsRef.current = newHitRegions;
 
             // --- REPULSION: max 8% overlap ---
             for (let i = 0; i < cubes.length; i++) {
@@ -560,6 +651,8 @@ const GlassCubes: React.FC<GlassCubesProps> = ({
             }}
         />
     );
-};
+});
+
+GlassCubes.displayName = 'GlassCubes';
 
 export default GlassCubes;
