@@ -18,7 +18,7 @@
 4. **Ghost Face** — Лицо на весь экран (115%), opacity 0.15, z-index 0 (за canvas). Radial mask: видимость до 80%, угасание в последних 20%.
 5. **MCP Shell** — Подключён mcp-shell-server. Cowork может запускать команды в терминале.
 6. **Restore Point 2** — Git tag `backdrop-v5-stable`.
-
+7. **Restore Point 3** - Git tag `design-progress-3` (Glass Cubes & Ellipsoids)
 ## 🛠️ Ключевые файлы (дизайн)
 
 | Файл | Что делает |

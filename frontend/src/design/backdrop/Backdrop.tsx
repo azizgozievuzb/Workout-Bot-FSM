@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { motion, useMotionValue, useSpring, useTransform, AnimatePresence } from 'framer-motion';
 import Starfield from './Starfield';
 import CloudField from './CloudField';
+import GlassCubes from './GlassCubes';
 import './Backdrop.css';
 
 import womanCosmic from '../../assets/test-faces/woman_cosmic.png';
@@ -66,6 +67,9 @@ const Backdrop: React.FC<BackdropProps> = ({ theme = 'dark' }) => {
                 ? <Starfield speed={1.15} starCount={1200} />
                 : <CloudField speed={1.0} />
             }
+
+            {/* LAYER 2.5: Glass cubes with energy blobs */}
+            <GlassCubes theme={theme} count={3} />
 
             {/* LAYER 3: Vignette */}
             <div className="ui-vignette" />

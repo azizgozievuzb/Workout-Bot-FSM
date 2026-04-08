@@ -60,8 +60,30 @@ git reset --hard backdrop-v5-stable
 
 ---
 
+## ✅ Restore Point 3 — Design Progress 3 "Glass Cubes & Ellipsoids" (STABLE)
+**Tag:** `design-progress-3`
+**Дата:** 2026-04-08
+
+Революционный 3D-движок рендеринга на Canvas, реализующий тяжелые плавающие объекты с внутренним пламенем.
+
+### Что было сделано:
+- [x] **Dark Mode (Volumetric Cubes)**: Киберпанк-кубы с физическим отскоком. Прозрачное стекло, толстые рамки, внутри пульсирует сгусток энергии.
+- [x] **Light Mode (Glossy Ellipsoids)**: Кубы превращаются в эллипсоиды (капсулы из густого янтаря). Экстремальный френель, мощные блики обода толстого стекла.
+- [x] **Monolithic typography**: Объемный 3D-текст жестко интегрирован вглубь стекла в обоих режимах. В светлой теме жестко привязан к матрице эллипсоида для монолитной читабельности.
+- [x] **Physics AI**: Автоматический дрейф объектов. Ядра внутри объектов перемещаются по собственным законам со своими границами-отскоками (адаптируется под тему).
+
+### Архитектура:
+- `GlassCubes.tsx` -> Математический 2D/3D Canvas Render (Project, RotatePoint, Affine Transform)
+
+### Откат:
+```bash
+git reset --hard design-progress-3
+```
+
+---
+
 ## 🚀 Следующие задачи:
-1. **Face Upgrade**: Заменить тестовые лица на финальные AI-обработанные (gold/meditation стиль для light mode).
+1. **Face Upgrade**: Заменить тестовые лица на финальные AI-обработанные.
 2. **UI Overlay**: Glassmorphic карточки поверх backdrop.
 3. **Adaptive Glow**: Цвета фона адаптируются под доминантные цвета аватара.
-4. **FSM Integration**: `backdrop state ↔ workoutSessionMachine` (Rest → light, Active → dark).
+4. **FSM Integration**: Интеграция `backdrop` ↔ `workoutSessionMachine`.
