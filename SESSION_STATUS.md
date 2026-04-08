@@ -2,45 +2,40 @@
 
 > **AI-агент:** Прочитай этот файл ПОСЛЕ `CLAUDE.md`. Здесь написано, на чём остановился предыдущий агент.
 
-**Последнее обновление:** 2026-04-04, 18:09 (UTC+5)  
-**Последний агент:** Claude Opus 4.6 / Antigravity IDE
+**Последнее обновление:** 2026-04-08  
+**Последний агент:** Claude Opus 4.6 / Cowork
 
 ---
 
 ## 🎯 Текущий фокус
-Все мета-документы проекта синхронизированы. Проект полностью готов к началу разработки.
+Работа над визуальной частью (дизайн backdrop). Backend и FSM не тронуты.
 
-## ✅ Завершено в этой сессии
-1. Получили внешний roadmap (`fitness-mini-app-roadmap.md`) → проанализировали → удалили как нерелевантный (другой стек, другая логика).
-2. Создали новый `ROADMAP.md` с нуля — под реальный стек (Python/Aiogram, Vite/React, Supabase, Gemini Vision, XState FSM).
-3. Создали `CLAUDE.md` — манифест проекта с ролями AI-моделей (Opus/Gemini Pro = архитекторы, Sonnet/Flash = строители).
-4. Синхронизировали ВСЕ файлы проекта:
-   - `PLAN.md` — исправлено 11 модулей → 8 реальных FSM-машин.
-   - `README.md` — исправлено 7 модулей → 8, убран Upstash Redis из стека.
-   - `ROADMAP.md` — скопирован в корень проекта (чтобы Cowork видел).
-5. Определили DB-терминологию: `partnerships` (не "couples") для связи Responsible ↔ Player (1:N).
-6. Настроили протокол передачи смены между Antigravity и Cowork.
+## ✅ Завершено в этой сессии (Cowork / Opus 4.6)
 
-## 🚧 Следующая задача
-Выбрать одно из двух:
+1. **Starfield Engine** — Canvas 3D starfield. Реалистичные звёзды (точки + эллипсоиды), без следов, полная очистка каждый кадр. 1200 частиц.
+2. **Arc Turns** — Дуговые повороты через дрейф vanishing point. Цикл: право→прямо→лево→прямо (10с фазы). `cos(omega*t)` с фазовым сдвигом для вертикали.
+3. **CloudField (Light mode)** — Белый космос с золотыми звёздами (gold/amber/warm yellow palette). Та же 3D-механика что Starfield. `mix-blend-mode: multiply`.
+4. **Ghost Face** — Лицо на весь экран (115%), opacity 0.15, z-index 0 (за canvas). Radial mask: видимость до 80%, угасание в последних 20%.
+5. **MCP Shell** — Подключён mcp-shell-server. Cowork может запускать команды в терминале.
+6. **Restore Point 2** — Git tag `backdrop-v5-stable`.
 
-**Вариант A — Продолжить Research (Этап 0):**
-- [ ] Тестовая отправка видео в Gemini Vision API (1080p vs 480p).
-- [ ] Тестовая загрузка 16 кусков видео на сервер.
-- [ ] Расчёт стоимости Gemini API.
+## 🛠️ Ключевые файлы (дизайн)
 
-**Вариант B — Начать строить (Этап 2):**
-- [ ] Создать структуру папок `backend/` и `frontend/`.
-- [ ] Настроить Supabase (проект, таблицы).
-- [ ] Создать `.env.example` файлы.
+| Файл | Что делает |
+|------|-----------|
+| `frontend/src/design/backdrop/Backdrop.tsx` | Слои: face(z:0) → canvas(z:1) → vignette(z:10). Parallax от пальца. |
+| `frontend/src/design/backdrop/Starfield.tsx` | Dark mode. Чёрный космос, белые/цветные звёзды. `mix-blend-mode: screen`. |
+| `frontend/src/design/backdrop/CloudField.tsx` | Light mode. Белый фон, золотые звёзды. `mix-blend-mode: multiply`. |
+| `frontend/src/design/backdrop/Backdrop.css` | z-index слои, radial mask лица, vignette. |
+| `frontend/src/design/DESIGN_PROGRESS.md` | История визуальных milestone'ов. |
 
-## 📍 На чём остановились
-Никакой код ещё не написан. Все 8 FSM-блюпринтов готовы (`/fsm_blueprints/`). Документация полная. Ждём команду пользователя — какой этап начинать.
+## 🚀 Следующие задачи (дизайн)
+1. Заменить тестовые лица на финальные AI-обработанные изображения.
+2. UI Overlay — glassmorphic карточки поверх backdrop.
+3. FSM Integration — backdrop state ↔ workoutSessionMachine states.
 
 ## 📝 Инструкция для СЛЕДУЮЩЕГО AI
 1. Прочитай `CLAUDE.md` — стек, правила, роли моделей.
-2. Прочитай этот файл — где остановились.
-3. **Спроси у пользователя**, какую задачу делать (Research или Infrastructure).
-4. Если нужна детальная карта → `ROADMAP.md`.
-5. Если нужен чеклист → `PLAN.md`.
-6. Если нужна логика → `/fsm_blueprints/`.
+2. Прочитай `frontend/src/design/DESIGN_PROGRESS.md` — визуальная история.
+3. Dev server: `cd frontend && npm run dev` → `http://localhost:5173/`
+4. Gesture: Hold 0.5s + Swipe Up → переключение dark/light темы.
