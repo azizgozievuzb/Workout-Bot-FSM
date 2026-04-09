@@ -4,6 +4,7 @@ WORKDIR /app
 
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+# cache bust: 2026-04-09
 
 COPY backend/ ./backend/
 
