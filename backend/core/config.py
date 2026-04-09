@@ -11,9 +11,9 @@ class Settings(BaseSettings):
 
     # Telegram
     BOT_TOKEN: str
-    WEBHOOK_URL: str          # https://your-domain.com
-    WEBHOOK_SECRET: str       # случайная строка для верификации вебхука
-    MINI_APP_URL: str         # https://your-frontend.vercel.app
+    WEBHOOK_URL: str = ""     # https://your-domain.com (пустой до первого деплоя)
+    WEBHOOK_SECRET: str = "dev_secret"
+    MINI_APP_URL: str = "http://localhost:5173"
 
     # Supabase
     SUPABASE_URL: str

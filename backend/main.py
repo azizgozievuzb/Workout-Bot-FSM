@@ -38,13 +38,16 @@ dp.include_router(onboarding_router)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    webhook_url = f"{settings.WEBHOOK_URL}/webhook"
-    await bot.set_webhook(
-        url=webhook_url,
-        secret_token=settings.WEBHOOK_SECRET,
-        allowed_updates=dp.resolve_used_update_types(),
-    )
-    logger.info("Webhook set: %s", webhook_url)
+    if settings.WEBHOOK_URL:
+        webhook_url = f"{settings.WEBHOOK_URL}/webhook"
+        await bot.set_webhook(
+            url=webhook_url,
+            secret_token=settings.WEBHOOK_SECRET,
+            allowed_updates=dp.resolve_used_update_types(),
+        )
+        logger.info("Webhook set: %s", webhook_url)
+    else:
+        logger.warning("WEBHOOK_URL is empty — skipping webhook setup")
     yield
     await bot.delete_webhook()
     await bot.session.close()
