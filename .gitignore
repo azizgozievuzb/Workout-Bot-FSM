@@ -1,1 +1,35 @@
-uploads/\nresearch/uploads/\n.DS_Store\n__pycache__/\n*.pyc\n
+# Uploads
+uploads/
+research/uploads/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+venv/
+.venv/
+
+# Secrets
+.env
+.env.local
+.env.production
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Node
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# Claude
+.claude/

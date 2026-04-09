@@ -1,0 +1,17 @@
+# Bot
+aiogram==3.13.1
+
+# API
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+pydantic==2.9.2
+pydantic-settings==2.6.1
+
+# Auth
+PyJWT==2.10.0
+
+# Database
+supabase==2.10.0
+
+# Utils
+python-dotenv==1.0.1
