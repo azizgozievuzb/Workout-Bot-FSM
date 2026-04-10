@@ -7,7 +7,10 @@ Player flow:      player_language → player_gender → player_survey → onboar
 import random
 import string
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Literal
+
+PAIR_LINK_TTL_DAYS = 7
 
 from supabase import AsyncClient
 
@@ -199,13 +202,17 @@ class OnboardingService:
             if not exists.data:
                 break
 
+        expires_at = (datetime.now(timezone.utc) + timedelta(days=PAIR_LINK_TTL_DAYS)).isoformat()
+
         await (
             self.db.table("partnerships")
             .insert({
                 "responsible_id": responsible_id,
+                "pairing_code": code,
                 "pair_code": code,
                 "player_name": player_name,
                 "status": "pending",
+                "expires_at": expires_at,
             })
             .execute()
         )
@@ -240,12 +247,26 @@ class OnboardingService:
         # Ищем partnership по коду
         pair_res = (
             await self.db.table("partnerships")
-            .select("id, responsible_id, status")
+            .select("id, responsible_id, status, expires_at")
             .eq("pair_code", code.upper())
             .execute()
         )
         if not pair_res.data or pair_res.data[0]["status"] != "pending":
             return {"ok": False, "reason": "invalid_code"}
+
+        # Проверяем срок действия ссылки
+        expires_at_str = pair_res.data[0].get("expires_at")
+        if expires_at_str:
+            expires_at = datetime.fromisoformat(expires_at_str)
+            if datetime.now(timezone.utc) > expires_at:
+                # Помечаем как expired
+                await (
+                    self.db.table("partnerships")
+                    .update({"status": "expired"})
+                    .eq("id", pair_res.data[0]["id"])
+                    .execute()
+                )
+                return {"ok": False, "reason": "link_expired"}
 
         pair = pair_res.data[0]
         responsible_id = pair["responsible_id"]

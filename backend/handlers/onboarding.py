@@ -91,6 +91,7 @@ async def cmd_start(message: types.Message, state: FSMContext) -> None:
             reasons = {
                 "already_player": "У вас уже есть ответственный.",
                 "limit_reached": "У вашего ответственного уже максимальное количество игроков.",
+                "link_expired": "Срок действия ссылки истёк (7 дней). Попросите ответственного отправить новую.",
             }
             await message.answer(reasons.get(result["reason"], "Ссылка недействительна."))
             return
@@ -223,7 +224,11 @@ async def process_invite_player_name(message: types.Message, state: FSMContext) 
     link = f"https://t.me/{BOT_USERNAME}?start=PAIR_{code}"
     await state.clear()
     await message.answer(
-        f"Ваша пригласительная ссылка:\n\n{link}\n\nОтправьте эту ссылку игроку {name}."
+        f"Ваша пригласительная ссылка:\n\n{link}\n\n"
+        f"Отправьте эту ссылку игроку {name}.\n\n"
+        f"⚠️ Ссылка действительна 7 дней. Если игрок не перейдёт по ней "
+        f"в течение этого срока, она сгорит. Приложение не несёт "
+        f"ответственности за неиспользованные ссылки."
     )
 
 
@@ -298,10 +303,20 @@ async def process_text_input(message: types.Message) -> None:
             {"type": "SET_PLAYER_NAME", "name": name},
         )
         if result.error:
+            await message.answer(f"Ошибка: {result.error}. Попробуйте ещё раз.")
             return
 
-        code = await svc.generate_pair_code(message.from_user.id, name)
+        try:
+            code = await svc.generate_pair_code(message.from_user.id, name)
+        except Exception as e:
+            await message.answer(f"Ошибка генерации ссылки: {e}")
+            return
+
         link = f"https://t.me/{BOT_USERNAME}?start=PAIR_{code}"
         await message.answer(
-            f"Ваша пригласительная ссылка:\n\n{link}\n\nОтправьте эту ссылку игроку {name}."
+            f"Ваша пригласительная ссылка:\n\n{link}\n\n"
+            f"Отправьте эту ссылку игроку {name}.\n\n"
+            f"⚠️ Ссылка действительна 7 дней. Если игрок не перейдёт по ней "
+            f"в течение этого срока, она сгорит. Приложение не несёт "
+            f"ответственности за неиспользованные ссылки."
         )
