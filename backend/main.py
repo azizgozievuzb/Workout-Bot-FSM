@@ -52,7 +52,7 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning("WEBHOOK_URL is empty — skipping webhook setup")
     yield
-    await bot.delete_webhook()
+    # Не удаляем вебхук при выключении, иначе старый контейнер при деплое удалит вебхук нового!
     await bot.session.close()
     logger.info("Bot shutdown")
 
