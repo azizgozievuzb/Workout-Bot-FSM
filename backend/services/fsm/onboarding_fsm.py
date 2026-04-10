@@ -1,5 +1,5 @@
 """
-OnboardingFSM v2 — Python-реализация нового онбординга.
+OnboardingFSM v3 — одноразовые промокоды из БД, 7-дневный TTL ссылок, brute-force защита.
 
 Responsible flow: resp_promo → resp_language → resp_gender → resp_player_name → onboardingComplete
 Player flow:      player_language → player_gender → player_survey → onboardingComplete
@@ -10,16 +10,11 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 
-PAIR_LINK_TTL_DAYS = 7
-
 from supabase import AsyncClient
 
-# Промокоды → subscription_tier
-PROMO_CODES: dict[str, str] = {
-    "WORKOUT2026": "basic",
-    "BETA100": "basic",
-    "TESTPRO": "premium",
-}
+PAIR_LINK_TTL_DAYS = 7
+MAX_PROMO_ATTEMPTS = 3  # per hour
+PROMO_LOCKOUT_HOURS = 1
 
 PLAYER_LIMITS: dict[str, int] = {
     "basic": 1,
@@ -34,16 +29,13 @@ _OLD_STATES = frozenset({
 })
 
 OnboardingState = Literal[
-    # Responsible flow
     "resp_promo",
     "resp_language",
     "resp_gender",
     "resp_player_name",
-    # Player flow
     "player_language",
     "player_gender",
     "player_survey",
-    # Terminal
     "onboardingComplete",
 ]
 
@@ -66,10 +58,10 @@ class OnboardingFSM:
         event_type = event.get("type")
 
         match current_state:
-            # --- RESPONSIBLE FLOW ---
             case "resp_promo":
                 if event_type == "SET_PROMO":
-                    tier = PROMO_CODES.get(event.get("code", "").upper())
+                    # Tier уже провалидирован в OnboardingService.validate_promo_code
+                    tier = event.get("tier")
                     if not tier:
                         return TransitionResult(state="resp_promo", context=ctx, error="invalid_promo")
                     ctx["subscription_tier"] = tier
@@ -90,7 +82,6 @@ class OnboardingFSM:
                     ctx["player_name"] = event.get("name", "")
                     return TransitionResult(state="onboardingComplete", context=ctx)
 
-            # --- PLAYER FLOW ---
             case "player_language":
                 if event_type == "SET_LANG":
                     ctx["lang"] = event["lang"]
@@ -118,9 +109,11 @@ class OnboardingService:
         self.db = db
         self.fsm = OnboardingFSM()
 
+    # ------------------------------------------------------------------
+    # State helpers
+    # ------------------------------------------------------------------
+
     async def get_state(self, telegram_id: int) -> tuple[OnboardingState | None, dict]:
-        """Возвращает (текущее_состояние | None, контекст) из БД.
-        None означает свежего пользователя без активного флоу."""
         result = (
             await self.db.table("users")
             .select("onboarding_state, lang, role, gender, subscription_tier")
@@ -131,7 +124,6 @@ class OnboardingService:
         data = result.data
         state_raw = data.get("onboarding_state")
 
-        # None или устаревшее состояние → свежий пользователь
         if not state_raw or state_raw in _OLD_STATES:
             state = None
         else:
@@ -146,10 +138,8 @@ class OnboardingService:
         return state, ctx
 
     async def send_event(self, telegram_id: int, event: dict) -> TransitionResult:
-        """Переход FSM + атомарная запись в БД."""
         state, ctx = await self.get_state(telegram_id)
 
-        # Если нет активного состояния, инициализируем resp_promo
         if state is None:
             state = "resp_promo"
 
@@ -175,11 +165,165 @@ class OnboardingService:
 
         return result
 
+    # ------------------------------------------------------------------
+    # Promo code validation (DB-based, one-time use)
+    # ------------------------------------------------------------------
+
+    async def check_promo_rate_limit(self, telegram_id: int) -> dict:
+        """Check if user is rate-limited for promo attempts.
+        Returns {"allowed": True} or {"allowed": False, "minutes_left": int}."""
+        user_res = (
+            await self.db.table("users")
+            .select("promo_attempts, promo_locked_until")
+            .eq("telegram_id", telegram_id)
+            .single()
+            .execute()
+        )
+        data = user_res.data
+        locked_until_str = data.get("promo_locked_until")
+
+        if locked_until_str:
+            locked_until = datetime.fromisoformat(locked_until_str)
+            now = datetime.now(timezone.utc)
+            if now < locked_until:
+                minutes_left = int((locked_until - now).total_seconds() / 60) + 1
+                return {"allowed": False, "minutes_left": minutes_left}
+            else:
+                # Lock expired — reset
+                await (
+                    self.db.table("users")
+                    .update({"promo_attempts": 0, "promo_locked_until": None})
+                    .eq("telegram_id", telegram_id)
+                    .execute()
+                )
+
+        return {"allowed": True}
+
+    async def record_failed_promo_attempt(self, telegram_id: int) -> dict:
+        """Increment failed attempts. Returns {"locked": bool, "attempts_left": int}."""
+        user_res = (
+            await self.db.table("users")
+            .select("promo_attempts")
+            .eq("telegram_id", telegram_id)
+            .single()
+            .execute()
+        )
+        attempts = (user_res.data.get("promo_attempts") or 0) + 1
+
+        update_data: dict = {"promo_attempts": attempts}
+        if attempts >= MAX_PROMO_ATTEMPTS:
+            locked_until = datetime.now(timezone.utc) + timedelta(hours=PROMO_LOCKOUT_HOURS)
+            update_data["promo_locked_until"] = locked_until.isoformat()
+
+        await (
+            self.db.table("users")
+            .update(update_data)
+            .eq("telegram_id", telegram_id)
+            .execute()
+        )
+
+        if attempts >= MAX_PROMO_ATTEMPTS:
+            return {"locked": True, "attempts_left": 0}
+        return {"locked": False, "attempts_left": MAX_PROMO_ATTEMPTS - attempts}
+
+    async def validate_promo_code(self, telegram_id: int, code: str) -> dict:
+        """Validate promo code from DB.
+        Returns {"ok": True, "tier": str, "promo_id": str} or {"ok": False, "reason": str, ...}."""
+
+        # 1. Rate limit check
+        rate = await self.check_promo_rate_limit(telegram_id)
+        if not rate["allowed"]:
+            return {
+                "ok": False,
+                "reason": "rate_limited",
+                "minutes_left": rate["minutes_left"],
+            }
+
+        # 2. Look up code in DB
+        promo_res = (
+            await self.db.table("promo_codes")
+            .select("id, tier, is_used")
+            .eq("code", code.strip())
+            .execute()
+        )
+
+        if not promo_res.data:
+            fail = await self.record_failed_promo_attempt(telegram_id)
+            return {
+                "ok": False,
+                "reason": "invalid_promo",
+                "locked": fail["locked"],
+                "attempts_left": fail["attempts_left"],
+            }
+
+        promo = promo_res.data[0]
+
+        if promo["is_used"]:
+            fail = await self.record_failed_promo_attempt(telegram_id)
+            return {
+                "ok": False,
+                "reason": "promo_already_used",
+                "locked": fail["locked"],
+                "attempts_left": fail["attempts_left"],
+            }
+
+        # 3. Valid! Save pending_promo_id on user (burn later on link generation)
+        user_res = (
+            await self.db.table("users")
+            .select("id")
+            .eq("telegram_id", telegram_id)
+            .single()
+            .execute()
+        )
+        await (
+            self.db.table("users")
+            .update({
+                "pending_promo_id": promo["id"],
+                "promo_attempts": 0,
+                "promo_locked_until": None,
+            })
+            .eq("telegram_id", telegram_id)
+            .execute()
+        )
+
+        return {"ok": True, "tier": promo["tier"], "promo_id": promo["id"]}
+
+    async def burn_promo_code(self, telegram_id: int) -> None:
+        """Mark the pending promo code as used. Called after link is generated."""
+        user_res = (
+            await self.db.table("users")
+            .select("id, pending_promo_id")
+            .eq("telegram_id", telegram_id)
+            .single()
+            .execute()
+        )
+        promo_id = user_res.data.get("pending_promo_id")
+        if not promo_id:
+            return
+
+        user_id = user_res.data["id"]
+        await (
+            self.db.table("promo_codes")
+            .update({
+                "is_used": True,
+                "used_by": user_id,
+                "used_at": datetime.now(timezone.utc).isoformat(),
+            })
+            .eq("id", promo_id)
+            .execute()
+        )
+        await (
+            self.db.table("users")
+            .update({"pending_promo_id": None})
+            .eq("telegram_id", telegram_id)
+            .execute()
+        )
+
+    # ------------------------------------------------------------------
+    # Pair code (invite link)
+    # ------------------------------------------------------------------
+
     async def generate_pair_code(self, responsible_telegram_id: int, player_name: str) -> str:
-        """
-        Генерирует уникальный 6-символьный pair_code для Responsible.
-        Создаёт запись в partnerships (status='pending', player_id=NULL).
-        """
         resp_res = (
             await self.db.table("users")
             .select("id")
@@ -217,13 +361,16 @@ class OnboardingService:
             .execute()
         )
 
+        # Burn the promo code — link generated successfully
+        await self.burn_promo_code(responsible_telegram_id)
+
         return code
 
+    # ------------------------------------------------------------------
+    # Pair code validation (player deep link)
+    # ------------------------------------------------------------------
+
     async def validate_pair_code(self, player_telegram_id: int, code: str) -> dict:
-        """
-        Валидирует pair_code при переходе игрока по deep link.
-        Возвращает {"ok": True, "responsible_name": str} или {"ok": False, "reason": str}.
-        """
         player_res = (
             await self.db.table("users")
             .select("id")
@@ -233,7 +380,6 @@ class OnboardingService:
         )
         player_id = player_res.data["id"]
 
-        # Уже является активным игроком у кого-то
         existing = (
             await self.db.table("partnerships")
             .select("id")
@@ -244,7 +390,6 @@ class OnboardingService:
         if existing.data:
             return {"ok": False, "reason": "already_player"}
 
-        # Ищем partnership по коду
         pair_res = (
             await self.db.table("partnerships")
             .select("id, responsible_id, status, expires_at")
@@ -254,12 +399,11 @@ class OnboardingService:
         if not pair_res.data or pair_res.data[0]["status"] != "pending":
             return {"ok": False, "reason": "invalid_code"}
 
-        # Проверяем срок действия ссылки
+        # Check expiry
         expires_at_str = pair_res.data[0].get("expires_at")
         if expires_at_str:
             expires_at = datetime.fromisoformat(expires_at_str)
             if datetime.now(timezone.utc) > expires_at:
-                # Помечаем как expired
                 await (
                     self.db.table("partnerships")
                     .update({"status": "expired"})
@@ -271,7 +415,6 @@ class OnboardingService:
         pair = pair_res.data[0]
         responsible_id = pair["responsible_id"]
 
-        # Проверяем лимит игроков у Responsible
         resp_res = (
             await self.db.table("users")
             .select("subscription_tier, first_name")
@@ -292,7 +435,6 @@ class OnboardingService:
         if len(active_count.data) >= limit:
             return {"ok": False, "reason": "limit_reached"}
 
-        # Привязываем игрока
         await (
             self.db.table("partnerships")
             .update({"player_id": player_id, "status": "active"})
@@ -306,7 +448,6 @@ class OnboardingService:
         }
 
     async def count_active_players(self, responsible_telegram_id: int) -> tuple[int, int]:
-        """Возвращает (текущее_кол-во, лимит) для Responsible."""
         resp_res = (
             await self.db.table("users")
             .select("id, subscription_tier")

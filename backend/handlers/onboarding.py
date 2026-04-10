@@ -1,15 +1,15 @@
 """
-Aiogram handlers для онбординга v2.
+Aiogram handlers для онбординга v3.
 
-Responsible flow: /start → promo_code → language → gender → player_name → link → done
+Responsible flow: /start → promo_code (DB) → language → gender → player_name → link → done
 Player flow:      /start PAIR_XXXXXX → validate → language → gender → survey → miniapp → done
-Повторный визит:  /start → статус (без перезапуска онбординга)
-/invite:          Responsible приглашает ещё одного игрока (проверяет лимит)
+Повторный визит:  /start → smart menu (зависит от состояния)
 """
+import logging
+
 from aiogram import F, Router, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
 
 from ..db.client import get_supabase
 from ..keyboards.onboarding_keyboards import (
@@ -20,6 +20,8 @@ from ..keyboards.onboarding_keyboards import (
 )
 from ..services.fsm.onboarding_fsm import OnboardingService
 
+logger = logging.getLogger(__name__)
+
 onboarding_router = Router(name="onboarding")
 
 BOT_USERNAME = "conectionWorkout_bot"
@@ -27,13 +29,11 @@ BOT_USERNAME = "conectionWorkout_bot"
 _RESP_STATES = frozenset({"resp_promo", "resp_language", "resp_gender", "resp_player_name"})
 _PLAYER_STATES = frozenset({"player_language", "player_gender", "player_survey"})
 
-
-# ---------------------------------------------------------------------------
-# Aiogram FSM state — используется только в /invite (отдельно от DB FSM)
-# ---------------------------------------------------------------------------
-
-class InviteForm(StatesGroup):
-    waiting_for_player_name = State()
+LINK_WARNING = (
+    "⚠️ Ссылка действительна 7 дней. Если игрок не перейдёт по ней "
+    "в течение этого срока, она сгорит. "
+    "Приложение не несёт ответственности за неиспользованные ссылки."
+)
 
 
 # ---------------------------------------------------------------------------
@@ -77,29 +77,23 @@ async def cmd_start(message: types.Message, state: FSMContext) -> None:
 
     db_state, _ = await svc.get_state(message.from_user.id)
 
-    # Уже завершил онбординг
+    # ------------------------------------------------------------------
+    # Уже завершил онбординг → smart menu
+    # ------------------------------------------------------------------
     if db_state == "onboardingComplete":
         db = await get_supabase()
         user_res = (
             await db.table("users")
-            .select("role")
+            .select("id, role")
             .eq("telegram_id", message.from_user.id)
             .single()
             .execute()
         )
         role = user_res.data.get("role")
+        resp_uuid = user_res.data["id"]
 
         if role == "responsible":
-            # Проверяем есть ли активный игрок
-            resp_id_res = (
-                await db.table("users")
-                .select("id")
-                .eq("telegram_id", message.from_user.id)
-                .single()
-                .execute()
-            )
-            resp_uuid = resp_id_res.data["id"]
-
+            # Есть активный игрок → Mini App
             active = (
                 await db.table("partnerships")
                 .select("id")
@@ -107,46 +101,43 @@ async def cmd_start(message: types.Message, state: FSMContext) -> None:
                 .eq("status", "active")
                 .execute()
             )
-
             if active.data:
-                # Есть активный игрок → Mini App
                 await message.answer(
                     "С возвращением! Ваш игрок привязан.",
                     reply_markup=get_miniapp_keyboard(),
                 )
-            else:
-                # Нет активного игрока → проверяем pending ссылку
-                pending = (
-                    await db.table("partnerships")
-                    .select("pair_code, player_name, expires_at")
-                    .eq("responsible_id", resp_uuid)
-                    .eq("status", "pending")
-                    .order("created_at", desc=True)
-                    .limit(1)
-                    .execute()
+                return
+
+            # Есть pending (не истёкшая) ссылка → показать её
+            pending = (
+                await db.table("partnerships")
+                .select("pair_code, player_name, expires_at")
+                .eq("responsible_id", resp_uuid)
+                .eq("status", "pending")
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            if pending.data:
+                p = pending.data[0]
+                link = f"https://t.me/{BOT_USERNAME}?start=PAIR_{p['pair_code']}"
+                await message.answer(
+                    f"У вас есть активная ссылка для {p['player_name']}:\n\n"
+                    f"{link}\n\n{LINK_WARNING}\n\n"
+                    f"Если игрок не перешёл — отправьте ссылку повторно.",
                 )
+                return
 
-                if pending.data:
-                    p = pending.data[0]
-                    link = f"https://t.me/{BOT_USERNAME}?start=PAIR_{p['pair_code']}"
-                    await message.answer(
-                        f"У вас есть активная ссылка для {p['player_name']}:\n\n"
-                        f"{link}\n\n"
-                        f"⚠️ Ссылка действительна до истечения 7 дней с момента создания.\n\n"
-                        f"Если игрок не перешёл — отправьте ссылку повторно.",
-                    )
-                else:
-                    # Нет pending ссылки → заново: промокод → имя → ссылка
-                    await db.table("users").update({
-                        "onboarding_state": "resp_promo",
-                        "onboarding_done": False,
-                    }).eq("telegram_id", message.from_user.id).execute()
+            # Нет ни игрока, ни pending ссылки → нужен новый промокод
+            await db.table("users").update({
+                "onboarding_state": "resp_promo",
+                "onboarding_done": False,
+            }).eq("telegram_id", message.from_user.id).execute()
 
-                    await message.answer(
-                        "У вас пока нет привязанного игрока.\n"
-                        "Давайте начнём заново.\n\n"
-                        "Введите промокод для активации:"
-                    )
+            await message.answer(
+                "У вас пока нет привязанного игрока.\n"
+                "Введите новый промокод для активации:"
+            )
             return
 
         # Игрок или другая роль → Mini App
@@ -156,7 +147,9 @@ async def cmd_start(message: types.Message, state: FSMContext) -> None:
         )
         return
 
-    # --- PLAYER FLOW (deep link с PAIR_) ---
+    # ------------------------------------------------------------------
+    # PLAYER FLOW (deep link с PAIR_)
+    # ------------------------------------------------------------------
     if deeplink.startswith("PAIR_"):
         code = deeplink[5:]
         result = await svc.validate_pair_code(message.from_user.id, code)
@@ -185,14 +178,16 @@ async def cmd_start(message: types.Message, state: FSMContext) -> None:
         )
         return
 
-    # --- RESPONSIBLE FLOW (прямой /start) ---
+    # ------------------------------------------------------------------
+    # RESPONSIBLE FLOW (прямой /start)
+    # ------------------------------------------------------------------
     if db_state in _PLAYER_STATES:
         await message.answer(
             "Вы проходите регистрацию как Игрок. Продолжайте с текущего шага."
         )
         return
 
-    # Всегда сбрасываем в resp_promo при /start (в т.ч. перезапуск в середине флоу)
+    # Сбрасываем в resp_promo
     db = await get_supabase()
     await (
         db.table("users")
@@ -208,7 +203,7 @@ async def cmd_start(message: types.Message, state: FSMContext) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Language callback (resp_language → resp_gender | player_language → player_gender)
+# Language callback
 # ---------------------------------------------------------------------------
 
 @onboarding_router.callback_query(F.data.startswith("lang_"))
@@ -229,7 +224,7 @@ async def process_language(callback: types.CallbackQuery) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Gender callback (resp_gender → resp_player_name | player_gender → player_survey)
+# Gender callback
 # ---------------------------------------------------------------------------
 
 @onboarding_router.callback_query(F.data.startswith("gender_"))
@@ -255,7 +250,7 @@ async def process_gender(callback: types.CallbackQuery) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Survey callback (player flow only: player_survey → onboardingComplete)
+# Survey callback (player flow)
 # ---------------------------------------------------------------------------
 
 @onboarding_router.callback_query(F.data.startswith("survey_"))
@@ -265,7 +260,6 @@ async def process_survey(callback: types.CallbackQuery) -> None:
     svc = await get_svc()
     await svc.send_event(callback.from_user.id, {"type": "SURVEY_COMPLETE", "window": window})
 
-    # Явно помечаем как done (фото загружается в Mini App, не в боте)
     db = await get_supabase()
     await (
         db.table("users")
@@ -282,67 +276,7 @@ async def process_survey(callback: types.CallbackQuery) -> None:
 
 
 # ---------------------------------------------------------------------------
-# /invite — Responsible приглашает ещё одного игрока (проверяет лимит)
-# Регистрируется ДО general text handler чтобы state-filter имел приоритет
-# ---------------------------------------------------------------------------
-
-@onboarding_router.message(InviteForm.waiting_for_player_name, F.text)
-async def process_invite_player_name(message: types.Message, state: FSMContext) -> None:
-    name = message.text.strip()
-    if not name:
-        await message.answer("Имя не может быть пустым. Попробуйте ещё раз:")
-        return
-
-    svc = await get_svc()
-    code = await svc.generate_pair_code(message.from_user.id, name)
-    link = f"https://t.me/{BOT_USERNAME}?start=PAIR_{code}"
-    await state.clear()
-    await message.answer(
-        f"Ваша пригласительная ссылка:\n\n{link}\n\n"
-        f"Отправьте эту ссылку игроку {name}.\n\n"
-        f"⚠️ Ссылка действительна 7 дней. Если игрок не перейдёт по ней "
-        f"в течение этого срока, она сгорит. Приложение не несёт "
-        f"ответственности за неиспользованные ссылки."
-    )
-
-
-@onboarding_router.message(Command("invite"))
-async def cmd_invite(message: types.Message, state: FSMContext) -> None:
-    svc = await get_svc()
-    db_state, _ = await svc.get_state(message.from_user.id)
-
-    if db_state != "onboardingComplete":
-        await message.answer("Завершите регистрацию сначала.")
-        return
-
-    db = await get_supabase()
-    user_res = (
-        await db.table("users")
-        .select("role, subscription_tier")
-        .eq("telegram_id", message.from_user.id)
-        .single()
-        .execute()
-    )
-    if user_res.data.get("role") != "responsible":
-        await message.answer("Команда /invite доступна только Ответственным.")
-        return
-
-    current, limit = await svc.count_active_players(message.from_user.id)
-    if current >= limit:
-        tier = user_res.data.get("subscription_tier", "basic")
-        upgrade_hint = " Для premium (3 игрока) — промокод TESTPRO." if tier == "basic" else ""
-        await message.answer(
-            f"Достигнут лимит игроков ({current}/{limit}).{upgrade_hint}"
-        )
-        return
-
-    await state.set_state(InviteForm.waiting_for_player_name)
-    await message.answer("Введите имя человека, которому хотите отправить приглашение:")
-
-
-# ---------------------------------------------------------------------------
-# General text handler: promo code (resp_promo) и player name (resp_player_name)
-# Срабатывает ТОЛЬКО когда aiogram FSM не в InviteForm.waiting_for_player_name
+# General text handler: promo code + player name
 # ---------------------------------------------------------------------------
 
 @onboarding_router.message(F.text)
@@ -353,19 +287,52 @@ async def process_text_input(message: types.Message) -> None:
     svc = await get_svc()
     db_state, _ = await svc.get_state(message.from_user.id)
 
+    # --- PROMO CODE (DB validation) ---
     if db_state == "resp_promo":
+        promo_result = await svc.validate_promo_code(
+            message.from_user.id, message.text.strip()
+        )
+
+        if not promo_result["ok"]:
+            reason = promo_result["reason"]
+
+            if reason == "rate_limited":
+                minutes = promo_result.get("minutes_left", 60)
+                await message.answer(
+                    f"⛔ Слишком много попыток. Повторите через {minutes} мин."
+                )
+                return
+
+            if reason == "promo_already_used":
+                msg = "Этот промокод уже был использован."
+            else:
+                msg = "Неверный промокод."
+
+            if promo_result.get("locked"):
+                msg += "\n\n⛔ Вы исчерпали 3 попытки. Повторите через 1 час."
+            elif promo_result.get("attempts_left") is not None:
+                left = promo_result["attempts_left"]
+                msg += f"\n\nОсталось попыток: {left}"
+
+            await message.answer(msg)
+            return
+
+        # Promo valid — send FSM event with tier from DB
+        tier = promo_result["tier"]
         result = await svc.send_event(
             message.from_user.id,
-            {"type": "SET_PROMO", "code": message.text.strip()},
+            {"type": "SET_PROMO", "tier": tier},
         )
-        if result.error == "invalid_promo":
-            await message.answer("Неверный промокод. Попробуйте ещё раз.")
-        else:
-            await message.answer(
-                "Промокод принят!\n\nВыберите язык / Tilni tanlang / Choose language:",
-                reply_markup=get_language_keyboard(),
-            )
+        if result.error:
+            await message.answer("Ошибка обработки промокода. Попробуйте снова.")
+            return
 
+        await message.answer(
+            "Промокод принят!\n\nВыберите язык / Tilni tanlang / Choose language:",
+            reply_markup=get_language_keyboard(),
+        )
+
+    # --- PLAYER NAME → GENERATE LINK ---
     elif db_state == "resp_player_name":
         name = message.text.strip()
         if not name:
@@ -383,14 +350,12 @@ async def process_text_input(message: types.Message) -> None:
         try:
             code = await svc.generate_pair_code(message.from_user.id, name)
         except Exception as e:
-            await message.answer(f"Ошибка генерации ссылки: {e}")
+            logger.error("generate_pair_code failed for %s: %s", message.from_user.id, e)
+            await message.answer("Ошибка генерации ссылки. Попробуйте /start заново.")
             return
 
         link = f"https://t.me/{BOT_USERNAME}?start=PAIR_{code}"
         await message.answer(
             f"Ваша пригласительная ссылка:\n\n{link}\n\n"
-            f"Отправьте эту ссылку игроку {name}.\n\n"
-            f"⚠️ Ссылка действительна 7 дней. Если игрок не перейдёт по ней "
-            f"в течение этого срока, она сгорит. Приложение не несёт "
-            f"ответственности за неиспользованные ссылки."
+            f"Отправьте эту ссылку игроку {name}.\n\n{LINK_WARNING}"
         )
