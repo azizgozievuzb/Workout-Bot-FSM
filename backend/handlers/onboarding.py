@@ -79,7 +79,81 @@ async def cmd_start(message: types.Message, state: FSMContext) -> None:
 
     # Уже завершил онбординг
     if db_state == "onboardingComplete":
-        await message.answer("Вы уже зарегистрированы. Используйте меню для продолжения.")
+        db = await get_supabase()
+        user_res = (
+            await db.table("users")
+            .select("role")
+            .eq("telegram_id", message.from_user.id)
+            .single()
+            .execute()
+        )
+        role = user_res.data.get("role")
+
+        if role == "responsible":
+            # Проверяем есть ли активный игрок
+            resp_id_res = (
+                await db.table("users")
+                .select("id")
+                .eq("telegram_id", message.from_user.id)
+                .single()
+                .execute()
+            )
+            resp_uuid = resp_id_res.data["id"]
+
+            active = (
+                await db.table("partnerships")
+                .select("id")
+                .eq("responsible_id", resp_uuid)
+                .eq("status", "active")
+                .execute()
+            )
+
+            if active.data:
+                # Есть активный игрок → Mini App
+                await message.answer(
+                    "С возвращением! Ваш игрок привязан.",
+                    reply_markup=get_miniapp_keyboard(),
+                )
+            else:
+                # Нет активного игрока → проверяем pending ссылку
+                pending = (
+                    await db.table("partnerships")
+                    .select("pair_code, player_name, expires_at")
+                    .eq("responsible_id", resp_uuid)
+                    .eq("status", "pending")
+                    .order("created_at", desc=True)
+                    .limit(1)
+                    .execute()
+                )
+
+                if pending.data:
+                    p = pending.data[0]
+                    link = f"https://t.me/{BOT_USERNAME}?start=PAIR_{p['pair_code']}"
+                    await message.answer(
+                        f"У вас есть активная ссылка для {p['player_name']}:\n\n"
+                        f"{link}\n\n"
+                        f"⚠️ Ссылка действительна до истечения 7 дней с момента создания.\n\n"
+                        f"Если игрок не перешёл — отправьте ссылку повторно.",
+                    )
+                else:
+                    # Нет pending ссылки → заново: промокод → имя → ссылка
+                    await db.table("users").update({
+                        "onboarding_state": "resp_promo",
+                        "onboarding_done": False,
+                    }).eq("telegram_id", message.from_user.id).execute()
+
+                    await message.answer(
+                        "У вас пока нет привязанного игрока.\n"
+                        "Давайте начнём заново.\n\n"
+                        "Введите промокод для активации:"
+                    )
+            return
+
+        # Игрок или другая роль → Mini App
+        await message.answer(
+            "С возвращением!",
+            reply_markup=get_miniapp_keyboard(),
+        )
         return
 
     # --- PLAYER FLOW (deep link с PAIR_) ---
