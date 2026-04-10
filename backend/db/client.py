@@ -10,7 +10,7 @@ async def get_supabase() -> AsyncClient:
     global _client
     if _client is None:
         _client = await acreate_client(
-            settings.SUPABASE_URL,
-            settings.SUPABASE_SERVICE_KEY,
+            settings.SUPABASE_URL.strip().strip("'").strip('"'),
+            settings.SUPABASE_SERVICE_KEY.strip().strip("'").strip('"'),
         )
     return _client
