@@ -39,7 +39,8 @@ dp.include_router(onboarding_router)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     if settings.WEBHOOK_URL:
-        webhook_url = f"{settings.WEBHOOK_URL}/webhook"
+        base_url = settings.WEBHOOK_URL.rstrip("/")
+        webhook_url = f"{base_url}/webhook"
         # Сначала удаляем старый вебхук со сбросом очереди, чтобы сбросить пенальти Telegram'а за предыдущие 500 ошибки
         await bot.delete_webhook(drop_pending_updates=True)
         await bot.set_webhook(
@@ -91,12 +92,16 @@ async def health() -> dict:
 
 @app.post("/webhook")
 async def telegram_webhook(request: Request) -> Response:
+    logger.info(">> Received webhook POST request")
     # Проверяем secret token от Telegram
     secret = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
     if secret != settings.WEBHOOK_SECRET:
+        logger.warning("Secret token mismatch. Expected %r, got %r", settings.WEBHOOK_SECRET, secret)
         return Response(status_code=403)
 
     data = await request.json()
+    logger.info("Update data: %s", data.get("update_id"))
     update = Update.model_validate(data, context={"bot": bot})
     await dp.feed_update(bot=bot, update=update)
+    logger.info("<< Update handled successfully")
     return Response(status_code=200)
