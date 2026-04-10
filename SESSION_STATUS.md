@@ -2,16 +2,22 @@
 
 > **AI-агент:** Прочитай этот файл ПОСЛЕ `CLAUDE.md`. Здесь написано, на чём остановился предыдущий агент.
 
-**Последнее обновление:** 2026-04-09  
-**Последний агент:** Cowork (Claude Sonnet 4.6)
+**Последнее обновление:** 2026-04-10
+**Последний агент:** Antigravity
 
 ---
 
 ## 🎯 Текущий фокус
-Вертикальный срез Onboarding. Backend полностью написан. Осталось: Frontend Onboarding UI + E2E тест.
+Backend DevOps и деплой полностью стабилизированы. Проблема с Telegram-вебхуком и базой данных решена. 
+Переходим к Frontend Onboarding UI.
 
-## ✅ Завершено в этой сессии (Backend Vertical Slice)
+## ✅ Недавние критические фиксы инфраструктуры (Backend)
+1. **Zero-downtime deploy webhook race condition**: В `backend/main.py` из `lifespan` при shutdown был *удален* вызов `bot.delete_webhook()`. Если его вернуть, при деплоях в Railway старый выключающийся контейнер будет удалять свежий вебхук нового контейнера! **НЕ ВОЗВРАЩАТЬ `delete_webhook` в shutdown.**
+2. **Supabase Legacy Keys**: Текущая версия библиотеки `supabase-python==2.10.0` **не поддерживает** новые ключи формата `sb_secret_...`. Приложение жёстко завязано на Legacy JWT ключи (начинаются на `ey...`). Railway использует именно его в `SUPABASE_SERVICE_KEY`. **НЕ ОБНОВЛЯТЬ `supabase` пакет без полного переписывания работы с API.**
+3. **Webhook URL Sanitization**: В `lifespan` добавлено жёсткое обрезание символов через `.strip().rstrip("/")`, чтобы пресекать "загрязненные" URL и дуг-слеши (например, `//webhook`), которые Telegram не может маршрутизировать.
+4. **Консолидированный Debug Webhook**: Прописано логирование `Processing Update ID:` в /webhook эндпоинте, что критически помогает отслеживать доставку событий от Telegram.
 
+## ✅ Завершено ранее (Backend Vertical Slice)
 1. **Структура backend** — создана полная иерархия пакетов (`core/`, `db/`, `api/routers/`, `services/fsm/`, `handlers/`, `keyboards/`)
 2. **Config** — `core/config.py` через pydantic-settings, все секреты из `.env`
 3. **Security** — `core/security.py`: валидация initData (HMAC-SHA256) + JWT create/decode
@@ -19,36 +25,24 @@
 5. **Supabase client** — `db/client.py`: async singleton
 6. **SQL миграции** — `db/migrations/001_initial.sql`: таблицы users, partnerships, subscriptions, player_stats + RLS + triggers
 7. **Реальная FSM** — `services/fsm/onboarding_fsm.py`: `OnboardingFSM` (1:1 маппинг XState) + `OnboardingService` (работа с Supabase)
-8. **Handlers (полные)** — `handlers/onboarding.py`: /start, lang, role, gender, survey, photo, pairing code input
-9. **Keyboards** — `keyboards/onboarding_keyboards.py`: lang, role, gender, survey, pairing_code
-10. **REST API** — `api/routers/auth.py` (`POST /auth/telegram`), `users.py` (`GET /users/me`), `partnerships.py` (create-code, accept-code, my-partner)
-11. **main.py** — Aiogram 3 webhook + FastAPI в одном процессе
-12. **Dockerfile + railway.toml** — готово к деплою
-13. **.env.example** — шаблон переменных окружения
+8. **REST API & Telegram Integration** — Webhook + FastAPI в одном процессе, готово к production деплою.
 
 ## 🛠️ Ключевые файлы
 | Файл | Что делает |
 |------|-----------|
-| `backend/main.py` | Точка входа: бот + REST API |
-| `backend/core/config.py` | Все env-переменные |
-| `backend/core/security.py` | initData валидация + JWT |
-| `backend/db/migrations/001_initial.sql` | Схема БД для Supabase |
+| `backend/main.py` | Точка входа: бот + REST API с оптимизированным Zero-Downtime вебхуком |
+| `backend/db/client.py` | Async Supabase singleton (требует JWT ключи) |
 | `backend/services/fsm/onboarding_fsm.py` | Реальная FSM + OnboardingService |
 | `backend/handlers/onboarding.py` | Telegram bot handlers |
-| `backend/api/routers/auth.py` | POST /auth/telegram |
-| `backend/api/routers/partnerships.py` | Pairing endpoints |
-| `backend/requirements.txt` | Python зависимости |
-| `Dockerfile` + `railway.toml` | Deploy config |
-| `.env.example` | Шаблон секретов |
+| `backend/requirements.txt` | Python зависимости (ВНИМАНИЕ: жестко зафиксированы версии Aiogram vs Pydantic vs Supabase) |
 
 ## 🚀 Следующие задачи
 1. **Frontend Onboarding UI** — React компоненты для 6 шагов онбординга поверх существующего дизайна (`App.tsx` → `OnboardingFlow.tsx`)
 2. **Axios + JWT** — `frontend/src/api/client.ts` с interceptor, `useAuth` hook
-3. **E2E тест** — задеплоить на Railway, вбить реальный BOT_TOKEN, протестировать в Telegram WebView
+3. **Окна Frontend** — Интеграция API в Telegram WebView.
 
 ## 📝 Инструкция для СЛЕДУЮЩЕГО AI
-1. Backend готов. НЕ трогать без причины.
+1. ПОВТОРЕНИЕ ДЛЯ СОХРАНЕНИЯ РАБОТОСПОСОБНОСТИ БЕКЕНДА: **Не трогай `main.py` (особенно shutdown-логику Webhook) и `requirements.txt` (особенно зависимости Supabase/Pydantic).** Бэкенд и деплой настроены 100% идеально.
 2. **Начинать с Frontend**: создать `frontend/src/api/client.ts`, `frontend/src/hooks/useAuth.ts`, `frontend/src/components/onboarding/OnboardingFlow.tsx`
 3. Стиль — Vanilla CSS (glassmorphism из App.css), НЕ Tailwind.
 4. Онбординг должен рендериться поверх существующего 3D backdrop (через `layoutMode`).
-5. После фронта — Railway деплой + E2E.
