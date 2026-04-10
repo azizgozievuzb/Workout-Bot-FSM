@@ -94,7 +94,6 @@ async def health() -> dict:
 
 @app.post("/webhook")
 async def telegram_webhook(request: Request) -> Response:
-    logger.info(">> Received webhook POST request")
     # Проверяем secret token от Telegram
     secret = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
     if secret != settings.WEBHOOK_SECRET:
@@ -102,8 +101,8 @@ async def telegram_webhook(request: Request) -> Response:
         return Response(status_code=403)
 
     data = await request.json()
-    logger.info("Update data: %s", data.get("update_id"))
+    update_id = data.get("update_id")
+    logger.info("Processing Update ID: %s", update_id)
     update = Update.model_validate(data, context={"bot": bot})
     await dp.feed_update(bot=bot, update=update)
-    logger.info("<< Update handled successfully")
     return Response(status_code=200)
