@@ -39,13 +39,15 @@ dp.include_router(onboarding_router)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     if settings.WEBHOOK_URL:
-        base_url = settings.WEBHOOK_URL.rstrip("/")
+        base_url = settings.WEBHOOK_URL.strip().rstrip("/")
         webhook_url = f"{base_url}/webhook"
+        secret_token = settings.WEBHOOK_SECRET.strip() if settings.WEBHOOK_SECRET else ""
+        
         # Сначала удаляем старый вебхук со сбросом очереди, чтобы сбросить пенальти Telegram'а за предыдущие 500 ошибки
         await bot.delete_webhook(drop_pending_updates=True)
         await bot.set_webhook(
             url=webhook_url,
-            secret_token=settings.WEBHOOK_SECRET,
+            secret_token=secret_token,
             allowed_updates=dp.resolve_used_update_types(),
         )
         logger.info("Webhook set: %s", webhook_url)
