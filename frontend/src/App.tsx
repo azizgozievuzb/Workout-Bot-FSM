@@ -128,20 +128,17 @@ const App: React.FC = () => {
                     />
 
                     {/* PHOTO GATE — обязательное селфи для ВСЕХ пользователей */}
+                    {/* Показываем только после загрузки auth (isLoading=false), чтобы кубы не мелькали */}
                     {!isLoading && !error && !photoUrl && <PhotoGate />}
+
+                    {/* Блокируем вид пока auth грузится — чёрный фон без мелькания кубов */}
+                    {isLoading && <div className="pg-loading-screen" />}
 
                     {/* UI OVERLAY — DOM поверх 3D */}
                     <div className="ui-overlay" style={{ pointerEvents: layoutMode !== 'chaos' || hasOverlay ? 'auto' : 'none' }}>
 
                         {/* === ONBOARDING === */}
                         {!isLoading && !onboardingDone && role === 'player' && !!photoUrl && <OnboardingFlow />}
-
-                        {/* === LOADING === */}
-                        {isLoading && (
-                            <div className="onb-loading">
-                                <div className="onb-loading-spinner" />
-                            </div>
-                        )}
 
                         {/* === AUTH ERROR === */}
                         {error && (

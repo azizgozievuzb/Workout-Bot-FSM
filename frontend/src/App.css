@@ -221,6 +221,15 @@ html, body {
 .dark-theme .dashboard-card-label { color: rgba(255, 255, 255, 0.85); }
 .light-theme .dashboard-card-label { color: rgba(0, 0, 0, 0.75); }
 
+/* --- Auth loading screen (prevents cube flash before PhotoGate) --- */
+
+.pg-loading-screen {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    background: #000;
+}
+
 /* --- Loading state --- */
 
 .onb-loading {
