@@ -16,32 +16,14 @@ const transition = { type: 'spring' as const, stiffness: 300, damping: 30 };
 // --- Types ---
 interface StepProps {
   onNext: (data?: Record<string, any>) => void;
-  role?: string | null;
 }
 
-type OnboardingStep = 'gender' | 'survey' | 'photo' | 'pairing';
+type OnboardingStep = 'survey' | 'photo';
 
-const STEP_ORDER: OnboardingStep[] = ['gender', 'survey', 'photo', 'pairing'];
-
-// ============================================================
-// STEP 1: Gender Selection
-// ============================================================
-const GenderStep: React.FC<StepProps> = ({ onNext }) => (
-  <div className="onb-step">
-    <h2 className="onb-title">Ваш пол</h2>
-    <div className="onb-buttons">
-      <button className="onb-btn" onClick={() => onNext({ gender: 'male' })}>
-        Мужской
-      </button>
-      <button className="onb-btn" onClick={() => onNext({ gender: 'female' })}>
-        Женский
-      </button>
-    </div>
-  </div>
-);
+const STEP_ORDER: OnboardingStep[] = ['survey', 'photo'];
 
 // ============================================================
-// STEP 2: Survey (Player only — determines startingWindow)
+// STEP 1: Survey (determines startingWindow)
 // ============================================================
 const SURVEY_QUESTIONS = [
   {
@@ -109,7 +91,7 @@ const SurveyStep: React.FC<StepProps> = ({ onNext }) => {
 };
 
 // ============================================================
-// STEP 3: Photo (stub — skip for now)
+// STEP 2: Photo (stub — skip for now)
 // ============================================================
 const PhotoStep: React.FC<StepProps> = ({ onNext }) => (
   <div className="onb-step">
@@ -125,53 +107,6 @@ const PhotoStep: React.FC<StepProps> = ({ onNext }) => (
     </div>
   </div>
 );
-
-// ============================================================
-// STEP 4: Pairing
-// ============================================================
-const PairingStep: React.FC<StepProps & { role?: string | null }> = ({ onNext, role }) => {
-  const [code, setCode] = useState('');
-  const [pairCode] = useState(() => Math.random().toString(36).substring(2, 8).toUpperCase());
-
-  if (role === 'responsible') {
-    return (
-      <div className="onb-step">
-        <h2 className="onb-title">Привязка игрока</h2>
-        <p className="onb-subtitle">Введите код игрока</p>
-        <input
-          className="onb-input"
-          placeholder="Код игрока"
-          value={code}
-          onChange={(e) => setCode(e.target.value.toUpperCase())}
-          maxLength={6}
-        />
-        <div className="onb-buttons">
-          <button
-            className="onb-btn onb-btn--accent"
-            disabled={code.length < 6}
-            onClick={() => onNext({ pair_code: code })}
-          >
-            Привязать
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // Player — show generated code
-  return (
-    <div className="onb-step">
-      <h2 className="onb-title">Ваш код привязки</h2>
-      <p className="onb-subtitle">Передайте этот код вашему Ответственному</p>
-      <div className="onb-code-display">{pairCode}</div>
-      <div className="onb-buttons">
-        <button className="onb-btn onb-btn--accent" onClick={() => onNext({ pair_code: pairCode })}>
-          Готово
-        </button>
-      </div>
-    </div>
-  );
-};
 
 // ============================================================
 // MAIN FLOW
@@ -197,33 +132,22 @@ const OnboardingFlow: React.FC = () => {
       }
 
       if (stepIndex < STEP_ORDER.length - 1) {
-        // Skip survey & photo for responsible role
-        const nextIdx = stepIndex + 1;
-        const nextStep = STEP_ORDER[nextIdx];
-        if (merged.role === 'responsible' && (nextStep === 'survey' || nextStep === 'photo')) {
-          const skip = nextStep === 'survey' ? 2 : 1;
-          setDirection(1);
-          setStepIndex(nextIdx + skip);
-          return;
-        }
         setDirection(1);
-        setStepIndex(nextIdx);
+        setStepIndex(stepIndex + 1);
       } else {
         // Onboarding complete
         try {
           await api.put('/users/me', { onboarding_done: true });
         } catch { /* silent */ }
-        setAuth(token!, merged.role || 'player', true);
+        setAuth(token!, 'player', true);
       }
     },
     [stepIndex, collectedData, setAuth, token]
   );
 
   const StepComponent = {
-    gender: GenderStep,
     survey: SurveyStep,
     photo: PhotoStep,
-    pairing: PairingStep,
   }[currentStep];
 
   return (
@@ -239,7 +163,7 @@ const OnboardingFlow: React.FC = () => {
           exit="exit"
           transition={transition}
         >
-          <StepComponent onNext={handleNext} role={collectedData.role} />
+          <StepComponent onNext={handleNext} />
         </motion.div>
       </AnimatePresence>
 

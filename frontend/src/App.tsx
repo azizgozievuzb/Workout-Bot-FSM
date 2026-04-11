@@ -15,7 +15,7 @@ const TAP_MAX = 300;
 const HOLD_DASHBOARD = 2500; // 2.5 сек → toggle dashboard
 
 const App: React.FC = () => {
-    const { isLoading, onboardingDone, error } = useAuth();
+    const { isLoading, onboardingDone, error, role } = useAuth();
     const [theme, setTheme] = useState<'dark' | 'light'>('dark');
     const [layoutMode, setLayoutMode] = useState<LayoutMode>('chaos');
     const [activeModule, setActiveModule] = useState<ModuleName | null>(null);
@@ -130,7 +130,7 @@ const App: React.FC = () => {
                     <div className="ui-overlay" style={{ pointerEvents: layoutMode !== 'chaos' || !onboardingDone ? 'auto' : 'none' }}>
 
                         {/* === ONBOARDING === */}
-                        {!isLoading && !onboardingDone && <OnboardingFlow />}
+                        {!isLoading && !onboardingDone && role === 'player' && <OnboardingFlow />}
 
                         {/* === LOADING === */}
                         {isLoading && (
