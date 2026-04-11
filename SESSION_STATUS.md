@@ -2,105 +2,66 @@
 
 > **AI-агент:** Прочитай этот файл ПОСЛЕ `CLAUDE.md`. Здесь написано, на чём остановился предыдущий агент.
 
-**Последнее обновление:** 2026-04-11 (ночь)
-**Последний агент:** Claude Opus 4.6
+**Последнее обновление:** 2026-04-11 (поздний вечер)
+**Последний агент:** Cowork (Claude Opus 4.6)
 
 ---
 
 ## 🎯 Текущий фокус
-ТЕСТИРОВАНИЕ онбординга v3. Все 4 фикса из PROMPT_FIX_V3 применены. Задеплоено на Railway + Vercel.
+Mini App РАБОТАЕТ. Авторизация починена. 3D кубы видны. Онбординг бота работает. Деплой Railway + Vercel настроен.
 
-## 🚀 СЛЕДУЮЩАЯ ЗАДАЧА — ТЕСТИРОВАНИЕ
+## 🚀 СЛЕДУЮЩАЯ ЗАДАЧА — Персональное фото как фон Mini App
 
-**Нужно сбросить БД** через Supabase Dashboard → SQL Editor:
-```sql
-UPDATE users SET onboarding_state = NULL, onboarding_done = false, pending_promo_id = NULL, promo_attempts = 0, promo_locked_until = NULL;
-UPDATE promo_codes SET is_used = false, used_by = NULL, used_at = NULL;
-UPDATE partnerships SET status = 'expired' WHERE status = 'pending';
-```
+### Требования (утверждены с Азизом):
+1. **При первом открытии Mini App** (и для Ответственного, и для Игрока) — показать экран запроса селфи. Кубы НЕ показываются пока нет фото.
+2. **Фото обязательно** — нет кнопки "Пропустить". Без фото Mini App не раскрывается.
+3. **Фото = персональный фон** — заменяет стоковые `woman_cosmic.png` / `woman_meditating.png`. Кубы летают поверх СОБСТВЕННОГО лица пользователя.
+4. **Фото сохраняется** — при следующем входе фон уже загружен, фото повторно не запрашивается.
+5. **Смена темы** — удержание + свайп вверх пока НЕ работает (известный баг). Нужно исправить.
 
-**Тестовые промокоды (одноразовые!):**
-- `Promocod100` — basic (1 игрок)
-- `Promocod300` — premium (3 игрока)
+### Техническая реализация (план):
+- **Frontend:** Новый компонент `PhotoGate` — показывается ДО 3D сцены если `user.photo_url` отсутствует
+- **Frontend:** `Backdrop.tsx` — вместо стокового изображения загружать `user.photo_url`
+- **Backend:** API endpoint `PUT /users/me/photo` — загрузка фото (Supabase Storage)
+- **Backend:** API endpoint `GET /users/me` — должен возвращать `photo_url`
+- **DB:** Поле `photo_url` в таблице `users` (если нет — добавить миграцию)
+- **Supabase Storage:** Бакет для аватаров
 
-**Тест-план:**
-1. `/start` → промокод → язык → пол → имя → ссылка + кнопка "Открыть приложение"
-2. Ссылка в `<code>` блоке (нажал = скопировал) + кнопка "Поделиться"
-3. Ответственный сразу видит 3D кубы в Mini App
-4. Игрок по ссылке → язык → пол → опрос → Mini App (Survey → Photo)
-5. Desktop Telegram → "Откройте приложение с телефона" (не техническая ошибка)
-
----
-
-## ✅ Завершено за сегодня (2026-04-11 ночь)
-
-### Фиксы из PROMPT_FIX_V3.md
-1. **Кнопка "Открыть приложение" сразу после ссылки** — Ответственный видит miniapp кнопку без повторного /start.
-2. **Улучшен текст ссылки** — `<code>` блок для копирования, предупреждения об одноразовости, только кнопка "Поделиться".
-3. **Убрана техническая ошибка initData** — вместо "No Telegram initData" показывается "Откройте приложение с телефона".
-4. **Удалены промпт-файлы** — PROMPT_FIX_3_ISSUES.md, PROMPT_FIX_ONBOARDING_V2.md, PROMPT_QUICK_FIX.md, PROMPT_FIX_V3.md.
-
-### Ранее (2026-04-11)
-- Убран дублирующий онбординг из фронтенда
-- Кнопки копирования ссылки (InlineKeyboardMarkup)
-- Убран мокап телефона
+### Ключевые файлы для этой задачи:
+| Файл | Что менять |
+|------|-----------|
+| frontend/src/App.tsx | Добавить PhotoGate перед Backdrop |
+| frontend/src/design/backdrop/Backdrop.tsx | Загружать user.photo_url вместо стока |
+| frontend/src/components/onboarding/OnboardingFlow.tsx | Сейчас survey+photo для игрока — фото нужно для ВСЕХ |
+| frontend/src/hooks/useAuth.ts | Возвращать photo_url из стора |
+| backend/api/routers/users.py | Endpoint загрузки фото |
 
 ---
 
-## ✅ Завершено за сегодня (2026-04-11)
+## ✅ Завершено за 2026-04-11 (полная сессия)
 
-### Фиксы бота
-1. **Исправлен краш при генерации ссылки** — `pairing_code` NOT NULL constraint. Бот молчал после ввода имени игрока. Теперь пишет и в `pairing_code`, и в `pair_code`.
-2. **Добавлен error handling** — вместо молчания бот теперь отвечает сообщением об ошибке.
-3. **7-дневный TTL ссылок** — `expires_at` в partnerships. Истёкшая ссылка → статус `expired`, игрок видит "ссылка истекла".
-4. **Предупреждение при генерации** — "Ссылка действительна 7 дней. Приложение не несёт ответственности."
+### Инфраструктура и авторизация
+1. **Починена авторизация Mini App** — добавлен `telegram-web-app.js` в index.html, `Telegram.WebApp.ready()` + `expand()`, robust getInitData()
+2. **VITE_API_URL** — настроен в Vercel (`https://workout-bot-fsm-production-0e08.up.railway.app`)
+3. **MINI_APP_URL** — настроен в Railway (`https://workout-bot-fsm.vercel.app`) для CORS
+4. **Vercel домен добавлен в CORS** явно в backend
 
-### Новая система промокодов (v3)
-5. **Таблица `promo_codes` в БД** — одноразовые коды, VARCHAR(128), верхний/нижний регистр + цифры + спецсимволы.
-6. **1 промокод = 1 человек глобально** — код сгорает ТОЛЬКО после генерации ссылки (не при вводе).
-7. **Brute force защита** — 3 неверные попытки в час → блокировка на 1 час с предупреждением.
-8. **Удалены хардкоженные коды** — WORKOUT2026, BETA100, TESTPRO больше не работают.
-9. **Удалена команда /invite** — доп. приглашения переедут в Mini App.
+### Фронтенд
+5. **Убран мокап телефона** — Mini App на полный экран (100% × 100vh)
+6. **Убран дублирующий онбординг** — Ответственный → сразу 3D кубы, Игрок → только Survey + Photo
+7. **3D кубы видимые** — исправлен z-index backdrop-stage (было -10, стало 0), app-container transparent
+8. **Десктоп Telegram** — "Откройте приложение с телефона" (корректное сообщение)
+9. **Дебаг ошибок авторизации** — реальная ошибка показывается на экране
 
-### Smart /start меню
-10. **Умный /start для завершивших онбординг:**
-    - Ответственный + есть активный игрок → кнопка Mini App
-    - Ответственный + есть pending ссылка → показать существующую
-    - Ответственный + нет игрока/ссылки → "введите новый промокод"
-    - Игрок → кнопка Mini App
-
-### Типы промокодов (в БД)
-11. **3 типа tier:** `basic` (1 игрок), `premium` (3 игрока), `upgrade` (basic→premium, для Mini App позже)
+### Бот (backend)
+10. **Кнопка "Открыть приложение" сразу после ссылки** — без повторного /start
+11. **Ссылка в `<code>` блоке** — нажал = скопировал. Кнопка "Поделиться" (switch_inline_query)
+12. **Предупреждения** — одноразовость, 7 дней TTL, невозможность отката
+13. **Промокоды v3** — из БД, brute force защита, типы basic/premium/upgrade
+14. **Smart /start** — разное поведение по состоянию пользователя
 
 ### Миграции (все применены)
-- 001_initial.sql
-- 002_onboarding_v2.sql
-- 003_pair_link_expiry.sql — `expires_at`, статус `expired`
-- 004_promo_codes_table.sql — таблица `promo_codes`, `promo_attempts`, `pending_promo_id`
-- 005_promo_upgrade_type.sql — tier `upgrade`
-
----
-
-## ✅ Завершено ранее
-
-### Backend
-1. **Полная структура backend** — пакеты core/, db/, api/routers/, services/fsm/, handlers/, keyboards/
-2. **Config, Security, Auth** — pydantic-settings, HMAC-SHA256, JWT, FastAPI dependencies
-3. **Supabase client** — async singleton
-4. **REST API** — auth, users, partnerships роуты
-5. **Деплой backend** — Railway (автодеплой при push)
-
-### Frontend
-1. **Vite + React + Three.js** — 3D кубы (Workout, Arsenal, Responsibility)
-2. **Axios + Zustand + useAuth** — клиент, стор, хук авторизации
-3. **OnboardingFlow** — компонент (нужна доработка)
-4. **Деплой frontend** — Vercel: https://workout-bot-fsm.vercel.app
-5. **BotFather** — Mini App URL обновлён
-
-### Инфраструктура
-1. **Supabase CLI** — установлен, подключён к проекту dlpdwmmfpzfxcelxqvlq
-2. **Vercel** — Build Command: `vite build`, Root Directory: frontend
-3. **Railway** — бэкенд деплой (автодеплой при push в main)
+- 001-005 (initial, onboarding_v2, pair_link_expiry, promo_codes, upgrade_type)
 
 ---
 
@@ -112,12 +73,13 @@ UPDATE partnerships SET status = 'expired' WHERE status = 'pending';
 - Upgrade промокод — только в Mini App (реализовать позже)
 - Ссылка живёт 7 дней, потом сгорает. Нужен новый промокод.
 - Один человек может быть и Ответственным и Игроком (но Игроком только у одного)
-- Фото обязательно только для Игрока, только в Mini App
+- **Фото обязательно для ВСЕХ пользователей** в Mini App (не только Игрок)
 - 3 неверных промокода в час → блокировка на 1 час
 
-## 🔧 Известные проблемы фронтенда (исправить позже)
-- gesture-layer блокирует pointer events кнопок онбординга
-- Фото: убрать кнопку "Пропустить", добавить проверку лица
+## 🔧 Известные баги
+- Свайп вверх при удержании не меняет тему (dark↔light)
+- gesture-layer может ловить touch при открытии Mini App
+- `@telegram-apps/sdk-react` deprecated → нужно мигрировать на `@tma.js`
 
 ## 🛠️ Ключевые файлы
 | Файл | Что делает |
@@ -125,11 +87,22 @@ UPDATE partnerships SET status = 'expired' WHERE status = 'pending';
 | backend/handlers/onboarding.py | Хэндлеры онбординга v3 |
 | backend/services/fsm/onboarding_fsm.py | FSM + промокоды из БД + brute force |
 | backend/keyboards/onboarding_keyboards.py | Клавиатуры + WebApp кнопка |
-| backend/db/migrations/003-005 | Миграции: TTL, promo_codes, upgrade tier |
-| frontend/src/components/onboarding/OnboardingFlow.tsx | UI онбординга (нужна доработка) |
+| frontend/src/App.tsx | Главный компонент, gesture handling |
+| frontend/src/hooks/useAuth.ts | Авторизация через Telegram initData |
+| frontend/src/design/backdrop/Backdrop.tsx | 3D сцена: лицо + частицы + кубы |
+| frontend/src/design/backdrop/GlassCubes.tsx | 3D кубы (canvas, hit detection) |
+| frontend/src/components/onboarding/OnboardingFlow.tsx | Survey + Photo для игрока |
 
 ## ⚠️ ВАЖНО
 - Пользователя зовут **Азиз** (не Николай)
 - Supabase CLI залогинен — перед возвратом компьютера Николаю выполнить `supabase logout`
-- MCP Николая отключены для экономии токенов
 - Промокоды создаёт Азиз вручную через SQL: `INSERT INTO promo_codes (code, tier) VALUES ('КОД', 'basic');`
+- **Vercel env:** `VITE_API_URL=https://workout-bot-fsm-production-0e08.up.railway.app`
+- **Railway env:** `MINI_APP_URL=https://workout-bot-fsm.vercel.app`
+
+## 🗃️ SQL для сброса тестовых данных
+```sql
+DELETE FROM partnerships;
+UPDATE users SET onboarding_state = NULL, onboarding_done = false, pending_promo_id = NULL, promo_attempts = 0, promo_locked_until = NULL;
+UPDATE promo_codes SET is_used = false, used_by = NULL, used_at = NULL;
+```
