@@ -27,10 +27,9 @@ onboarding_router = Router(name="onboarding")
 BOT_USERNAME = "conectionWorkout_bot"
 
 
-def get_copy_link_keyboard(pair_code: str, link: str) -> types.InlineKeyboardMarkup:
+def get_share_keyboard(link: str) -> types.InlineKeyboardMarkup:
     return types.InlineKeyboardMarkup(inline_keyboard=[
-        [types.InlineKeyboardButton(text="📋 Скопировать ссылку", callback_data=f"copy_link:{pair_code}")],
-        [types.InlineKeyboardButton(text="📤 Поделиться", switch_inline_query=link)],
+        [types.InlineKeyboardButton(text="📤 Поделиться ссылкой", switch_inline_query=link)],
     ])
 
 _RESP_STATES = frozenset({"resp_promo", "resp_language", "resp_gender", "resp_player_name"})
@@ -131,9 +130,15 @@ async def cmd_start(message: types.Message, state: FSMContext) -> None:
                 link = f"https://t.me/{BOT_USERNAME}?start=PAIR_{pair_code}"
                 await message.answer(
                     f"✅ Ссылка для игрока {p['player_name']} создана!\n\n"
-                    f"⚠️ Ссылка действительна 7 дней.\n\n"
-                    f"Используйте кнопки ниже, чтобы скопировать или поделиться ссылкой.",
-                    reply_markup=get_copy_link_keyboard(pair_code, link),
+                    f"👇 Нажмите на ссылку, чтобы скопировать:\n"
+                    f"<code>{link}</code>\n\n"
+                    f"⚠️ Важно:\n"
+                    f"• Ссылка действительна 7 дней\n"
+                    f"• Ссылка одноразовая — ей может воспользоваться только один человек\n"
+                    f"• Если по ссылке перейдёт не тот человек, отменить это будет нельзя\n"
+                    f"• Будьте внимательны при отправке!",
+                    parse_mode="HTML",
+                    reply_markup=get_share_keyboard(link),
                 )
                 return
 
@@ -366,22 +371,20 @@ async def process_text_input(message: types.Message) -> None:
         link = f"https://t.me/{BOT_USERNAME}?start=PAIR_{code}"
         await message.answer(
             f"✅ Ссылка для игрока {name} создана!\n\n"
-            f"⚠️ Ссылка действительна 7 дней.\n\n"
-            f"Используйте кнопки ниже, чтобы скопировать или поделиться ссылкой.",
-            reply_markup=get_copy_link_keyboard(code, link),
+            f"👇 Нажмите на ссылку, чтобы скопировать:\n"
+            f"<code>{link}</code>\n\n"
+            f"⚠️ Важно:\n"
+            f"• Ссылка действительна 7 дней\n"
+            f"• Ссылка одноразовая — ей может воспользоваться только один человек\n"
+            f"• Если по ссылке перейдёт не тот человек, отменить это будет нельзя\n"
+            f"• Будьте внимательны при отправке!",
+            parse_mode="HTML",
+            reply_markup=get_share_keyboard(link),
+        )
+        # Фикс 1: сразу показать кнопку приложения
+        await message.answer(
+            "Отлично! Теперь откройте приложение:",
+            reply_markup=get_miniapp_keyboard(),
         )
 
 
-# ---------------------------------------------------------------------------
-# copy_link callback — отправляет ссылку в <code> блоке для копирования
-# ---------------------------------------------------------------------------
-
-@onboarding_router.callback_query(F.data.startswith("copy_link:"))
-async def process_copy_link(callback: types.CallbackQuery) -> None:
-    pair_code = callback.data.split(":", 1)[1]
-    link = f"https://t.me/{BOT_USERNAME}?start=PAIR_{pair_code}"
-    await callback.message.answer(
-        f"👇 Нажмите на ссылку чтобы скопировать:\n\n<code>{link}</code>",
-        parse_mode="HTML",
-    )
-    await callback.answer()
