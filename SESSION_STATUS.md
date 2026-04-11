@@ -1,108 +1,94 @@
-# 📂 SESSION_STATUS.md — Текущий статус и передача смены
+# SESSION_STATUS.md — Текущий статус и передача смены
 
 > **AI-агент:** Прочитай этот файл ПОСЛЕ `CLAUDE.md`. Здесь написано, на чём остановился предыдущий агент.
 
-**Последнее обновление:** 2026-04-11 (поздний вечер)
+**Последнее обновление:** 2026-04-11 (ночь)
 **Последний агент:** Cowork (Claude Opus 4.6)
 
 ---
 
-## 🎯 Текущий фокус
-Mini App РАБОТАЕТ. Авторизация починена. 3D кубы видны. Онбординг бота работает. Деплой Railway + Vercel настроен.
+## СЛЕДУЮЩАЯ ЗАДАЧА — AI-стилизация селфи
 
-## 🚀 СЛЕДУЮЩАЯ ЗАДАЧА — Персональное фото как фон Mini App
+**Полная инструкция:** `PROMPT_AI_PHOTO.md` — скопируй в новую сессию Claude Code.
 
-### Требования (утверждены с Азизом):
-1. **При первом открытии Mini App** (и для Ответственного, и для Игрока) — показать экран запроса селфи. Кубы НЕ показываются пока нет фото.
-2. **Фото обязательно** — нет кнопки "Пропустить". Без фото Mini App не раскрывается.
-3. **Фото = персональный фон** — заменяет стоковые `woman_cosmic.png` / `woman_meditating.png`. Кубы летают поверх СОБСТВЕННОГО лица пользователя.
-4. **Фото сохраняется** — при следующем входе фон уже загружен, фото повторно не запрашивается.
-5. **Смена темы** — удержание + свайп вверх пока НЕ работает (известный баг). Нужно исправить.
+### Что нужно:
+- После загрузки селфи → Gemini API генерирует 2 стилизованные версии:
+  - **Dark:** космический стиль (James Webb, nebulae, галактический glow)
+  - **Light:** медитативный стиль (закрытые глаза, мягкий свет, ethereal)
+- Обработка в фоне (`asyncio.create_task`) пока пользователь проходит онбординг
+- Онбординг идёт МЕДЛЕННО (маскирует время обработки 10-30 сек)
+- Backdrop выбирает dark/light версию по текущей теме
 
-### Техническая реализация (план):
-- **Frontend:** Новый компонент `PhotoGate` — показывается ДО 3D сцены если `user.photo_url` отсутствует
-- **Frontend:** `Backdrop.tsx` — вместо стокового изображения загружать `user.photo_url`
-- **Backend:** API endpoint `PUT /users/me/photo` — загрузка фото (Supabase Storage)
-- **Backend:** API endpoint `GET /users/me` — должен возвращать `photo_url`
-- **DB:** Поле `photo_url` в таблице `users` (если нет — добавить миграцию)
-- **Supabase Storage:** Бакет для аватаров
+### Что уже сделано:
+- PhotoGate работает: камера → овал → face detection → обратный отсчёт → захват → загрузка в Supabase Storage
+- `POST /users/me/photo` загружает оригинал в Storage и сохраняет URL в БД
+- Auth response возвращает `profile_photo_url`
+- Backdrop использует персональное фото вместо стоковых
+- Смена темы (hold + swipe up) починена
+- gesture-layer не перехватывает тачи при открытых оверлеях
 
-### Ключевые файлы для этой задачи:
-| Файл | Что менять |
-|------|-----------|
-| frontend/src/App.tsx | Добавить PhotoGate перед Backdrop |
-| frontend/src/design/backdrop/Backdrop.tsx | Загружать user.photo_url вместо стока |
-| frontend/src/components/onboarding/OnboardingFlow.tsx | Сейчас survey+photo для игрока — фото нужно для ВСЕХ |
-| frontend/src/hooks/useAuth.ts | Возвращать photo_url из стора |
-| backend/api/routers/users.py | Endpoint загрузки фото |
-
----
-
-## ✅ Завершено за 2026-04-11 (полная сессия)
-
-### Инфраструктура и авторизация
-1. **Починена авторизация Mini App** — добавлен `telegram-web-app.js` в index.html, `Telegram.WebApp.ready()` + `expand()`, robust getInitData()
-2. **VITE_API_URL** — настроен в Vercel (`https://workout-bot-fsm-production-0e08.up.railway.app`)
-3. **MINI_APP_URL** — настроен в Railway (`https://workout-bot-fsm.vercel.app`) для CORS
-4. **Vercel домен добавлен в CORS** явно в backend
-
-### Фронтенд
-5. **Убран мокап телефона** — Mini App на полный экран (100% × 100vh)
-6. **Убран дублирующий онбординг** — Ответственный → сразу 3D кубы, Игрок → только Survey + Photo
-7. **3D кубы видимые** — исправлен z-index backdrop-stage (было -10, стало 0), app-container transparent
-8. **Десктоп Telegram** — "Откройте приложение с телефона" (корректное сообщение)
-9. **Дебаг ошибок авторизации** — реальная ошибка показывается на экране
-
-### Бот (backend)
-10. **Кнопка "Открыть приложение" сразу после ссылки** — без повторного /start
-11. **Ссылка в `<code>` блоке** — нажал = скопировал. Кнопка "Поделиться" (switch_inline_query)
-12. **Предупреждения** — одноразовость, 7 дней TTL, невозможность отката
-13. **Промокоды v3** — из БД, brute force защита, типы basic/premium/upgrade
-14. **Smart /start** — разное поведение по состоянию пользователя
-
-### Миграции (все применены)
-- 001-005 (initial, onboarding_v2, pair_link_expiry, promo_codes, upgrade_type)
+### Что нужно создать/изменить (12 шагов):
+1. Миграция `006_photo_styles.sql` (photo_dark_url, photo_light_url, photo_processing)
+2. GEMINI_API_KEY в config.py
+3. `backend/services/photo_styler.py` — сервис стилизации
+4. Фоновая задача в upload_photo
+5. Endpoint `/users/me/photo-status`
+6. photo_dark_url + photo_light_url в auth response
+7. authStore — новые поля
+8. useAuth — передача новых полей
+9. Backdrop — dark/light фото по теме
+10. Поллинг статуса обработки
+11. Онбординг с плавным темпом + ожидание обработки
+12. TypeScript проверка
 
 ---
 
-## 📝 Бизнес-правила (утверждены с Азизом)
+## Завершено за 2026-04-11
+
+### PhotoGate (полный цикл)
+1. **PhotoGate компонент** — камера, овальная рамка, face detection (FaceDetector API + fallback), обратный отсчёт 3-2-1, захват, превью, retake, upload
+2. **POST /users/me/photo** — base64 JPEG → Supabase Storage (бакет avatars) → profile_photo_url в БД
+3. **Auth response** — возвращает profile_photo_url
+4. **Backdrop** — персональное фото вместо стоковых woman_cosmic/woman_meditating
+5. **Intro-экран** — предупреждения: хорошее освещение + фото одноразовое (замена платная)
+6. **Ref callback** — видеоэлемент монтируется через callback ref (решает AnimatePresence race condition)
+7. **Чёрный loading-screen** — предотвращает мелькание кубов до загрузки auth
+
+### Баг-фиксы
+8. **Свайп + тема** — убран framer-motion onPanEnd, свайп через pointer events в gesture-layer
+9. **gesture-layer** — отключается при активных оверлеях (PhotoGate, Onboarding, loading)
+10. **Supabase Storage** — x-upsert header, manual public URL construction (async client issue)
+11. **Camera retake** — полный cleanup + перезапуск через ref callback
+
+### Инфраструктура
+- Supabase Storage бакет `avatars` (public) — создан
+- GEMINI_API_KEY — `AIzaSyDkXkF3d7OrTA31n8tZMc8Q44xm3qOQ7ls`
+
+---
+
+## Бизнес-правила (утверждены с Азизом)
 - Любой кто заходит напрямую → Ответственный
 - Игрок — ТОЛЬКО по пригласительной ссылке
 - **1 промокод = 1 ссылка = 1 человек глобально**
-- Basic: 1 игрок. Premium: 3 игрока (первая при онбординге, +2 в Mini App)
-- Upgrade промокод — только в Mini App (реализовать позже)
-- Ссылка живёт 7 дней, потом сгорает. Нужен новый промокод.
-- Один человек может быть и Ответственным и Игроком (но Игроком только у одного)
-- **Фото обязательно для ВСЕХ пользователей** в Mini App (не только Игрок)
+- Basic: 1 игрок. Premium: 3 игрока
+- Ссылка живёт 7 дней
+- **Фото обязательно для ВСЕХ** в Mini App
+- **Фото делается один раз. Повторная замена — платная**
 - 3 неверных промокода в час → блокировка на 1 час
 
-## 🔧 Известные баги
-- Свайп вверх при удержании не меняет тему (dark↔light)
-- gesture-layer может ловить touch при открытии Mini App
+## Известные баги
 - `@telegram-apps/sdk-react` deprecated → нужно мигрировать на `@tma.js`
 
-## 🛠️ Ключевые файлы
-| Файл | Что делает |
-|------|-----------|
-| backend/handlers/onboarding.py | Хэндлеры онбординга v3 |
-| backend/services/fsm/onboarding_fsm.py | FSM + промокоды из БД + brute force |
-| backend/keyboards/onboarding_keyboards.py | Клавиатуры + WebApp кнопка |
-| frontend/src/App.tsx | Главный компонент, gesture handling |
-| frontend/src/hooks/useAuth.ts | Авторизация через Telegram initData |
-| frontend/src/design/backdrop/Backdrop.tsx | 3D сцена: лицо + частицы + кубы |
-| frontend/src/design/backdrop/GlassCubes.tsx | 3D кубы (canvas, hit detection) |
-| frontend/src/components/onboarding/OnboardingFlow.tsx | Survey + Photo для игрока |
-
-## ⚠️ ВАЖНО
+## ВАЖНО
 - Пользователя зовут **Азиз** (не Николай)
-- Supabase CLI залогинен — перед возвратом компьютера Николаю выполнить `supabase logout`
-- Промокоды создаёт Азиз вручную через SQL: `INSERT INTO promo_codes (code, tier) VALUES ('КОД', 'basic');`
+- Supabase CLI залогинен — перед возвратом компьютера Николаю: `supabase logout`
 - **Vercel env:** `VITE_API_URL=https://workout-bot-fsm-production-0e08.up.railway.app`
 - **Railway env:** `MINI_APP_URL=https://workout-bot-fsm.vercel.app`
+- **Railway env (добавить):** `GEMINI_API_KEY=AIzaSyDkXkF3d7OrTA31n8tZMc8Q44xm3qOQ7ls`
 
-## 🗃️ SQL для сброса тестовых данных
+## SQL для сброса тестовых данных
 ```sql
 DELETE FROM partnerships;
-UPDATE users SET onboarding_state = NULL, onboarding_done = false, pending_promo_id = NULL, promo_attempts = 0, promo_locked_until = NULL;
+UPDATE users SET onboarding_state = NULL, onboarding_done = false, pending_promo_id = NULL, promo_attempts = 0, promo_locked_until = NULL, profile_photo_url = NULL, photo_dark_url = NULL, photo_light_url = NULL, photo_processing = false;
 UPDATE promo_codes SET is_used = false, used_by = NULL, used_at = NULL;
 ```
