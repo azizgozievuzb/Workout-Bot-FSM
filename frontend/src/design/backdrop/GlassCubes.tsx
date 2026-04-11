@@ -262,7 +262,8 @@ const GlassCubes = forwardRef<GlassCubesHandle, GlassCubesProps>(({
             const glassAlpha = 0.12;
             const edgeAlpha = 0.45;
 
-            for (const cube of cubes) {
+            for (let cubeIdx = 0; cubeIdx < cubes.length; cubeIdx++) {
+                const cube = cubes[cubeIdx];
                 const isDark = theme === 'dark';
                 const moveMult = isDark ? 1.0 : 1.35;
                 const rotMult  = isDark ? 1.0 : 1.90;
@@ -439,9 +440,11 @@ const GlassCubes = forwardRef<GlassCubesHandle, GlassCubesProps>(({
                     ctx.fillStyle = `hsla(${h}, ${tGlassSat}%, ${tGlassLit}%, ${tGlassA * brightness * 0.4})`;
                     ctx.fill();
 
-                    // --- GLITCH on faces WITHOUT text ---
-                    if (!hasTxt && Math.sin(t * 4.5 + face.dot * 10) > 0.6) {
-                        const glitchAlpha = 0.08 + Math.sin(t * 12 + face.dot * 7) * 0.05;
+                    // --- GLITCH on faces WITHOUT text (desynchronized per cube) ---
+                    // Each cube has its own glitch phase offset so they don't fire simultaneously
+                    const glitchSeed = cubeIdx * 7.3 + 2.1; // unique per cube
+                    if (!hasTxt && Math.sin(t * 3.2 + glitchSeed + face.dot * 10) > 0.75) {
+                        const glitchAlpha = 0.08 + Math.sin(t * 12 + glitchSeed + face.dot * 7) * 0.05;
                         // Random horizontal offset lines
                         ctx.save();
                         ctx.beginPath();
@@ -457,7 +460,7 @@ const GlassCubes = forwardRef<GlassCubesHandle, GlassCubesProps>(({
 
                         // RGB split glitch bars
                         for (let gi = 0; gi < 3; gi++) {
-                            const gy = minY + Math.abs(Math.sin(t * 7 + gi * 2.3 + face.dot * 5)) * (maxY - minY);
+                            const gy = minY + Math.abs(Math.sin(t * 7 + gi * 2.3 + glitchSeed + face.dot * 5)) * (maxY - minY);
                             const gh = 2 + Math.random() * 3;
                             const gShift = (Math.sin(t * 11 + gi * 3) > 0.3 ? 1 : -1) * (2 + Math.random() * 4);
                             ctx.fillStyle = `hsla(${h + gi * 120}, 90%, 70%, ${glitchAlpha})`;
@@ -667,7 +670,33 @@ const GlassCubes = forwardRef<GlassCubesHandle, GlassCubesProps>(({
                     ctx.arc(bProj.sx, bProj.sy, Math.max(1, blobR), 0, Math.PI * 2);
                     ctx.fill();
 
-                    // 4. INTERNAL TEXT
+                    // 4. SLOW SURFACE PULSES — 3 bright sparks orbiting the ellipse edge
+                    ctx.save();
+                    ctx.translate(pCenter.sx, pCenter.sy);
+                    ctx.rotate(cube.rz);
+                    ctx.beginPath();
+                    ctx.ellipse(0, 0, radiusX * 1.05, radiusY * 1.05, 0, 0, Math.PI * 2);
+                    ctx.clip();
+
+                    for (let pi = 0; pi < 3; pi++) {
+                        // Very slow orbit: t * 0.15 (much slower than dark theme's 0.48)
+                        const angle = (t * 0.15 + pi * (Math.PI * 2 / 3) + cube.hue * 0.05) % (Math.PI * 2);
+                        const px2 = Math.cos(angle) * radiusX * 0.92;
+                        const py2 = Math.sin(angle) * radiusY * 0.92;
+                        const pr = 5 + Math.sin(t * 0.8 + pi * 1.5) * 2;
+
+                        const pGrad = ctx.createRadialGradient(px2, py2, 0, px2, py2, pr);
+                        pGrad.addColorStop(0, `hsla(${h + 15}, 100%, 97%, 0.85)`);
+                        pGrad.addColorStop(0.35, `hsla(${h}, 90%, 80%, 0.35)`);
+                        pGrad.addColorStop(1, `hsla(${h}, 80%, 60%, 0)`);
+                        ctx.fillStyle = pGrad;
+                        ctx.beginPath();
+                        ctx.arc(px2, py2, pr, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                    ctx.restore();
+
+                    // 5. INTERNAL TEXT — bold with strong contrast
                     const ptTL = rotatePoint(-s*1.2, -s*0.8, 0, 0, 0, cube.rz);
                     const ptTR = rotatePoint( s*1.2, -s*0.8, 0, 0, 0, cube.rz);
                     const ptBL = rotatePoint(-s*1.2,  s*0.8, 0, 0, 0, cube.rz);
@@ -685,15 +714,20 @@ const GlassCubes = forwardRef<GlassCubesHandle, GlassCubesProps>(({
                     ctx.save();
                     ctx.transform(m11, m12, m21, m22, pTL.sx, pTL.sy);
 
-                    ctx.font = '800 400px Inter, system-ui, sans-serif';
+                    ctx.font = '900 420px Inter, system-ui, sans-serif';
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
 
-                    ctx.fillStyle = `hsla(${h}, ${tTextSat}%, 20%, 0.7)`;
-                    ctx.fillText(cube.label.toUpperCase(), lw/2, (lh/2) + 15, lw * 0.85);
+                    // Deep shadow for contrast
+                    ctx.fillStyle = `hsla(${h}, 80%, 10%, 0.85)`;
+                    ctx.fillText(cube.label.toUpperCase(), lw/2, (lh/2) + 18, lw * 0.85);
 
-                    ctx.fillStyle = `hsla(${h}, ${tTextSat}%, 98%, 0.95)`;
+                    // Bright foreground with glow
+                    ctx.shadowColor = `hsla(${h}, 100%, 85%, 0.6)`;
+                    ctx.shadowBlur = 15;
+                    ctx.fillStyle = `hsla(${h}, 20%, 100%, 1.0)`;
                     ctx.fillText(cube.label.toUpperCase(), lw/2, lh/2, lw * 0.85);
+                    ctx.shadowBlur = 0;
                     ctx.restore();
 
                     // 5. FRONT GLOSS with moving specular highlight
