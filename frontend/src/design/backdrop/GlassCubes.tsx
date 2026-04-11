@@ -443,8 +443,8 @@ const GlassCubes = forwardRef<GlassCubesHandle, GlassCubesProps>(({
                     // --- GLITCH on faces WITHOUT text (desynchronized per cube) ---
                     // Each cube has its own glitch phase offset so they don't fire simultaneously
                     const glitchSeed = cubeIdx * 7.3 + 2.1; // unique per cube
-                    if (!hasTxt && Math.sin(t * 3.2 + glitchSeed + face.dot * 10) > 0.75) {
-                        const glitchAlpha = 0.08 + Math.sin(t * 12 + glitchSeed + face.dot * 7) * 0.05;
+                    if (!hasTxt && Math.sin(t * 3.2 + glitchSeed + face.dot * 10) > 0.65) {
+                        const glitchAlpha = 0.12 + Math.sin(t * 12 + glitchSeed + face.dot * 7) * 0.06;
                         // Random horizontal offset lines
                         ctx.save();
                         ctx.beginPath();
@@ -461,8 +461,8 @@ const GlassCubes = forwardRef<GlassCubesHandle, GlassCubesProps>(({
                         // RGB split glitch bars
                         for (let gi = 0; gi < 3; gi++) {
                             const gy = minY + Math.abs(Math.sin(t * 7 + gi * 2.3 + glitchSeed + face.dot * 5)) * (maxY - minY);
-                            const gh = 2 + Math.random() * 3;
-                            const gShift = (Math.sin(t * 11 + gi * 3) > 0.3 ? 1 : -1) * (2 + Math.random() * 4);
+                            const gh = 3 + Math.random() * 4;
+                            const gShift = (Math.sin(t * 11 + gi * 3) > 0.3 ? 1 : -1) * (3 + Math.random() * 6);
                             ctx.fillStyle = `hsla(${h + gi * 120}, 90%, 70%, ${glitchAlpha})`;
                             ctx.fillRect(minX + gShift, gy, maxX - minX, gh);
                         }
