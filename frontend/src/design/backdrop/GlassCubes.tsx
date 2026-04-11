@@ -425,10 +425,11 @@ const GlassCubes = forwardRef<GlassCubesHandle, GlassCubesProps>(({
                     ctx.stroke();
                 }
 
-                // --- HOLOGRAPHIC FACES: very transparent with scan-line hint ---
+                // --- HOLOGRAPHIC FACES ---
                 for (const face of faceData) {
                     const pts = face.idx.map(i => projected[i]);
                     const brightness = Math.max(0, face.dot) * 0.5 + 0.5;
+                    const hasTxt = !!(face.textPts && face.logW && face.logH);
 
                     // Ultra-transparent holographic face fill
                     ctx.beginPath();
@@ -438,7 +439,34 @@ const GlassCubes = forwardRef<GlassCubesHandle, GlassCubesProps>(({
                     ctx.fillStyle = `hsla(${h}, ${tGlassSat}%, ${tGlassLit}%, ${tGlassA * brightness * 0.4})`;
                     ctx.fill();
 
-                    // Holographic sheen — subtle color-shift gradient
+                    // --- GLITCH on faces WITHOUT text ---
+                    if (!hasTxt && Math.sin(t * 4.5 + face.dot * 10) > 0.6) {
+                        const glitchAlpha = 0.08 + Math.sin(t * 12 + face.dot * 7) * 0.05;
+                        // Random horizontal offset lines
+                        ctx.save();
+                        ctx.beginPath();
+                        ctx.moveTo(pts[0].sx, pts[0].sy);
+                        pts.slice(1).forEach(p => ctx.lineTo(p.sx, p.sy));
+                        ctx.closePath();
+                        ctx.clip();
+
+                        const minY = Math.min(...pts.map(p => p.sy));
+                        const maxY = Math.max(...pts.map(p => p.sy));
+                        const minX = Math.min(...pts.map(p => p.sx));
+                        const maxX = Math.max(...pts.map(p => p.sx));
+
+                        // RGB split glitch bars
+                        for (let gi = 0; gi < 3; gi++) {
+                            const gy = minY + Math.abs(Math.sin(t * 7 + gi * 2.3 + face.dot * 5)) * (maxY - minY);
+                            const gh = 2 + Math.random() * 3;
+                            const gShift = (Math.sin(t * 11 + gi * 3) > 0.3 ? 1 : -1) * (2 + Math.random() * 4);
+                            ctx.fillStyle = `hsla(${h + gi * 120}, 90%, 70%, ${glitchAlpha})`;
+                            ctx.fillRect(minX + gShift, gy, maxX - minX, gh);
+                        }
+                        ctx.restore();
+                    }
+
+                    // Holographic sheen
                     if (face.dot > 0.05) {
                         const p0 = pts[0], p2 = pts[2];
                         const grad = ctx.createLinearGradient(p0.sx, p0.sy, p2.sx, p2.sy);
@@ -453,11 +481,11 @@ const GlassCubes = forwardRef<GlassCubesHandle, GlassCubesProps>(({
                         ctx.fill();
                     }
 
-                    // --- HOLOGRAPHIC TEXT ON LATERAL FACES ---
-                    if (face.textPts && face.logW && face.logH) {
-                        const [pTL, pTR, pBL] = face.textPts.map((i: number) => projected[i]);
-                        const lw = face.logW;
-                        const lh = face.logH;
+                    // --- HOLOGRAPHIC TEXT — brighter, with double glow ---
+                    if (hasTxt) {
+                        const [pTL, pTR, pBL] = face.textPts!.map((i: number) => projected[i]);
+                        const lw = face.logW!;
+                        const lh = face.logH!;
 
                         const m11 = (pTR.sx - pTL.sx) / lw;
                         const m12 = (pTR.sy - pTL.sy) / lw;
@@ -465,18 +493,22 @@ const GlassCubes = forwardRef<GlassCubesHandle, GlassCubesProps>(({
                         const m22 = (pBL.sy - pTL.sy) / lh;
 
                         ctx.save();
-                        const textAlpha = tTextBaseA * Math.max(0.1, face.dot + 0.6);
+                        const textAlpha = Math.min(1, tTextBaseA * 1.5 * Math.max(0.2, face.dot + 0.7));
                         ctx.transform(m11, m12, m21, m22, pTL.sx, pTL.sy);
 
-                        // Holographic text glow (behind text)
-                        ctx.shadowColor = `hsla(${h}, 100%, 70%, ${textAlpha * 0.6})`;
-                        ctx.shadowBlur = 12;
+                        // Outer glow layer
+                        ctx.shadowColor = `hsla(${h}, 100%, 75%, ${textAlpha * 0.8})`;
+                        ctx.shadowBlur = 20;
                         ctx.font = '800 350px Inter, system-ui, sans-serif';
-                        ctx.fillStyle = `hsla(${h}, ${tTextSat}%, ${tTextLit}%, ${textAlpha})`;
+                        ctx.fillStyle = `hsla(${h}, 30%, 100%, ${textAlpha * 0.9})`;
                         ctx.textAlign = 'center';
                         ctx.textBaseline = 'middle';
                         ctx.fillText(cube.label.toUpperCase(), lw / 2, lh / 2, lw * 0.85);
+
+                        // Crisp inner text (no shadow)
                         ctx.shadowBlur = 0;
+                        ctx.fillStyle = `hsla(${h}, 10%, 100%, ${textAlpha})`;
+                        ctx.fillText(cube.label.toUpperCase(), lw / 2, lh / 2, lw * 0.85);
                         ctx.restore();
                     }
                 }
@@ -500,8 +532,8 @@ const GlassCubes = forwardRef<GlassCubesHandle, GlassCubesProps>(({
                     ctx.lineWidth = 1.0;
                     ctx.stroke();
 
-                    // Electric pulse — bright spot traveling along each edge
-                    const pulsePhase = (t * 0.8 + ei * 0.25) % 1.0;
+                    // Electric pulse — bright spot traveling along each edge (slowed 40%)
+                    const pulsePhase = (t * 0.48 + ei * 0.25) % 1.0;
                     const px2 = pa.sx + (pb.sx - pa.sx) * pulsePhase;
                     const py2 = pa.sy + (pb.sy - pa.sy) * pulsePhase;
                     const pulseR = 4 + Math.sin(t * 3 + ei) * 2;

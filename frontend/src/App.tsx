@@ -35,7 +35,7 @@ const App: React.FC = () => {
 
     // Определяем, должен ли gesture-layer быть активен
     const hasOverlay = !photoUrl || (!onboardingDone && role === 'player');
-    const gestureEnabled = onboardingDone && !!photoUrl && !isLoading && !error;
+    const gestureEnabled = !isLoading && (onboardingDone && !!photoUrl || !!error);
 
     const setLayout = useCallback((mode: LayoutMode) => {
         layoutModeRef.current = mode;
