@@ -12,7 +12,7 @@ type ModuleName = 'Workout' | 'Arsenal' | 'Responsibility';
 
 // --- Константы таймеров (мс) ---
 const TAP_MAX = 300;
-const HOLD_DASHBOARD = 2500; // 2.5 сек → toggle dashboard
+const HOLD_DASHBOARD = 3000; // 3 сек → toggle dashboard
 const SWIPE_UP_THRESHOLD = 80; // px минимальная дистанция свайпа вверх
 const HOLD_FOR_SWIPE = 500; // мс минимальное удержание перед свайпом
 
@@ -98,11 +98,12 @@ const App: React.FC = () => {
                     setLayout('fullscreen');
                     setActiveModule(hit.label as ModuleName);
                 }
-            } else {
-                // Тап в любом другом режиме → назад в chaos
+            } else if (cur === 'fullscreen') {
+                // Тап в fullscreen → назад в chaos
                 setLayout('chaos');
                 setActiveModule(null);
             }
+            // dashboard: тап НЕ выходит — только long press 3с
         }
     }, [clearTimers, setLayout]);
 
