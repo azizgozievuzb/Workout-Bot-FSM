@@ -26,6 +26,13 @@ onboarding_router = Router(name="onboarding")
 
 BOT_USERNAME = "conectionWorkout_bot"
 
+
+def get_copy_link_keyboard(link: str) -> types.InlineKeyboardMarkup:
+    return types.InlineKeyboardMarkup(inline_keyboard=[[
+        types.InlineKeyboardButton(text="📋 Скопировать ссылку", callback_data="copy_link"),
+        types.InlineKeyboardButton(text="📤 Поделиться", switch_inline_query=link),
+    ]])
+
 _RESP_STATES = frozenset({"resp_promo", "resp_language", "resp_gender", "resp_player_name"})
 _PLAYER_STATES = frozenset({"player_language", "player_gender", "player_survey"})
 
@@ -122,9 +129,10 @@ async def cmd_start(message: types.Message, state: FSMContext) -> None:
                 p = pending.data[0]
                 link = f"https://t.me/{BOT_USERNAME}?start=PAIR_{p['pair_code']}"
                 await message.answer(
-                    f"У вас есть активная ссылка для {p['player_name']}:\n\n"
-                    f"{link}\n\n{LINK_WARNING}\n\n"
-                    f"Если игрок не перешёл — отправьте ссылку повторно.",
+                    f"✅ Ссылка для игрока {p['player_name']} создана!\n\n"
+                    f"⚠️ Ссылка действительна 7 дней.\n\n"
+                    f"Используйте кнопки ниже, чтобы скопировать или поделиться ссылкой.",
+                    reply_markup=get_copy_link_keyboard(link),
                 )
                 return
 
@@ -356,6 +364,44 @@ async def process_text_input(message: types.Message) -> None:
 
         link = f"https://t.me/{BOT_USERNAME}?start=PAIR_{code}"
         await message.answer(
-            f"Ваша пригласительная ссылка:\n\n{link}\n\n"
-            f"Отправьте эту ссылку игроку {name}.\n\n{LINK_WARNING}"
+            f"✅ Ссылка для игрока {name} создана!\n\n"
+            f"⚠️ Ссылка действительна 7 дней.\n\n"
+            f"Используйте кнопки ниже, чтобы скопировать или поделиться ссылкой.",
+            reply_markup=get_copy_link_keyboard(link),
         )
+
+
+# ---------------------------------------------------------------------------
+# copy_link callback
+# ---------------------------------------------------------------------------
+
+@onboarding_router.callback_query(F.data == "copy_link")
+async def process_copy_link(callback: types.CallbackQuery) -> None:
+    db = await get_supabase()
+    user_res = (
+        await db.table("users")
+        .select("id")
+        .eq("telegram_id", callback.from_user.id)
+        .single()
+        .execute()
+    )
+    resp_uuid = user_res.data["id"]
+
+    pending = (
+        await db.table("partnerships")
+        .select("pair_code")
+        .eq("responsible_id", resp_uuid)
+        .eq("status", "pending")
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+
+    if not pending.data:
+        await callback.answer("Ссылка не найдена.", show_alert=True)
+        return
+
+    pair_code = pending.data[0]["pair_code"]
+    link = f"https://t.me/{BOT_USERNAME}?start=PAIR_{pair_code}"
+    await callback.message.answer(f"<code>{link}</code>", parse_mode="HTML")
+    await callback.answer("Ссылка отправлена ниже — нажмите на неё для копирования")
