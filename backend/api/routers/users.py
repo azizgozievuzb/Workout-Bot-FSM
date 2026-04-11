@@ -1,4 +1,5 @@
 """Users API — профиль + загрузка фото."""
+import asyncio
 import base64
 import uuid
 import logging
@@ -7,6 +8,7 @@ from pydantic import BaseModel
 
 from ...core.deps import get_current_user
 from ...db.client import get_supabase
+from ...services.photo_styler import process_photo_styles
 
 logger = logging.getLogger(__name__)
 
@@ -113,4 +115,26 @@ async def upload_photo(
         logger.error(f"DB update failed for user {tid}: {e}")
         raise HTTPException(status_code=500, detail=f"DB update failed: {e}")
 
+    # Start AI photo styling in background
+    await (
+        db.table("users")
+        .update({"photo_processing": True})
+        .eq("telegram_id", tid)
+        .execute()
+    )
+    asyncio.create_task(process_photo_styles(photo_bytes, tid))
+
     return PhotoResponse(profile_photo_url=public_url)
+
+
+@router.get("/me/photo-status")
+async def photo_status(current_user: dict = Depends(get_current_user)):
+    db = await get_supabase()
+    result = (
+        await db.table("users")
+        .select("photo_processing, photo_dark_url, photo_light_url")
+        .eq("telegram_id", current_user["telegram_id"])
+        .single()
+        .execute()
+    )
+    return result.data

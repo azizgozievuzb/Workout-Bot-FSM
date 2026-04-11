@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { retrieveLaunchParams } from '@telegram-apps/sdk-react';
 import api, { setToken } from '../api/client';
 import { useAuthStore } from '../stores/authStore';
@@ -40,9 +40,10 @@ function getInitData(): string {
 }
 
 export function useAuth() {
-  const { isAuthenticated, role, onboardingDone, photoUrl, setAuth, clearAuth } = useAuthStore();
+  const { isAuthenticated, role, onboardingDone, photoUrl, photoDarkUrl, photoLightUrl, setAuth, setStyledPhotos, clearAuth } = useAuthStore();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -82,7 +83,7 @@ export function useAuth() {
 
         if (!cancelled) {
           setToken(data.access_token);
-          setAuth(data.access_token, data.role, data.onboarding_done, data.profile_photo_url);
+          setAuth(data.access_token, data.role, data.onboarding_done, data.profile_photo_url, data.photo_dark_url, data.photo_light_url);
         }
       } catch (err: any) {
         if (!cancelled) {
@@ -99,5 +100,38 @@ export function useAuth() {
     return () => { cancelled = true; };
   }, [isAuthenticated, setAuth]);
 
-  return { isLoading, isAuthenticated, role, onboardingDone, photoUrl, error, clearAuth };
+  // Poll for styled photos if original exists but styled don't
+  useEffect(() => {
+    if (!isAuthenticated || !photoUrl || (photoDarkUrl && photoLightUrl)) {
+      return;
+    }
+
+    const poll = async () => {
+      try {
+        const { data } = await api.get('/users/me/photo-status');
+        if (data.photo_dark_url && data.photo_light_url) {
+          setStyledPhotos(data.photo_dark_url, data.photo_light_url);
+          if (pollingRef.current) {
+            clearInterval(pollingRef.current);
+            pollingRef.current = null;
+          }
+        }
+      } catch {
+        // silent — retry on next interval
+      }
+    };
+
+    pollingRef.current = setInterval(poll, 5000);
+    // Also run immediately
+    poll();
+
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+  }, [isAuthenticated, photoUrl, photoDarkUrl, photoLightUrl, setStyledPhotos]);
+
+  return { isLoading, isAuthenticated, role, onboardingDone, photoUrl, photoDarkUrl, photoLightUrl, error, clearAuth };
 }

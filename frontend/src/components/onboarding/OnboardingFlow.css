@@ -263,6 +263,39 @@
   background: #111;
 }
 
+/* --- Encouragement text --- */
+
+.onb-encouragement {
+  font-size: 22px;
+  font-weight: 700;
+  color: rgba(99, 102, 241, 0.9);
+  text-align: center;
+  padding: 40px 0;
+}
+
+/* --- Waiting screen (AI processing) --- */
+
+.onb-waiting {
+  justify-content: center;
+  min-height: 300px;
+  position: relative;
+}
+
+.onb-particles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.onb-particle {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(99, 102, 241, 0.6);
+  box-shadow: 0 0 8px rgba(99, 102, 241, 0.4);
+}
+
 /* --- Mobile adaptive --- */
 
 @media (max-width: 393px) {

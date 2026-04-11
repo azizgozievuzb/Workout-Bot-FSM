@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_HOURS: int = 24 * 30  # 30 дней
 
+    # Gemini
+    GEMINI_API_KEY: str = ""
+
     # App
     ENVIRONMENT: str = "development"
     LOG_LEVEL: str = "INFO"

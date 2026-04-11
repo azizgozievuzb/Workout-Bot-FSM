@@ -23,7 +23,7 @@ interface BackdropProps {
  *   3. Vignette
  */
 const Backdrop = forwardRef<GlassCubesHandle, BackdropProps>(({ theme = 'dark' }, ref) => {
-    const { photoUrl } = useAuthStore();
+    const { photoUrl, photoDarkUrl, photoLightUrl } = useAuthStore();
     const mouseX = useMotionValue(0.5);
     const mouseY = useMotionValue(0.5);
     const springX = useSpring(mouseX, { stiffness: 25, damping: 30 });
@@ -52,8 +52,12 @@ const Backdrop = forwardRef<GlassCubesHandle, BackdropProps>(({ theme = 'dark' }
             <motion.div className="face-fullscreen" style={{ x: faceShiftX, y: faceShiftY }}>
                 <AnimatePresence mode="wait">
                     <motion.img
-                        key={photoUrl ? 'personal' : theme}
-                        src={photoUrl || (theme === 'dark' ? womanCosmic : womanMeditating)}
+                        key={photoDarkUrl || photoLightUrl || photoUrl ? 'personal' : theme}
+                        src={
+                            theme === 'dark'
+                                ? (photoDarkUrl || photoUrl || womanCosmic)
+                                : (photoLightUrl || photoUrl || womanMeditating)
+                        }
                         alt="Flying Entity"
                         className="face-image"
                         initial={{ opacity: 0, filter: 'blur(12px)' }}

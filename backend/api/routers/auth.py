@@ -18,6 +18,8 @@ class TokenResponse(BaseModel):
     role: str
     onboarding_done: bool
     profile_photo_url: str | None = None
+    photo_dark_url: str | None = None
+    photo_light_url: str | None = None
 
 
 @router.post("/telegram", response_model=TokenResponse)
@@ -53,7 +55,7 @@ async def telegram_auth(body: TelegramAuthRequest) -> TokenResponse:
     # Получаем актуальные данные
     user_res = (
         await db.table("users")
-        .select("role, onboarding_done, profile_photo_url")
+        .select("role, onboarding_done, profile_photo_url, photo_dark_url, photo_light_url")
         .eq("telegram_id", telegram_id)
         .single()
         .execute()
@@ -67,4 +69,6 @@ async def telegram_auth(body: TelegramAuthRequest) -> TokenResponse:
         role=user_data["role"],
         onboarding_done=user_data.get("onboarding_done", False),
         profile_photo_url=user_data.get("profile_photo_url"),
+        photo_dark_url=user_data.get("photo_dark_url"),
+        photo_light_url=user_data.get("photo_light_url"),
     )
