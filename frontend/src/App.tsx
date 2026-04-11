@@ -1,7 +1,9 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { motion, useAnimation, type PanInfo } from 'framer-motion';
+import { motion, type PanInfo } from 'framer-motion';
 import Backdrop from './design/backdrop/Backdrop';
 import type { GlassCubesHandle } from './design/backdrop/GlassCubes';
+import { useAuth } from './hooks/useAuth';
+import OnboardingFlow from './components/onboarding/OnboardingFlow';
 import './App.css';
 
 // --- Типы ---
@@ -13,13 +15,13 @@ const TAP_MAX = 300;
 const HOLD_DASHBOARD = 2500; // 2.5 сек → toggle dashboard
 
 const App: React.FC = () => {
+    const { isLoading, onboardingDone, error } = useAuth();
     const [theme, setTheme] = useState<'dark' | 'light'>('dark');
     const [layoutMode, setLayoutMode] = useState<LayoutMode>('chaos');
     const [activeModule, setActiveModule] = useState<ModuleName | null>(null);
 
     const cubesRef = useRef<GlassCubesHandle>(null);
     const contentRef = useRef<HTMLElement>(null);
-    const controls = useAnimation();
 
     // --- Gesture state ---
     const pointerDownAt = useRef<number>(0);
@@ -97,18 +99,7 @@ const App: React.FC = () => {
         if (isLongPress && isStrongSwipeUp) {
             setTheme(prev => prev === 'dark' ? 'light' : 'dark');
         }
-
-        controls.start({ scale: 0.75, transition: { duration: 0.3 } });
-    }, [controls]);
-
-    // --- Pointer Down на mobile-frame (только для scale-анимации) ---
-    const handleFrameDown = useCallback(() => {
-        controls.start({ scale: 0.72, transition: { duration: 0.4 } });
-    }, [controls]);
-
-    const handleFrameUp = useCallback(() => {
-        controls.start({ scale: 0.75, transition: { duration: 0.3 } });
-    }, [controls]);
+    }, []);
 
     // --- Кнопка «Назад» ---
     const handleClose = useCallback(() => {
@@ -119,23 +110,10 @@ const App: React.FC = () => {
     return (
         <div className={`app-container ${theme}-theme`}>
             <motion.div
-                className="mobile-frame"
-                initial={{ scale: 0.75 }}
-                animate={controls}
-                onPointerDown={handleFrameDown}
-                onPointerUp={handleFrameUp}
+                className="app-root"
                 onPanEnd={handlePanEnd}
-                style={{ cursor: 'grab', touchAction: 'none' }}
+                style={{ touchAction: 'none' }}
             >
-                {/* СТАТУС БАР */}
-                <div className="status-bar">
-                    <span className="time">9:41</span>
-                    <div className="icons">
-                        <span className="signal">📶</span>
-                        <span className="battery">🔋</span>
-                    </div>
-                </div>
-
                 {/* ОСНОВНОЙ КОНТЕНТ */}
                 <main className="content" ref={contentRef}>
                     <Backdrop ref={cubesRef} theme={theme} />
@@ -145,10 +123,28 @@ const App: React.FC = () => {
                         className="gesture-layer"
                         onPointerDown={handleGestureDown}
                         onPointerUp={handleGestureUp}
+                        style={{ pointerEvents: onboardingDone ? 'auto' : 'none' }}
                     />
 
                     {/* UI OVERLAY — DOM поверх 3D */}
-                    <div className="ui-overlay" style={{ pointerEvents: layoutMode !== 'chaos' ? 'auto' : 'none' }}>
+                    <div className="ui-overlay" style={{ pointerEvents: layoutMode !== 'chaos' || !onboardingDone ? 'auto' : 'none' }}>
+
+                        {/* === ONBOARDING === */}
+                        {!isLoading && !onboardingDone && <OnboardingFlow />}
+
+                        {/* === LOADING === */}
+                        {isLoading && (
+                            <div className="onb-loading">
+                                <div className="onb-loading-spinner" />
+                            </div>
+                        )}
+
+                        {/* === AUTH ERROR === */}
+                        {error && (
+                            <div className="onb-loading">
+                                <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14 }}>{error}</p>
+                            </div>
+                        )}
 
                         {/* === FULLSCREEN MODULE === */}
                         {layoutMode === 'fullscreen' && activeModule && (
