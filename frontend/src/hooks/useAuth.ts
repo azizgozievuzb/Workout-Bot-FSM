@@ -40,7 +40,7 @@ function getInitData(): string {
 }
 
 export function useAuth() {
-  const { isAuthenticated, role, onboardingDone, setAuth, clearAuth } = useAuthStore();
+  const { isAuthenticated, role, onboardingDone, photoUrl, setAuth, clearAuth } = useAuthStore();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -64,7 +64,7 @@ export function useAuth() {
 
         if (!initData) {
           if (import.meta.env.DEV) {
-            setAuth('dev-token', 'player', false);
+            setAuth('dev-token', 'player', false, null);
             setToken('dev-token');
             setIsLoading(false);
             return;
@@ -82,7 +82,7 @@ export function useAuth() {
 
         if (!cancelled) {
           setToken(data.access_token);
-          setAuth(data.access_token, data.role, data.onboarding_done);
+          setAuth(data.access_token, data.role, data.onboarding_done, data.profile_photo_url);
         }
       } catch (err: any) {
         if (!cancelled) {
@@ -99,5 +99,5 @@ export function useAuth() {
     return () => { cancelled = true; };
   }, [isAuthenticated, setAuth]);
 
-  return { isLoading, isAuthenticated, role, onboardingDone, error, clearAuth };
+  return { isLoading, isAuthenticated, role, onboardingDone, photoUrl, error, clearAuth };
 }

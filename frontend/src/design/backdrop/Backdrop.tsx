@@ -3,6 +3,7 @@ import { motion, useMotionValue, useSpring, useTransform, AnimatePresence } from
 import Starfield from './Starfield';
 import CloudField from './CloudField';
 import GlassCubes, { type GlassCubesHandle } from './GlassCubes';
+import { useAuthStore } from '../../stores/authStore';
 import './Backdrop.css';
 
 import womanCosmic from '../../assets/test-faces/woman_cosmic.png';
@@ -22,6 +23,7 @@ interface BackdropProps {
  *   3. Vignette
  */
 const Backdrop = forwardRef<GlassCubesHandle, BackdropProps>(({ theme = 'dark' }, ref) => {
+    const { photoUrl } = useAuthStore();
     const mouseX = useMotionValue(0.5);
     const mouseY = useMotionValue(0.5);
     const springX = useSpring(mouseX, { stiffness: 25, damping: 30 });
@@ -50,12 +52,12 @@ const Backdrop = forwardRef<GlassCubesHandle, BackdropProps>(({ theme = 'dark' }
             <motion.div className="face-fullscreen" style={{ x: faceShiftX, y: faceShiftY }}>
                 <AnimatePresence mode="wait">
                     <motion.img
-                        key={theme}
-                        src={theme === 'dark' ? womanCosmic : womanMeditating}
+                        key={photoUrl ? 'personal' : theme}
+                        src={photoUrl || (theme === 'dark' ? womanCosmic : womanMeditating)}
                         alt="Flying Entity"
                         className="face-image"
                         initial={{ opacity: 0, filter: 'blur(12px)' }}
-                        animate={{ opacity: 0.15, filter: 'blur(0px)' }}
+                        animate={{ opacity: photoUrl ? 0.2 : 0.15, filter: 'blur(0px)' }}
                         exit={{ opacity: 0, filter: 'blur(12px)' }}
                         transition={{ duration: 1.4, ease: 'easeInOut' }}
                     />

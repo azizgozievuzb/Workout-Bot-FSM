@@ -4,6 +4,7 @@ import Backdrop from './design/backdrop/Backdrop';
 import type { GlassCubesHandle } from './design/backdrop/GlassCubes';
 import { useAuth } from './hooks/useAuth';
 import OnboardingFlow from './components/onboarding/OnboardingFlow';
+import PhotoGate from './components/photo-gate/PhotoGate';
 import './App.css';
 
 // --- Типы ---
@@ -15,7 +16,7 @@ const TAP_MAX = 300;
 const HOLD_DASHBOARD = 2500; // 2.5 сек → toggle dashboard
 
 const App: React.FC = () => {
-    const { isLoading, onboardingDone, error, role } = useAuth();
+    const { isLoading, onboardingDone, photoUrl, error, role } = useAuth();
     const [theme, setTheme] = useState<'dark' | 'light'>('dark');
     const [layoutMode, setLayoutMode] = useState<LayoutMode>('chaos');
     const [activeModule, setActiveModule] = useState<ModuleName | null>(null);
@@ -126,11 +127,14 @@ const App: React.FC = () => {
                         style={{ pointerEvents: onboardingDone ? 'auto' : 'none' }}
                     />
 
+                    {/* PHOTO GATE — обязательное селфи для ВСЕХ пользователей */}
+                    {!isLoading && !error && !photoUrl && <PhotoGate />}
+
                     {/* UI OVERLAY — DOM поверх 3D */}
                     <div className="ui-overlay" style={{ pointerEvents: layoutMode !== 'chaos' || !onboardingDone ? 'auto' : 'none' }}>
 
                         {/* === ONBOARDING === */}
-                        {!isLoading && !onboardingDone && role === 'player' && <OnboardingFlow />}
+                        {!isLoading && !onboardingDone && role === 'player' && !!photoUrl && <OnboardingFlow />}
 
                         {/* === LOADING === */}
                         {isLoading && (

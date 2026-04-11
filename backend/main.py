@@ -71,7 +71,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.MINI_APP_URL, "http://localhost:5173"],
+    allow_origins=[settings.MINI_APP_URL, "https://workout-bot-fsm.vercel.app", "http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
