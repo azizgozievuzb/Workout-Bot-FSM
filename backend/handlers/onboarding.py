@@ -27,12 +27,9 @@ onboarding_router = Router(name="onboarding")
 BOT_USERNAME = "conectionWorkout_bot"
 
 
-def get_copy_link_keyboard(link: str) -> types.InlineKeyboardMarkup:
+def get_copy_link_keyboard(pair_code: str, link: str) -> types.InlineKeyboardMarkup:
     return types.InlineKeyboardMarkup(inline_keyboard=[
-        [types.InlineKeyboardButton(
-            text="📋 Скопировать ссылку",
-            copy_text=types.CopyTextButton(text=link),
-        )],
+        [types.InlineKeyboardButton(text="📋 Скопировать ссылку", callback_data=f"copy_link:{pair_code}")],
         [types.InlineKeyboardButton(text="📤 Поделиться", switch_inline_query=link)],
     ])
 
@@ -130,12 +127,13 @@ async def cmd_start(message: types.Message, state: FSMContext) -> None:
             )
             if pending.data:
                 p = pending.data[0]
-                link = f"https://t.me/{BOT_USERNAME}?start=PAIR_{p['pair_code']}"
+                pair_code = p['pair_code']
+                link = f"https://t.me/{BOT_USERNAME}?start=PAIR_{pair_code}"
                 await message.answer(
                     f"✅ Ссылка для игрока {p['player_name']} создана!\n\n"
                     f"⚠️ Ссылка действительна 7 дней.\n\n"
                     f"Используйте кнопки ниже, чтобы скопировать или поделиться ссылкой.",
-                    reply_markup=get_copy_link_keyboard(link),
+                    reply_markup=get_copy_link_keyboard(pair_code, link),
                 )
                 return
 
@@ -370,7 +368,20 @@ async def process_text_input(message: types.Message) -> None:
             f"✅ Ссылка для игрока {name} создана!\n\n"
             f"⚠️ Ссылка действительна 7 дней.\n\n"
             f"Используйте кнопки ниже, чтобы скопировать или поделиться ссылкой.",
-            reply_markup=get_copy_link_keyboard(link),
+            reply_markup=get_copy_link_keyboard(code, link),
         )
 
 
+# ---------------------------------------------------------------------------
+# copy_link callback — отправляет ссылку в <code> блоке для копирования
+# ---------------------------------------------------------------------------
+
+@onboarding_router.callback_query(F.data.startswith("copy_link:"))
+async def process_copy_link(callback: types.CallbackQuery) -> None:
+    pair_code = callback.data.split(":", 1)[1]
+    link = f"https://t.me/{BOT_USERNAME}?start=PAIR_{pair_code}"
+    await callback.message.answer(
+        f"👇 Нажмите на ссылку чтобы скопировать:\n\n<code>{link}</code>",
+        parse_mode="HTML",
+    )
+    await callback.answer()
