@@ -301,6 +301,17 @@ const GlassCubes = forwardRef<GlassCubesHandle, GlassCubesProps>(({
                 cube.ry += cube.vry * rotMult * dt;
                 cube.rz += cube.vrz * rotMult * dt;
 
+                // Soft correction: text faces (front/back) visible when ry ≈ 0 or π
+                // Nudge ry away from ±π/2 (edge-on) so labels don't vanish for long
+                if (isDark) {
+                    const ryMod = ((cube.ry % Math.PI) + Math.PI) % Math.PI; // 0..π
+                    const distFromEdge = Math.abs(ryMod - Math.PI / 2); // 0 at edge-on, π/2 at face-on
+                    if (distFromEdge < 0.4) { // within ~23° of edge-on
+                        const nudge = (ryMod < Math.PI / 2 ? -1 : 1) * 0.3 * dt;
+                        cube.vry += nudge;
+                    }
+                }
+
                 // Move energy blob (slowed down and constrained by 20% in light theme)
                 const blob = cube.blob;
                 const blobSpeedMult = isDark ? 1.0 : 0.65; // 35% slower in light theme
@@ -397,34 +408,6 @@ const GlassCubes = forwardRef<GlassCubesHandle, GlassCubesProps>(({
                     const avgZB = b.idx.reduce((s, i) => s + rotated[i][2], 0) / 4;
                     return avgZB - avgZA;
                 });
-
-                // --- INNER GYROSCOPE: smaller cube rotating in opposite direction ---
-                const innerScale = 0.45;
-                const innerVerts: [number, number, number][] = verts.map(([px, py, pz]) => [
-                    px * innerScale, py * innerScale, pz * innerScale
-                ]);
-                const innerRotated = innerVerts.map(([px, py, pz]) =>
-                    rotatePoint(px, py, pz, -cube.rx * 1.4, -cube.ry * 1.2, cube.rz * 0.7)
-                );
-                const innerProjected = innerRotated.map(([px, py, pz]) =>
-                    project(cube.x + px, cube.y + py, cube.z + pz, cx, cy)
-                );
-
-                // Draw inner gyroscope wireframe first (behind outer)
-                const innerEdges = [
-                    [0,1],[1,2],[2,3],[3,0],
-                    [4,5],[5,6],[6,7],[7,4],
-                    [0,4],[1,5],[2,6],[3,7],
-                ];
-                for (const [a, b] of innerEdges) {
-                    const pa = innerProjected[a], pb = innerProjected[b];
-                    ctx.beginPath();
-                    ctx.moveTo(pa.sx, pa.sy);
-                    ctx.lineTo(pb.sx, pb.sy);
-                    ctx.strokeStyle = `hsla(${h + 60}, 80%, 70%, 0.15)`;
-                    ctx.lineWidth = 0.5;
-                    ctx.stroke();
-                }
 
                 // --- HOLOGRAPHIC FACES ---
                 for (const face of faceData) {
@@ -670,24 +653,43 @@ const GlassCubes = forwardRef<GlassCubesHandle, GlassCubesProps>(({
                     ctx.arc(bProj.sx, bProj.sy, Math.max(1, blobR), 0, Math.PI * 2);
                     ctx.fill();
 
-                    // 4. SLOW SURFACE PULSES — 3 bright sparks orbiting the ellipse edge
+                    // 4. SURFACE PULSES — 3 sparks on different orbits across the 3D surface
+                    // Each pulse travels a unique great-circle path: parallel, meridian, diagonal
                     ctx.save();
                     ctx.translate(pCenter.sx, pCenter.sy);
                     ctx.rotate(cube.rz);
                     ctx.beginPath();
-                    ctx.ellipse(0, 0, radiusX * 1.05, radiusY * 1.05, 0, 0, Math.PI * 2);
+                    ctx.ellipse(0, 0, radiusX * 1.02, radiusY * 1.02, 0, 0, Math.PI * 2);
                     ctx.clip();
 
+                    // Orbit definitions: [tiltAngle, speedMult, phaseOffset]
+                    // tilt 0 = equator (parallel), π/2 = meridian, other = diagonal
+                    const orbits: [number, number, number][] = [
+                        [0.15, 0.12, 0],           // near-equator (parallel)
+                        [Math.PI * 0.45, 0.10, 2.1],  // near-meridian
+                        [Math.PI * 0.25, 0.14, 4.3],  // diagonal
+                    ];
+
                     for (let pi = 0; pi < 3; pi++) {
-                        // Very slow orbit: t * 0.15 (much slower than dark theme's 0.48)
-                        const angle = (t * 0.15 + pi * (Math.PI * 2 / 3) + cube.hue * 0.05) % (Math.PI * 2);
-                        const px2 = Math.cos(angle) * radiusX * 0.92;
-                        const py2 = Math.sin(angle) * radiusY * 0.92;
-                        const pr = 5 + Math.sin(t * 0.8 + pi * 1.5) * 2;
+                        const [tilt, spd, phase] = orbits[pi];
+                        const angle = t * spd + phase + cube.hue * 0.03;
+
+                        // Point on tilted great circle, projected to 2D ellipse
+                        const cx3d = Math.cos(angle);
+                        const cy3d = Math.sin(angle) * Math.cos(tilt);
+                        const cz3d = Math.sin(angle) * Math.sin(tilt);
+
+                        // Project 3D sphere point onto 2D ellipse surface
+                        const px2 = cx3d * radiusX * 0.85;
+                        const py2 = cy3d * radiusY * 0.85;
+                        // z-depth affects size and brightness (closer = bigger/brighter)
+                        const depthFactor = 0.5 + cz3d * 0.5; // 0..1
+                        const pr = (4 + Math.sin(t * 0.8 + pi * 1.5) * 2) * (0.6 + depthFactor * 0.6);
+                        const pAlpha = 0.4 + depthFactor * 0.45; // brighter than gold dust, dimmer than blob
 
                         const pGrad = ctx.createRadialGradient(px2, py2, 0, px2, py2, pr);
-                        pGrad.addColorStop(0, `hsla(${h + 15}, 100%, 97%, 0.85)`);
-                        pGrad.addColorStop(0.35, `hsla(${h}, 90%, 80%, 0.35)`);
+                        pGrad.addColorStop(0, `hsla(${h + 15}, 100%, 95%, ${pAlpha})`);
+                        pGrad.addColorStop(0.35, `hsla(${h}, 95%, 78%, ${pAlpha * 0.45})`);
                         pGrad.addColorStop(1, `hsla(${h}, 80%, 60%, 0)`);
                         ctx.fillStyle = pGrad;
                         ctx.beginPath();
