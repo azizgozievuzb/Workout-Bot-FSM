@@ -7,7 +7,9 @@ import './PhotoGate.css';
 type Phase = 'intro' | 'camera' | 'countdown' | 'preview' | 'uploading';
 
 const COUNTDOWN_SEC = 3;
-const OVAL_RATIO = 1.35; // height / width for face oval
+const OVAL_RATIO = 1.35;
+const DETECTION_INTERVAL = 200; // ms
+const REQUIRED_STABLE = 5; // ~1 сек стабильного обнаружения
 
 const PhotoGate: React.FC = () => {
   const [phase, setPhase] = useState<Phase>('intro');
@@ -20,153 +22,40 @@ const PhotoGate: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const detectorRef = useRef<any>(null);
-  const detectionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const detectionLoop = useRef<ReturnType<typeof setInterval> | null>(null);
+  const countdownLoop = useRef<ReturnType<typeof setInterval> | null>(null);
+  const consecutiveRef = useRef(0);
+  const phaseRef = useRef<Phase>('intro');
 
   const { setPhotoUrl } = useAuthStore();
 
-  // --- Cleanup ---
-  const stopCamera = useCallback(() => {
-    if (detectionIntervalRef.current) {
-      clearInterval(detectionIntervalRef.current);
-      detectionIntervalRef.current = null;
-    }
-    if (countdownRef.current) {
-      clearInterval(countdownRef.current);
-      countdownRef.current = null;
-    }
+  // Sync phase to ref (avoid stale closures)
+  phaseRef.current = phase;
+
+  // --- Cleanup all intervals + camera ---
+  const cleanup = useCallback(() => {
+    if (detectionLoop.current) { clearInterval(detectionLoop.current); detectionLoop.current = null; }
+    if (countdownLoop.current) { clearInterval(countdownLoop.current); countdownLoop.current = null; }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(t => t.stop());
       streamRef.current = null;
     }
   }, []);
 
-  useEffect(() => () => stopCamera(), [stopCamera]);
+  useEffect(() => () => cleanup(), [cleanup]);
 
-  // --- Start camera ---
-  const startCamera = useCallback(async () => {
-    setError(null);
-    setPhase('camera');
-    setFaceDetected(false);
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 720 }, height: { ideal: 960 } },
-        audio: false,
-      });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
-
-      // Try to use native FaceDetector API
-      if ('FaceDetector' in window) {
-        try {
-          detectorRef.current = new (window as any).FaceDetector({ fastMode: true, maxDetectedFaces: 1 });
-        } catch {
-          detectorRef.current = null;
-        }
-      }
-
-      // Start face detection loop
-      startFaceDetection();
-    } catch (err: any) {
-      setError('Не удалось открыть камеру. Разрешите доступ в настройках.');
-      setPhase('intro');
-    }
-  }, []);
-
-  // --- Face detection ---
-  const startFaceDetection = useCallback(() => {
-    if (detectionIntervalRef.current) clearInterval(detectionIntervalRef.current);
-
-    let consecutiveDetections = 0;
-    const REQUIRED_DETECTIONS = 5; // ~1 sec of stable detection at 200ms intervals
-
-    detectionIntervalRef.current = setInterval(async () => {
-      if (!videoRef.current || videoRef.current.readyState < 2) return;
-
-      let hasFace = false;
-
-      if (detectorRef.current) {
-        // Native FaceDetector API
-        try {
-          const faces = await detectorRef.current.detect(videoRef.current);
-          if (faces.length > 0) {
-            // Check if face is roughly centered in oval area
-            const vw = videoRef.current.videoWidth;
-            const vh = videoRef.current.videoHeight;
-            const face = faces[0].boundingBox;
-            const cx = face.x + face.width / 2;
-            const cy = face.y + face.height / 2;
-            // Face center should be in middle 40% of frame
-            hasFace = cx > vw * 0.3 && cx < vw * 0.7 && cy > vh * 0.2 && cy < vh * 0.65;
-          }
-        } catch { /* fallback below */ }
-      } else {
-        // Fallback: no face detection → auto-detect after 2 seconds of camera being on
-        hasFace = true;
-      }
-
-      if (hasFace) {
-        consecutiveDetections++;
-        if (consecutiveDetections >= REQUIRED_DETECTIONS) {
-          setFaceDetected(true);
-        }
-      } else {
-        consecutiveDetections = Math.max(0, consecutiveDetections - 2);
-        if (consecutiveDetections < REQUIRED_DETECTIONS - 2) {
-          setFaceDetected(false);
-        }
-      }
-    }, 200);
-  }, []);
-
-  // --- Start countdown when face detected ---
-  useEffect(() => {
-    if (phase === 'camera' && faceDetected) {
-      setPhase('countdown');
-      setCountdown(COUNTDOWN_SEC);
-
-      let count = COUNTDOWN_SEC;
-      countdownRef.current = setInterval(() => {
-        count--;
-        setCountdown(count);
-        if (count <= 0) {
-          if (countdownRef.current) clearInterval(countdownRef.current);
-          capturePhoto();
-        }
-      }, 1000);
-    }
-  }, [faceDetected, phase]);
-
-  // --- Reset countdown if face lost during countdown ---
-  useEffect(() => {
-    if (phase === 'countdown' && !faceDetected) {
-      if (countdownRef.current) {
-        clearInterval(countdownRef.current);
-        countdownRef.current = null;
-      }
-      setPhase('camera');
-      setCountdown(COUNTDOWN_SEC);
-    }
-  }, [faceDetected, phase]);
-
-  // --- Capture photo ---
-  const capturePhoto = useCallback(() => {
-    if (!videoRef.current || !canvasRef.current) return;
-
+  // --- Capture photo (extracted to avoid closure issues) ---
+  const doCapture = useCallback(() => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    const size = Math.min(video.videoWidth, video.videoHeight);
+    if (!video || !canvas) return;
 
-    // Crop to square centered on face area
+    const size = Math.min(video.videoWidth, video.videoHeight);
     canvas.width = size;
     canvas.height = size;
     const ctx = canvas.getContext('2d')!;
 
-    // Mirror the image (front camera)
+    // Mirror front camera
     ctx.translate(size, 0);
     ctx.scale(-1, 1);
 
@@ -177,15 +66,110 @@ const PhotoGate: React.FC = () => {
     const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
     setCapturedImage(dataUrl);
     setPhase('preview');
-    stopCamera();
-  }, [stopCamera]);
+    cleanup();
+  }, [cleanup]);
+
+  // --- Start camera + face detection ---
+  const openCamera = useCallback(async () => {
+    // Full reset
+    cleanup();
+    setError(null);
+    setFaceDetected(false);
+    setCountdown(COUNTDOWN_SEC);
+    consecutiveRef.current = 0;
+    setPhase('camera');
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 720 }, height: { ideal: 960 } },
+        audio: false,
+      });
+      streamRef.current = stream;
+
+      const video = videoRef.current;
+      if (!video) return;
+
+      video.srcObject = stream;
+      // Wait for video to be actually playing before starting detection
+      await new Promise<void>((resolve) => {
+        const onPlaying = () => { video.removeEventListener('playing', onPlaying); resolve(); };
+        video.addEventListener('playing', onPlaying);
+        video.play().catch(() => resolve());
+      });
+
+      // Init FaceDetector if available
+      if (!detectorRef.current && 'FaceDetector' in window) {
+        try {
+          detectorRef.current = new (window as any).FaceDetector({ fastMode: true, maxDetectedFaces: 1 });
+        } catch { /* not supported */ }
+      }
+
+      // --- Face detection loop ---
+      detectionLoop.current = setInterval(async () => {
+        if (!videoRef.current || videoRef.current.readyState < 2) return;
+        // Don't run detection if we're already in countdown/preview/etc
+        if (phaseRef.current !== 'camera') return;
+
+        let hasFace = false;
+
+        if (detectorRef.current) {
+          try {
+            const faces = await detectorRef.current.detect(videoRef.current);
+            if (faces.length > 0) {
+              const vw = videoRef.current.videoWidth;
+              const vh = videoRef.current.videoHeight;
+              const face = faces[0].boundingBox;
+              const cx = face.x + face.width / 2;
+              const cy = face.y + face.height / 2;
+              hasFace = cx > vw * 0.3 && cx < vw * 0.7 && cy > vh * 0.2 && cy < vh * 0.65;
+            }
+          } catch { hasFace = false; }
+        } else {
+          // No FaceDetector API → auto-pass after stabilization period
+          hasFace = true;
+        }
+
+        if (hasFace) {
+          consecutiveRef.current++;
+          if (consecutiveRef.current >= REQUIRED_STABLE) {
+            setFaceDetected(true);
+            // Stop detection, start countdown
+            if (detectionLoop.current) { clearInterval(detectionLoop.current); detectionLoop.current = null; }
+            startCountdown();
+          }
+        } else {
+          consecutiveRef.current = Math.max(0, consecutiveRef.current - 2);
+          setFaceDetected(false);
+        }
+      }, DETECTION_INTERVAL);
+
+    } catch {
+      setError('Не удалось открыть камеру. Разрешите доступ в настройках.');
+      setPhase('intro');
+    }
+  }, [cleanup]);
+
+  // --- Countdown (separate function, no deps issues) ---
+  const startCountdown = useCallback(() => {
+    setPhase('countdown');
+    let count = COUNTDOWN_SEC;
+    setCountdown(count);
+
+    countdownLoop.current = setInterval(() => {
+      count--;
+      setCountdown(count);
+      if (count <= 0) {
+        if (countdownLoop.current) { clearInterval(countdownLoop.current); countdownLoop.current = null; }
+        doCapture();
+      }
+    }, 1000);
+  }, [doCapture]);
 
   // --- Retake ---
   const handleRetake = useCallback(() => {
     setCapturedImage(null);
-    setFaceDetected(false);
-    startCamera();
-  }, [startCamera]);
+    openCamera();
+  }, [openCamera]);
 
   // --- Upload ---
   const handleConfirm = useCallback(async () => {
@@ -232,7 +216,7 @@ const PhotoGate: React.FC = () => {
               <p className="pg-warning-item pg-warning-item--accent">Фото делается один раз. Повторная замена будет платной</p>
             </div>
             {error && <p className="pg-error">{error}</p>}
-            <button className="pg-btn pg-btn--primary" onClick={startCamera}>
+            <button className="pg-btn pg-btn--primary" onClick={openCamera}>
               Открыть камеру
             </button>
           </motion.div>
@@ -254,12 +238,10 @@ const PhotoGate: React.FC = () => {
               muted
               autoPlay
             />
-            {/* Mirror CSS applied via .pg-video */}
 
             {/* Oval overlay */}
             <div className="pg-oval-overlay">
               <svg className="pg-oval-svg" viewBox="0 0 300 400" preserveAspectRatio="xMidYMid meet">
-                {/* Dark mask with oval cutout */}
                 <defs>
                   <mask id="oval-mask">
                     <rect width="300" height="400" fill="white" />
@@ -267,7 +249,6 @@ const PhotoGate: React.FC = () => {
                   </mask>
                 </defs>
                 <rect width="300" height="400" fill="rgba(0,0,0,0.55)" mask="url(#oval-mask)" />
-                {/* Oval border */}
                 <ellipse
                   cx="150"
                   cy="175"
@@ -281,7 +262,7 @@ const PhotoGate: React.FC = () => {
               </svg>
             </div>
 
-            {/* Hint text */}
+            {/* Hint / Countdown */}
             <div className="pg-camera-hint">
               {phase === 'countdown' ? (
                 <motion.div
@@ -339,7 +320,6 @@ const PhotoGate: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* Hidden canvas for capture */}
       <canvas ref={canvasRef} style={{ display: 'none' }} />
     </div>
   );
