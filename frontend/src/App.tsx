@@ -143,10 +143,10 @@ const App: React.FC = () => {
                         {error && (
                             <div className="onb-loading" style={{ textAlign: 'center', padding: '0 24px' }}>
                                 <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: 18, marginBottom: 8 }}>
-                                    Откройте приложение с телефона
+                                    Не удалось войти
                                 </p>
-                                <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>
-                                    Mini App работает только в мобильном Telegram
+                                <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13, whiteSpace: 'pre-line' }}>
+                                    {error}
                                 </p>
                             </div>
                         )}
