@@ -96,12 +96,10 @@ async def upload_photo(
             detail=f"Storage upload failed: {str(e)[:200]}",
         )
 
-    # Get public URL
-    try:
-        public_url = db.storage.from_("avatars").get_public_url(file_name)
-    except Exception as e:
-        logger.error(f"get_public_url failed: {e}")
-        raise HTTPException(status_code=500, detail=f"URL generation failed: {e}")
+    # Build public URL directly (get_public_url may be sync or async depending on client)
+    from ...core.config import settings
+    base = settings.SUPABASE_URL.strip().strip("'").strip('"').rstrip("/")
+    public_url = f"{base}/storage/v1/object/public/avatars/{file_name}"
 
     # Update user record
     try:
