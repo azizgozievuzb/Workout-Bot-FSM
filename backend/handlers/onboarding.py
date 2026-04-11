@@ -28,10 +28,13 @@ BOT_USERNAME = "conectionWorkout_bot"
 
 
 def get_copy_link_keyboard(link: str) -> types.InlineKeyboardMarkup:
-    return types.InlineKeyboardMarkup(inline_keyboard=[[
-        types.InlineKeyboardButton(text="📋 Скопировать ссылку", callback_data="copy_link"),
-        types.InlineKeyboardButton(text="📤 Поделиться", switch_inline_query=link),
-    ]])
+    return types.InlineKeyboardMarkup(inline_keyboard=[
+        [types.InlineKeyboardButton(
+            text="📋 Скопировать ссылку",
+            copy_text=types.CopyTextButton(text=link),
+        )],
+        [types.InlineKeyboardButton(text="📤 Поделиться", switch_inline_query=link)],
+    ])
 
 _RESP_STATES = frozenset({"resp_promo", "resp_language", "resp_gender", "resp_player_name"})
 _PLAYER_STATES = frozenset({"player_language", "player_gender", "player_survey"})
@@ -371,37 +374,3 @@ async def process_text_input(message: types.Message) -> None:
         )
 
 
-# ---------------------------------------------------------------------------
-# copy_link callback
-# ---------------------------------------------------------------------------
-
-@onboarding_router.callback_query(F.data == "copy_link")
-async def process_copy_link(callback: types.CallbackQuery) -> None:
-    db = await get_supabase()
-    user_res = (
-        await db.table("users")
-        .select("id")
-        .eq("telegram_id", callback.from_user.id)
-        .single()
-        .execute()
-    )
-    resp_uuid = user_res.data["id"]
-
-    pending = (
-        await db.table("partnerships")
-        .select("pair_code")
-        .eq("responsible_id", resp_uuid)
-        .eq("status", "pending")
-        .order("created_at", desc=True)
-        .limit(1)
-        .execute()
-    )
-
-    if not pending.data:
-        await callback.answer("Ссылка не найдена.", show_alert=True)
-        return
-
-    pair_code = pending.data[0]["pair_code"]
-    link = f"https://t.me/{BOT_USERNAME}?start=PAIR_{pair_code}"
-    await callback.message.answer(f"<code>{link}</code>", parse_mode="HTML")
-    await callback.answer("Ссылка отправлена ниже — нажмите на неё для копирования")
