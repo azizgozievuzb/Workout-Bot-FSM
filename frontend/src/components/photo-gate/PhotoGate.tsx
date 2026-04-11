@@ -17,9 +17,8 @@ const PhotoGate: React.FC = () => {
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [faceDetected, setFaceDetected] = useState(false);
-  const [cameraReady, setCameraReady] = useState(false);
 
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoElRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const detectorRef = useRef<any>(null);
@@ -27,6 +26,7 @@ const PhotoGate: React.FC = () => {
   const countdownLoop = useRef<ReturnType<typeof setInterval> | null>(null);
   const consecutiveRef = useRef(0);
   const phaseRef = useRef<Phase>('intro');
+  const streamAttached = useRef(false);
 
   const { setPhotoUrl } = useAuthStore();
 
@@ -40,14 +40,14 @@ const PhotoGate: React.FC = () => {
       streamRef.current.getTracks().forEach(t => t.stop());
       streamRef.current = null;
     }
-    setCameraReady(false);
+    streamAttached.current = false;
   }, []);
 
   useEffect(() => () => cleanup(), [cleanup]);
 
   // --- Capture ---
   const doCapture = useCallback(() => {
-    const video = videoRef.current;
+    const video = videoElRef.current;
     const canvas = canvasRef.current;
     if (!video || !canvas) return;
 
@@ -81,29 +81,29 @@ const PhotoGate: React.FC = () => {
     }, 1000);
   }, [doCapture]);
 
-  // --- Start face detection (called only after video is playing) ---
+  // --- Face detection ---
   const startDetection = useCallback(() => {
     if (detectionLoop.current) clearInterval(detectionLoop.current);
     consecutiveRef.current = 0;
     setFaceDetected(false);
 
-    // Init FaceDetector once
     if (!detectorRef.current && 'FaceDetector' in window) {
       try { detectorRef.current = new (window as any).FaceDetector({ fastMode: true, maxDetectedFaces: 1 }); }
       catch { /* not supported */ }
     }
 
     detectionLoop.current = setInterval(async () => {
-      if (!videoRef.current || videoRef.current.readyState < 2) return;
+      const video = videoElRef.current;
+      if (!video || video.readyState < 2) return;
       if (phaseRef.current !== 'camera') return;
 
       let hasFace = false;
       if (detectorRef.current) {
         try {
-          const faces = await detectorRef.current.detect(videoRef.current);
+          const faces = await detectorRef.current.detect(video);
           if (faces.length > 0) {
-            const vw = videoRef.current.videoWidth;
-            const vh = videoRef.current.videoHeight;
+            const vw = video.videoWidth;
+            const vh = video.videoHeight;
             const f = faces[0].boundingBox;
             const cx = f.x + f.width / 2;
             const cy = f.y + f.height / 2;
@@ -111,7 +111,7 @@ const PhotoGate: React.FC = () => {
           }
         } catch { /* ignore */ }
       } else {
-        hasFace = true; // fallback — auto-pass
+        hasFace = true;
       }
 
       if (hasFace) {
@@ -128,49 +128,37 @@ const PhotoGate: React.FC = () => {
     }, DETECTION_INTERVAL);
   }, [startCountdown]);
 
-  // --- Attach stream to video element (called after video mounts via ref callback) ---
-  const attachStream = useCallback(async () => {
-    const video = videoRef.current;
-    if (!video || !streamRef.current) return;
+  // --- Attach stream to video element + start detection ---
+  const attachStreamToVideo = useCallback(async (video: HTMLVideoElement) => {
+    if (!streamRef.current || streamAttached.current) return;
+    streamAttached.current = true;
 
     video.srcObject = streamRef.current;
-    try {
-      await video.play();
-    } catch {
-      // autoplay might be blocked, try with muted (already muted in JSX)
-      try { await video.play(); } catch { /* give up */ }
-    }
+    try { await video.play(); } catch { /* autoplay blocked */ }
 
-    // Wait for actual video data
-    const waitForData = () => {
-      if (video.readyState >= 2) {
-        setCameraReady(true);
-        startDetection();
-      } else {
-        video.addEventListener('loadeddata', () => {
-          setCameraReady(true);
-          startDetection();
-        }, { once: true });
-      }
-    };
-    waitForData();
+    // Wait for actual frames
+    if (video.readyState >= 2) {
+      startDetection();
+    } else {
+      video.addEventListener('loadeddata', () => startDetection(), { once: true });
+    }
   }, [startDetection]);
 
-  // --- When phase becomes 'camera' and video element exists, attach stream ---
-  useEffect(() => {
-    if ((phase === 'camera') && videoRef.current && streamRef.current) {
-      attachStream();
+  // --- Video ref callback: fires when <video> mounts/unmounts ---
+  const videoRefCallback = useCallback((el: HTMLVideoElement | null) => {
+    videoElRef.current = el;
+    if (el && streamRef.current && !streamAttached.current) {
+      attachStreamToVideo(el);
     }
-  }, [phase, cameraReady, attachStream]);
+  }, [attachStreamToVideo]);
 
-  // --- Open camera: get stream first, THEN switch phase ---
+  // --- Open camera ---
   const openCamera = useCallback(async () => {
     cleanup();
     setError(null);
     setFaceDetected(false);
     setCountdown(COUNTDOWN_SEC);
     consecutiveRef.current = 0;
-    setCameraReady(false);
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -178,13 +166,20 @@ const PhotoGate: React.FC = () => {
         audio: false,
       });
       streamRef.current = stream;
-      // Now switch phase → video element mounts → useEffect attaches stream
-      setPhase('camera');
+
+      // If video element already exists (retake case), attach immediately
+      if (videoElRef.current) {
+        setPhase('camera');
+        attachStreamToVideo(videoElRef.current);
+      } else {
+        // Switch phase → video mounts → videoRefCallback fires → attaches stream
+        setPhase('camera');
+      }
     } catch {
       setError('Не удалось открыть камеру. Разрешите доступ в настройках.');
       setPhase('intro');
     }
-  }, [cleanup]);
+  }, [cleanup, attachStreamToVideo]);
 
   // --- Retake ---
   const handleRetake = useCallback(() => {
@@ -250,7 +245,7 @@ const PhotoGate: React.FC = () => {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
           >
-            <video ref={videoRef} className="pg-video" playsInline muted autoPlay />
+            <video ref={videoRefCallback} className="pg-video" playsInline muted autoPlay />
 
             <div className="pg-oval-overlay">
               <svg className="pg-oval-svg" viewBox="0 0 300 400" preserveAspectRatio="xMidYMid meet">
