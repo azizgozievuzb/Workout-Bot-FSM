@@ -37,7 +37,7 @@ export function useAuth() {
             setIsLoading(false);
             return;
           }
-          throw new Error('No Telegram initData available');
+          throw new Error('Для работы приложения откройте его в мобильном Telegram');
         }
 
         const { data } = await api.post('/auth/telegram', { init_data: initData });
