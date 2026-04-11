@@ -9,23 +9,34 @@ from ..db.client import get_supabase
 logger = logging.getLogger(__name__)
 
 PROMPT_DARK = (
-    "Take this selfie portrait and transform it into a cosmic/space art style. "
-    "Keep the person's face recognizable but make it look like a mystical space entity. "
-    "Add nebula textures, star clusters (similar to James Webb telescope images), "
-    "and cosmic dust overlaying the face. The skin should have a subtle galactic glow. "
-    "The background should be deep space black with colorful nebulae. "
-    "Make it dark, atmospheric, and beautiful. Keep only the face and neck area in an oval composition. "
-    "The result should be a portrait-oriented image suitable as a phone wallpaper background."
+    "You are given a selfie photo. Your task:\n"
+    "1. EXTRACT only the person's face — cut it out precisely like a Photoshop lasso tool along the jawline, forehead, and ears. Remove ALL background, body, clothes, hair below the chin.\n"
+    "2. TRANSFORM the extracted face into a cosmic/space art style:\n"
+    "   - Overlay the face with nebula textures, star clusters (James Webb telescope imagery), cosmic dust\n"
+    "   - The skin must have a strong galactic glow — purples, blues, magentas blending into the skin\n"
+    "   - Eyes should glow with starlight\n"
+    "   - The face should look like a mystical space entity, not a normal photo\n"
+    "3. PLACE this heavily-stylized face LARGE and centered on a FULL-SCREEN vertical phone wallpaper (9:16 ratio)\n"
+    "4. BACKGROUND: deep space black filled with vivid colorful nebulae, stars, cosmic clouds\n"
+    "5. The face must seamlessly blend into the cosmic background at the edges — no hard cutoff lines\n"
+    "IMPORTANT: The result must be a dramatic, heavily-processed artwork — NOT a photo with a filter. "
+    "Think digital art, not Instagram filter. Edge to edge, no borders."
 )
 
 PROMPT_LIGHT = (
-    "Take this selfie portrait and transform it into a serene, meditative art style. "
-    "Keep the person's face recognizable but make them appear peaceful with eyes gently closed. "
-    "Use soft, warm, ethereal light tones — whites, light golds, soft pastels. "
-    "Add subtle light rays, floating particles of light, and a dreamy bokeh effect. "
-    "The skin should glow softly. The background should be pure white/cream with gentle gradients. "
-    "Make it calming, peaceful, and beautiful. Keep only the face and neck area in an oval composition. "
-    "The result should be a portrait-oriented image suitable as a phone wallpaper background."
+    "You are given a selfie photo. Your task:\n"
+    "1. EXTRACT only the person's face — cut it out precisely like a Photoshop lasso tool along the jawline, forehead, and ears. Remove ALL background, body, clothes, hair below the chin.\n"
+    "2. TRANSFORM the extracted face into a serene meditation art style:\n"
+    "   - Make the face appear deeply peaceful, eyes gently closed\n"
+    "   - The skin must glow with warm golden-white ethereal light\n"
+    "   - Add soft light rays emanating from the face, floating golden particles of light\n"
+    "   - Dreamy soft-focus bokeh effect throughout\n"
+    "   - The face should look like a meditation deity or angel, not a normal photo\n"
+    "3. PLACE this heavily-stylized face LARGE and centered on a FULL-SCREEN vertical phone wallpaper (9:16 ratio)\n"
+    "4. BACKGROUND: pure luminous white/cream with gentle warm gradients, golden light rays, floating particles\n"
+    "5. The face must seamlessly blend into the light background at the edges — no hard cutoff lines\n"
+    "IMPORTANT: The result must be a dramatic, heavily-processed artwork — NOT a photo with a filter. "
+    "Think digital art, not Instagram filter. Edge to edge, no borders."
 )
 
 MODEL = "gemini-2.5-flash-image"

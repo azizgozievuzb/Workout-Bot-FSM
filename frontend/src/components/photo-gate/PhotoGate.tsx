@@ -51,65 +51,16 @@ const PhotoGate: React.FC = () => {
     const canvas = canvasRef.current;
     if (!video || !canvas) return;
 
-    // Match the oval overlay proportions: ellipse centered at (150,175) in 300x400 viewBox
-    // rx=95, ry=95*OVAL_RATIO — we map this to the video frame
-    const vw = video.videoWidth;
-    const vh = video.videoHeight;
-
-    // Oval center & radii relative to video (matching SVG viewBox 300x400)
-    const ovalCxRatio = 150 / 300;  // 0.5
-    const ovalCyRatio = 175 / 400;  // 0.4375
-    const ovalRxRatio = 95 / 300;   // ~0.317
-    const ovalRyRatio = (95 * OVAL_RATIO) / 400; // ~0.320
-
-    // Map to video pixels (use the dimension that fills the viewport)
-    const displayAspect = vw / vh;
-    const viewBoxAspect = 300 / 400;
-    let scaleX: number, scaleY: number, offsetX: number, offsetY: number;
-
-    if (displayAspect > viewBoxAspect) {
-      // Video is wider — height fits, width is cropped
-      scaleY = vh;
-      scaleX = vh * viewBoxAspect;
-      offsetX = (vw - scaleX) / 2;
-      offsetY = 0;
-    } else {
-      // Video is taller — width fits, height is cropped
-      scaleX = vw;
-      scaleY = vw / viewBoxAspect;
-      offsetX = 0;
-      offsetY = (vh - scaleY) / 2;
-    }
-
-    const cx = offsetX + ovalCxRatio * scaleX;
-    const cy = offsetY + ovalCyRatio * scaleY;
-    const rx = ovalRxRatio * scaleX;
-    const ry = ovalRyRatio * scaleY;
-
-    // Canvas sized to bounding box of the ellipse with small padding
-    const pad = 1.08; // 8% padding around oval
-    const outW = Math.round(rx * 2 * pad);
-    const outH = Math.round(ry * 2 * pad);
-    canvas.width = outW;
-    canvas.height = outH;
-
+    // Send full photo to backend — Gemini will handle face extraction
+    const size = Math.min(video.videoWidth, video.videoHeight);
+    canvas.width = size;
+    canvas.height = size;
     const ctx = canvas.getContext('2d')!;
-    // Mirror horizontally (front camera)
-    ctx.translate(outW, 0);
+    ctx.translate(size, 0);
     ctx.scale(-1, 1);
-
-    // Clip to ellipse
-    ctx.beginPath();
-    ctx.ellipse(outW / 2, outH / 2, rx, ry, 0, 0, Math.PI * 2);
-    ctx.closePath();
-    ctx.clip();
-
-    // Draw the portion of the video that corresponds to the oval area
-    const srcX = cx - rx * pad;
-    const srcY = cy - ry * pad;
-    const srcW = rx * 2 * pad;
-    const srcH = ry * 2 * pad;
-    ctx.drawImage(video, srcX, srcY, srcW, srcH, 0, 0, outW, outH);
+    const offsetX = (video.videoWidth - size) / 2;
+    const offsetY = (video.videoHeight - size) / 2;
+    ctx.drawImage(video, offsetX, offsetY, size, size, 0, 0, size, size);
 
     setCapturedImage(canvas.toDataURL('image/jpeg', 0.85));
     setPhase('preview');
