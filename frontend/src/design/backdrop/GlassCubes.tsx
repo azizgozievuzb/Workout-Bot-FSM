@@ -136,7 +136,7 @@ const GlassCubes = forwardRef<GlassCubesHandle, GlassCubesProps>(({
             { x:  0.0, y:  0.05 },  // center
         ];
 
-        const labels = ['Arsenal', 'Workout', 'Responsibility'];
+        const labels = ['Action', 'Market', 'Bond'];
 
         cubesRef.current = Array.from({ length: count }, (_, i) => ({
             label: labels[i % labels.length],
@@ -347,6 +347,7 @@ const GlassCubes = forwardRef<GlassCubesHandle, GlassCubesProps>(({
 
                 // 8 vertices of a box (aspect: wider than tall, like a card)
                 if (isDark) {
+                const t = timeRef.current;
                 const verts: [number, number, number][] = [
                     [-s * 1.5, -s, -s * 0.6],
                     [ s * 1.5, -s, -s * 0.6],
@@ -368,26 +369,23 @@ const GlassCubes = forwardRef<GlassCubesHandle, GlassCubesProps>(({
                     project(cube.x + px, cube.y + py, cube.z + pz, cx, cy)
                 );
 
-                // 6 faces: [vertices indices, text mapping pts, logical dimensions]
-                // textPts = [TopLeft, TopRight, BottomLeft]
+                // 6 faces with text mapping
                 const faces: { idx: number[], textPts?: number[], logW?: number, logH?: number }[] = [
-                    { idx: [0,1,2,3], textPts: [0,1,3], logW: 3000, logH: 2000 }, // front
-                    { idx: [4,5,6,7], textPts: [5,4,6], logW: 3000, logH: 2000 }, // back
-                    { idx: [0,4,7,3] }, // left
-                    { idx: [1,5,6,2] }, // right
-                    { idx: [0,1,5,4] }, // top
-                    { idx: [3,2,6,7] }, // bottom
+                    { idx: [0,1,2,3], textPts: [0,1,3], logW: 3000, logH: 2000 },
+                    { idx: [4,5,6,7], textPts: [5,4,6], logW: 3000, logH: 2000 },
+                    { idx: [0,4,7,3] },
+                    { idx: [1,5,6,2] },
+                    { idx: [0,1,5,4] },
+                    { idx: [3,2,6,7] },
                 ];
 
-                // Compute face normals for basic backface culling + shading
+                // Compute face normals
                 const faceData = faces.map(face => {
                     const [a, b, c] = face.idx;
                     const [ax, ay] = rotated[a];
                     const [bx, by] = rotated[b];
                     const [cx2, cy2] = rotated[c];
-                    // Normal via cross product (only need Z for backface culling)
                     const nz = (bx - ax) * (cy2 - ay) - (by - ay) * (cx2 - ax);
-                    // View direction is (0,0,-1)
                     const dot = -nz;
                     return { ...face, dot, normalZ: nz };
                 });
@@ -399,51 +397,55 @@ const GlassCubes = forwardRef<GlassCubesHandle, GlassCubesProps>(({
                     return avgZB - avgZA;
                 });
 
-                // (tokens moved to outer scope)
+                // --- INNER GYROSCOPE: smaller cube rotating in opposite direction ---
+                const innerScale = 0.45;
+                const innerVerts: [number, number, number][] = verts.map(([px, py, pz]) => [
+                    px * innerScale, py * innerScale, pz * innerScale
+                ]);
+                const innerRotated = innerVerts.map(([px, py, pz]) =>
+                    rotatePoint(px, py, pz, -cube.rx * 1.4, -cube.ry * 1.2, cube.rz * 0.7)
+                );
+                const innerProjected = innerRotated.map(([px, py, pz]) =>
+                    project(cube.x + px, cube.y + py, cube.z + pz, cx, cy)
+                );
 
+                // Draw inner gyroscope wireframe first (behind outer)
+                const innerEdges = [
+                    [0,1],[1,2],[2,3],[3,0],
+                    [4,5],[5,6],[6,7],[7,4],
+                    [0,4],[1,5],[2,6],[3,7],
+                ];
+                for (const [a, b] of innerEdges) {
+                    const pa = innerProjected[a], pb = innerProjected[b];
+                    ctx.beginPath();
+                    ctx.moveTo(pa.sx, pa.sy);
+                    ctx.lineTo(pb.sx, pb.sy);
+                    ctx.strokeStyle = `hsla(${h + 60}, 80%, 70%, 0.15)`;
+                    ctx.lineWidth = 0.5;
+                    ctx.stroke();
+                }
+
+                // --- HOLOGRAPHIC FACES: very transparent with scan-line hint ---
                 for (const face of faceData) {
                     const pts = face.idx.map(i => projected[i]);
+                    const brightness = Math.max(0, face.dot) * 0.5 + 0.5;
 
+                    // Ultra-transparent holographic face fill
                     ctx.beginPath();
                     ctx.moveTo(pts[0].sx, pts[0].sy);
                     pts.slice(1).forEach(p => ctx.lineTo(p.sx, p.sy));
                     ctx.closePath();
-
-                    // Face fill — Extra glossy glass
-                    const brightness = Math.max(0, face.dot) * 0.5 + 0.5;
-                    const faceAlpha = tGlassA * brightness;
-                    
-                    if (isDark) {
-                        ctx.fillStyle = `hsla(${h}, ${tGlassSat}%, ${tGlassLit}%, ${faceAlpha})`;
-                    } else {
-                        // Extreme Gloss for Light Theme: Diagonal glare gradient across every face
-                        let minX = pts[0].sx, minY = pts[0].sy, maxX = pts[0].sx, maxY = pts[0].sy;
-                        for (let i = 1; i < pts.length; i++) {
-                            if (pts[i].sx < minX) minX = pts[i].sx;
-                            if (pts[i].sx > maxX) maxX = pts[i].sx;
-                            if (pts[i].sy < minY) minY = pts[i].sy;
-                            if (pts[i].sy > maxY) maxY = pts[i].sy;
-                        }
-                        // +80% Glossiness: dual specular highlights + extreme intensity
-                        const glassGrad = ctx.createLinearGradient(minX, minY, maxX, maxY);
-                        glassGrad.addColorStop(0, `hsla(${h}, ${tGlassSat}%, 100%, ${faceAlpha * 4.0})`); // extreme primary glare
-                        glassGrad.addColorStop(0.12, `hsla(${h}, ${tGlassSat}%, ${tGlassLit}%, ${faceAlpha})`); // glass body
-                        glassGrad.addColorStop(0.85, `hsla(${h}, ${tGlassSat}%, ${tGlassLit - 20}%, ${faceAlpha * 0.7})`); // deep shadow
-                        glassGrad.addColorStop(1, `hsla(${h}, ${tGlassSat}%, 100%, ${faceAlpha * 2.5})`); // secondary bottom shine
-                        ctx.fillStyle = glassGrad;
-                    }
+                    ctx.fillStyle = `hsla(${h}, ${tGlassSat}%, ${tGlassLit}%, ${tGlassA * brightness * 0.4})`;
                     ctx.fill();
 
-                    // Sheen gradient on top faces
-                    if (face.dot > 0.1) {
+                    // Holographic sheen — subtle color-shift gradient
+                    if (face.dot > 0.05) {
                         const p0 = pts[0], p2 = pts[2];
                         const grad = ctx.createLinearGradient(p0.sx, p0.sy, p2.sx, p2.sy);
-                        const stopWidth = isDark ? 0.4 : 0.02; // Knife-sharp 0.02 top gloss reflection
-                        grad.addColorStop(0, `hsla(${h + 30}, 90%, ${tSheenL1}%, ${tSheenA * brightness})`);
-                        grad.addColorStop(stopWidth, `hsla(${h}, 70%, ${tSheenL2}%, ${tSheenA * 0.3 * brightness})`);
-                        grad.addColorStop(1, `hsla(${h}, 60%, ${tSheenL3}%, 0)`);
+                        grad.addColorStop(0, `hsla(${h + 40}, 90%, 85%, ${0.08 * brightness})`);
+                        grad.addColorStop(0.5, `hsla(${h}, 70%, 60%, 0)`);
+                        grad.addColorStop(1, `hsla(${h - 40}, 90%, 85%, ${0.05 * brightness})`);
                         ctx.fillStyle = grad;
-
                         ctx.beginPath();
                         ctx.moveTo(pts[0].sx, pts[0].sy);
                         pts.slice(1).forEach(p => ctx.lineTo(p.sx, p.sy));
@@ -451,42 +453,70 @@ const GlassCubes = forwardRef<GlassCubesHandle, GlassCubesProps>(({
                         ctx.fill();
                     }
 
-                    // --- DRAW TEXT ON LATERAL FACES ---
+                    // --- HOLOGRAPHIC TEXT ON LATERAL FACES ---
                     if (face.textPts && face.logW && face.logH) {
                         const [pTL, pTR, pBL] = face.textPts.map((i: number) => projected[i]);
                         const lw = face.logW;
                         const lh = face.logH;
-                        
+
                         const m11 = (pTR.sx - pTL.sx) / lw;
                         const m12 = (pTR.sy - pTL.sy) / lw;
                         const m21 = (pBL.sx - pTL.sx) / lh;
                         const m22 = (pBL.sy - pTL.sy) / lh;
-                        
+
                         ctx.save();
-                        // Text opacity scales smoothly based on brightness/angle. 
-                        // It will appear naturally mirrored from behind!
                         const textAlpha = tTextBaseA * Math.max(0.1, face.dot + 0.6);
-                        
                         ctx.transform(m11, m12, m21, m22, pTL.sx, pTL.sy);
-                        
-                        ctx.font = '800 350px Inter, system-ui, sans-serif'; 
+
+                        // Holographic text glow (behind text)
+                        ctx.shadowColor = `hsla(${h}, 100%, 70%, ${textAlpha * 0.6})`;
+                        ctx.shadowBlur = 12;
+                        ctx.font = '800 350px Inter, system-ui, sans-serif';
                         ctx.fillStyle = `hsla(${h}, ${tTextSat}%, ${tTextLit}%, ${textAlpha})`;
                         ctx.textAlign = 'center';
                         ctx.textBaseline = 'middle';
-                        
-                        // Shrink to fit width if necessary
                         ctx.fillText(cube.label.toUpperCase(), lw / 2, lh / 2, lw * 0.85);
+                        ctx.shadowBlur = 0;
                         ctx.restore();
                     }
-
-                    // Edge glow
-                    ctx.strokeStyle = `hsla(${h}, ${tEdgeSat}%, ${tEdgeLit}%, ${tEdgeA * Math.max(0.3, brightness)})`;
-                    ctx.lineWidth = 0.8;
-                    ctx.stroke();
                 }
 
-                // --- ENERGY BLOB inside cube ---
-                // Project blob position
+                // --- GLOWING EDGES WITH ELECTRIC PULSE ---
+                const outerEdges: [number, number][] = [
+                    [0,1],[1,2],[2,3],[3,0],
+                    [4,5],[5,6],[6,7],[7,4],
+                    [0,4],[1,5],[2,6],[3,7],
+                ];
+
+                for (let ei = 0; ei < outerEdges.length; ei++) {
+                    const [a, b] = outerEdges[ei];
+                    const pa = projected[a], pb = projected[b];
+
+                    // Base edge glow
+                    ctx.beginPath();
+                    ctx.moveTo(pa.sx, pa.sy);
+                    ctx.lineTo(pb.sx, pb.sy);
+                    ctx.strokeStyle = `hsla(${h}, ${tEdgeSat}%, ${tEdgeLit}%, ${tEdgeA * 0.7})`;
+                    ctx.lineWidth = 1.0;
+                    ctx.stroke();
+
+                    // Electric pulse — bright spot traveling along each edge
+                    const pulsePhase = (t * 0.8 + ei * 0.25) % 1.0;
+                    const px2 = pa.sx + (pb.sx - pa.sx) * pulsePhase;
+                    const py2 = pa.sy + (pb.sy - pa.sy) * pulsePhase;
+                    const pulseR = 4 + Math.sin(t * 3 + ei) * 2;
+
+                    const pulseGrad = ctx.createRadialGradient(px2, py2, 0, px2, py2, pulseR);
+                    pulseGrad.addColorStop(0, `hsla(${h + 30}, 100%, 95%, 0.9)`);
+                    pulseGrad.addColorStop(0.4, `hsla(${h}, 100%, 75%, 0.4)`);
+                    pulseGrad.addColorStop(1, `hsla(${h}, 80%, 60%, 0)`);
+                    ctx.fillStyle = pulseGrad;
+                    ctx.beginPath();
+                    ctx.arc(px2, py2, pulseR, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                // --- ENERGY BLOB (holographic core) ---
                 const [bx3, by3, bz3] = rotatePoint(
                     blob.x * s, blob.y * s, blob.z * s * 0.6,
                     cube.rx, cube.ry, cube.rz
@@ -497,46 +527,54 @@ const GlassCubes = forwardRef<GlassCubesHandle, GlassCubesProps>(({
                 const blobX = bProj.sx;
                 const blobY = bProj.sy;
 
+                // Holographic flicker effect
+                const flicker = 0.7 + Math.sin(t * 8) * 0.15 + Math.sin(t * 13) * 0.1;
+
                 // Outer glow
                 const blobGlow = ctx.createRadialGradient(blobX, blobY, 0, blobX, blobY, blobR * 2.5);
-                blobGlow.addColorStop(0, `hsla(${tBlobHue + 20}, 100%, ${tGlowL1}%, 0.40)`);
-                blobGlow.addColorStop(0.4, `hsla(${tBlobHue}, 90%, ${tGlowL2}%, 0.20)`);
+                blobGlow.addColorStop(0, `hsla(${tBlobHue + 20}, 100%, ${tGlowL1}%, ${0.40 * flicker})`);
+                blobGlow.addColorStop(0.4, `hsla(${tBlobHue}, 90%, ${tGlowL2}%, ${0.20 * flicker})`);
                 blobGlow.addColorStop(1, `hsla(${tBlobHue}, 80%, ${tGlowL3}%, 0)`);
                 ctx.fillStyle = blobGlow;
                 ctx.beginPath();
                 ctx.arc(blobX, blobY, blobR * 2.5, 0, Math.PI * 2);
                 ctx.fill();
 
-                // Core
+                // Core with holographic shimmer
                 const blobCore = ctx.createRadialGradient(blobX, blobY, 0, blobX, blobY, blobR);
-                blobCore.addColorStop(0, `hsla(${tBlobHue + 40}, 100%, ${tCoreL1}%, 0.72)`);
-                blobCore.addColorStop(0.5, `hsla(${tBlobHue + 20}, 100%, ${tCoreL2}%, 0.56)`);
+                blobCore.addColorStop(0, `hsla(${tBlobHue + 40}, 100%, ${tCoreL1}%, ${0.72 * flicker})`);
+                blobCore.addColorStop(0.5, `hsla(${tBlobHue + 20}, 100%, ${tCoreL2}%, ${0.56 * flicker})`);
                 blobCore.addColorStop(1, `hsla(${tBlobHue}, 90%, ${tCoreL3}%, 0)`);
                 ctx.fillStyle = blobCore;
                 ctx.beginPath();
                 ctx.arc(blobX, blobY, blobR, 0, Math.PI * 2);
                 ctx.fill();
                 } else {
-                    // --- LIGHT THEME: GLOSSY ELLIPSOID & VOLUMETRIC TEXT ---
+                    // --- LIGHT THEME: VOLUMETRIC LIQUID GLASS OVOID ---
+                    const t = timeRef.current;
                     const pCenter = project(cube.x, cube.y, cube.z, cx, cy);
                     const pScale = pCenter.scale;
-                    
-                    const radiusX = s * 1.5 * pScale;
-                    const radiusY = s * 1.0 * pScale;
-                    
-                    // 1. BACK SHELL & FRESNEL RIM SHADOW
+
+                    // Jelly wobble — radii oscillate slightly for organic feel
+                    const wobbleX = 1.0 + Math.sin(t * 1.2 + cube.hue) * 0.03 + Math.sin(t * 2.7) * 0.015;
+                    const wobbleY = 1.0 + Math.cos(t * 1.5 + cube.hue) * 0.025 + Math.cos(t * 3.1) * 0.01;
+                    const radiusX = s * 1.5 * pScale * wobbleX;
+                    const radiusY = s * 1.0 * pScale * wobbleY;
+
+                    // 1. BACK SHELL — Deep fresnel rim for perceived thickness
                     ctx.save();
                     ctx.translate(pCenter.sx, pCenter.sy);
                     ctx.rotate(cube.rz);
                     ctx.beginPath();
                     ctx.ellipse(0, 0, radiusX, radiusY, 0, 0, Math.PI * 2);
-                    
+
                     const fresnel = ctx.createRadialGradient(0, 0, 0, 0, 0, radiusX);
-                    fresnel.addColorStop(0, `hsla(${h}, ${tGlassSat}%, 35%, 0)`); // hollow core
-                    fresnel.addColorStop(0.6, `hsla(${h}, ${tGlassSat}%, 30%, ${tGlassA * 1.0})`); // glass body
-                    fresnel.addColorStop(0.95, `hsla(${h}, ${tGlassSat}%, 15%, ${tGlassA * 3.5})`); // physical thick rim
-                    fresnel.addColorStop(1, `hsla(${h}, ${tGlassSat}%, 10%, ${tGlassA * 5.0})`); // dark edge
-                    
+                    fresnel.addColorStop(0, `hsla(${h}, ${tGlassSat}%, 45%, 0)`);
+                    fresnel.addColorStop(0.5, `hsla(${h}, ${tGlassSat}%, 35%, ${tGlassA * 0.8})`);
+                    fresnel.addColorStop(0.8, `hsla(${h}, ${tGlassSat}%, 20%, ${tGlassA * 2.5})`);
+                    fresnel.addColorStop(0.95, `hsla(${h}, ${tGlassSat}%, 12%, ${tGlassA * 4.0})`);
+                    fresnel.addColorStop(1, `hsla(${h}, ${tGlassSat}%, 8%, ${tGlassA * 5.5})`);
+
                     ctx.fillStyle = fresnel;
                     ctx.fill();
                     ctx.lineWidth = 1.5;
@@ -544,17 +582,41 @@ const GlassCubes = forwardRef<GlassCubesHandle, GlassCubesProps>(({
                     ctx.stroke();
                     ctx.restore();
 
-                    // 2. FIRE CORE (With Dynamic Z-Depth Perception)
+                    // 2. CAUSTIC LIGHT PATTERNS — animated bright spots on surface
+                    ctx.save();
+                    ctx.translate(pCenter.sx, pCenter.sy);
+                    ctx.rotate(cube.rz);
+                    // Clip to ellipse
+                    ctx.beginPath();
+                    ctx.ellipse(0, 0, radiusX, radiusY, 0, 0, Math.PI * 2);
+                    ctx.clip();
+
+                    // 3 caustic spots drifting across surface
+                    for (let ci = 0; ci < 3; ci++) {
+                        const cx2 = Math.sin(t * 0.6 + ci * 2.1) * radiusX * 0.6;
+                        const cy2 = Math.cos(t * 0.8 + ci * 1.7) * radiusY * 0.5;
+                        const cr = radiusX * (0.25 + Math.sin(t * 1.3 + ci) * 0.1);
+                        const caustic = ctx.createRadialGradient(cx2, cy2, 0, cx2, cy2, cr);
+                        caustic.addColorStop(0, `hsla(${h + 10}, 100%, 95%, 0.25)`);
+                        caustic.addColorStop(0.5, `hsla(${h}, 90%, 80%, 0.08)`);
+                        caustic.addColorStop(1, `hsla(${h}, 80%, 60%, 0)`);
+                        ctx.fillStyle = caustic;
+                        ctx.beginPath();
+                        ctx.arc(cx2, cy2, cr, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                    ctx.restore();
+
+                    // 3. FIRE CORE (With Dynamic Z-Depth Perception)
                     const [bx3, by3, bz3] = rotatePoint(blob.x * s, blob.y * s, blob.z * s * 0.6, cube.rx, cube.ry, cube.rz);
                     const bProj = project(cube.x + bx3, cube.y + by3, cube.z + bz3, cx, cy);
-                    
-                    // bz3 / s is roughly -0.5 to 0.5. Scale shrinks heavily as it recedes into the "heavy jelly"
-                    const zNorm = bz3 / s; 
+
+                    const zNorm = bz3 / s;
                     const depthScale = Math.max(0.3, 1.0 - zNorm * 1.5);
                     const coreOpacity = Math.min(1.0, Math.max(0.1, 1.0 - zNorm * 1.5));
-                    
+
                     const blobR = s * 28 * bProj.scale * 0.012 * depthScale;
-                    
+
                     const blobGlow = ctx.createRadialGradient(bProj.sx, bProj.sy, 0, bProj.sx, bProj.sy, Math.max(1, blobR * 2.5));
                     blobGlow.addColorStop(0, `hsla(${tBlobHue + 20}, 100%, ${tGlowL1}%, ${0.50 * coreOpacity})`);
                     blobGlow.addColorStop(0.4, `hsla(${tBlobHue}, 90%, ${tGlowL2}%, ${0.25 * coreOpacity})`);
@@ -572,60 +634,63 @@ const GlassCubes = forwardRef<GlassCubesHandle, GlassCubesProps>(({
                     ctx.beginPath();
                     ctx.arc(bProj.sx, bProj.sy, Math.max(1, blobR), 0, Math.PI * 2);
                     ctx.fill();
-                    
-                    // 3. INTERNAL TEXT (Rigidly attached, no 3D flip distortion)
-                    // We render a single flat text plane that spins gracefully with the capsule's Z-axis.
+
+                    // 4. INTERNAL TEXT
                     const ptTL = rotatePoint(-s*1.2, -s*0.8, 0, 0, 0, cube.rz);
                     const ptTR = rotatePoint( s*1.2, -s*0.8, 0, 0, 0, cube.rz);
                     const ptBL = rotatePoint(-s*1.2,  s*0.8, 0, 0, 0, cube.rz);
-                    
+
                     const pTL = project(cube.x + ptTL[0], cube.y + ptTL[1], cube.z + ptTL[2], cx, cy);
                     const pTR = project(cube.x + ptTR[0], cube.y + ptTR[1], cube.z + ptTR[2], cx, cy);
                     const pBL = project(cube.x + ptBL[0], cube.y + ptBL[1], cube.z + ptBL[2], cx, cy);
-                    
+
                     const lw = 2400; const lh = 1600;
                     const m11 = (pTR.sx - pTL.sx) / lw;
                     const m12 = (pTR.sy - pTL.sy) / lw;
                     const m21 = (pBL.sx - pTL.sx) / lh;
                     const m22 = (pBL.sy - pTL.sy) / lh;
-                    
+
                     ctx.save();
                     ctx.transform(m11, m12, m21, m22, pTL.sx, pTL.sy);
-                    
-                    ctx.font = '800 400px Inter, system-ui, sans-serif'; 
+
+                    ctx.font = '800 400px Inter, system-ui, sans-serif';
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
-                    
-                    // Faux drop-shadow thickness for depth embedded inside the solid glass
-                    ctx.fillStyle = `hsla(${h}, ${tTextSat}%, 20%, 0.7)`; 
+
+                    ctx.fillStyle = `hsla(${h}, ${tTextSat}%, 20%, 0.7)`;
                     ctx.fillText(cube.label.toUpperCase(), lw/2, (lh/2) + 15, lw * 0.85);
 
-                    // Front crisp text
-                    ctx.fillStyle = `hsla(${h}, ${tTextSat}%, 98%, 0.95)`; 
+                    ctx.fillStyle = `hsla(${h}, ${tTextSat}%, 98%, 0.95)`;
                     ctx.fillText(cube.label.toUpperCase(), lw/2, lh/2, lw * 0.85);
                     ctx.restore();
 
-                    // 4. FRONT GLOSS OVERLAY (+80% Glossiness)
+                    // 5. FRONT GLOSS with moving specular highlight
                     ctx.save();
                     ctx.translate(pCenter.sx, pCenter.sy);
                     ctx.rotate(cube.rz);
-                    
+
                     ctx.beginPath();
                     ctx.ellipse(0, 0, radiusX, radiusY, 0, 0, Math.PI * 2);
-                    
-                    const glassGrad = ctx.createLinearGradient(-radiusX, -radiusY, radiusX, radiusY);
-                    glassGrad.addColorStop(0, `hsla(${h}, ${tGlassSat}%, 100%, 0.85)`); // Primary glare
-                    glassGrad.addColorStop(0.15, `hsla(${h}, ${tGlassSat}%, ${tGlassLit}%, ${tGlassA * 0.4})`); // body
-                    glassGrad.addColorStop(0.85, `hsla(${h}, ${tGlassSat}%, 10%, ${tGlassA * 0.2})`); // shadow
-                    glassGrad.addColorStop(1, `hsla(${h}, ${tGlassSat}%, 100%, 0.6)`); // Bounce secondary shine
+
+                    // Moving highlight position (like sun reflecting off bubble)
+                    const hlX = Math.sin(t * 0.4 + cube.hue * 0.1) * radiusX * 0.3;
+                    const hlY = -radiusY * 0.35 + Math.cos(t * 0.5) * radiusY * 0.1;
+
+                    const glassGrad = ctx.createRadialGradient(hlX, hlY, 0, 0, 0, radiusX);
+                    glassGrad.addColorStop(0, `hsla(${h + 10}, 100%, 100%, 0.75)`);
+                    glassGrad.addColorStop(0.1, `hsla(${h}, ${tGlassSat}%, 95%, 0.3)`);
+                    glassGrad.addColorStop(0.4, `hsla(${h}, ${tGlassSat}%, ${tGlassLit}%, ${tGlassA * 0.3})`);
+                    glassGrad.addColorStop(0.85, `hsla(${h}, ${tGlassSat}%, 10%, ${tGlassA * 0.15})`);
+                    glassGrad.addColorStop(1, `hsla(${h}, ${tGlassSat}%, 100%, 0.2)`);
                     ctx.fillStyle = glassGrad;
                     ctx.fill();
-                    
-                    // Super sharp knife-edge specular arc along the top lip
+
+                    // Specular arc — follows highlight position
                     ctx.beginPath();
-                    ctx.ellipse(0, 0, radiusX * 0.95, radiusY * 0.95, 0, Math.PI, Math.PI * 1.5);
-                    ctx.strokeStyle = `hsla(0, 0%, 100%, 0.8)`;
-                    ctx.lineWidth = 3.0; // thicker edge trace
+                    const arcStart = Math.PI + Math.sin(t * 0.3) * 0.3;
+                    ctx.ellipse(0, 0, radiusX * 0.92, radiusY * 0.92, 0, arcStart, arcStart + Math.PI * 0.4);
+                    ctx.strokeStyle = `hsla(0, 0%, 100%, 0.7)`;
+                    ctx.lineWidth = 2.5;
                     ctx.stroke();
                     ctx.restore();
                 }
