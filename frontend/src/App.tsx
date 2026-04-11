@@ -1,5 +1,4 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { motion, type PanInfo } from 'framer-motion';
 import Backdrop from './design/backdrop/Backdrop';
 import type { GlassCubesHandle } from './design/backdrop/GlassCubes';
 import { useAuth } from './hooks/useAuth';
@@ -14,6 +13,8 @@ type ModuleName = 'Workout' | 'Arsenal' | 'Responsibility';
 // --- Константы таймеров (мс) ---
 const TAP_MAX = 300;
 const HOLD_DASHBOARD = 2500; // 2.5 сек → toggle dashboard
+const SWIPE_UP_THRESHOLD = 80; // px минимальная дистанция свайпа вверх
+const HOLD_FOR_SWIPE = 500; // мс минимальное удержание перед свайпом
 
 const App: React.FC = () => {
     const { isLoading, onboardingDone, photoUrl, error, role } = useAuth();
@@ -27,9 +28,14 @@ const App: React.FC = () => {
     // --- Gesture state ---
     const pointerDownAt = useRef<number>(0);
     const pointerPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+    const pointerStartY = useRef<number>(0); // для свайпа
     const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const holdFired = useRef<boolean>(false); // true если таймер удержания уже сработал
+    const holdFired = useRef<boolean>(false);
     const layoutModeRef = useRef<LayoutMode>('chaos');
+
+    // Определяем, должен ли gesture-layer быть активен
+    const hasOverlay = !photoUrl || (!onboardingDone && role === 'player');
+    const gestureEnabled = onboardingDone && !!photoUrl && !isLoading && !error;
 
     const setLayout = useCallback((mode: LayoutMode) => {
         layoutModeRef.current = mode;
@@ -52,6 +58,7 @@ const App: React.FC = () => {
                 y: e.clientY - rect.top,
             };
         }
+        pointerStartY.current = e.clientY;
 
         clearTimers();
 
@@ -69,11 +76,19 @@ const App: React.FC = () => {
         }, HOLD_DASHBOARD);
     }, [clearTimers, setLayout]);
 
-    const handleGestureUp = useCallback(() => {
+    const handleGestureUp = useCallback((e: React.PointerEvent) => {
         const elapsed = Date.now() - pointerDownAt.current;
         clearTimers();
 
-        if (elapsed < TAP_MAX) {
+        // --- Свайп вверх при удержании → смена темы ---
+        const deltaY = pointerStartY.current - e.clientY; // положительный = вверх
+        if (elapsed > HOLD_FOR_SWIPE && deltaY > SWIPE_UP_THRESHOLD) {
+            setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+            return; // не обрабатываем как тап
+        }
+
+        // --- Тап ---
+        if (elapsed < TAP_MAX && !holdFired.current) {
             const cur = layoutModeRef.current;
 
             if (cur === 'chaos') {
@@ -91,17 +106,6 @@ const App: React.FC = () => {
         }
     }, [clearTimers, setLayout]);
 
-    // --- Pan End (свайп для смены темы — framer-motion) ---
-    const handlePanEnd = useCallback((_event: any, info: PanInfo) => {
-        const holdDuration = Date.now() - pointerDownAt.current;
-        const isLongPress = holdDuration > 500;
-        const isStrongSwipeUp = info.offset.y < -100;
-
-        if (isLongPress && isStrongSwipeUp) {
-            setTheme(prev => prev === 'dark' ? 'light' : 'dark');
-        }
-    }, []);
-
     // --- Кнопка «Назад» ---
     const handleClose = useCallback(() => {
         setLayout('chaos');
@@ -110,28 +114,24 @@ const App: React.FC = () => {
 
     return (
         <div className={`app-container ${theme}-theme`}>
-            <motion.div
-                className="app-root"
-                onPanEnd={handlePanEnd}
-                style={{ touchAction: 'none' }}
-            >
+            <div className="app-root">
                 {/* ОСНОВНОЙ КОНТЕНТ */}
                 <main className="content" ref={contentRef}>
                     <Backdrop ref={cubesRef} theme={theme} />
 
-                    {/* GESTURE LAYER — всегда активен, ловит тапы и удержания */}
+                    {/* GESTURE LAYER — активен только когда нет оверлеев */}
                     <div
                         className="gesture-layer"
                         onPointerDown={handleGestureDown}
                         onPointerUp={handleGestureUp}
-                        style={{ pointerEvents: onboardingDone ? 'auto' : 'none' }}
+                        style={{ pointerEvents: gestureEnabled ? 'auto' : 'none' }}
                     />
 
                     {/* PHOTO GATE — обязательное селфи для ВСЕХ пользователей */}
                     {!isLoading && !error && !photoUrl && <PhotoGate />}
 
                     {/* UI OVERLAY — DOM поверх 3D */}
-                    <div className="ui-overlay" style={{ pointerEvents: layoutMode !== 'chaos' || !onboardingDone ? 'auto' : 'none' }}>
+                    <div className="ui-overlay" style={{ pointerEvents: layoutMode !== 'chaos' || hasOverlay ? 'auto' : 'none' }}>
 
                         {/* === ONBOARDING === */}
                         {!isLoading && !onboardingDone && role === 'player' && !!photoUrl && <OnboardingFlow />}
@@ -189,7 +189,7 @@ const App: React.FC = () => {
                         )}
                     </div>
                 </main>
-            </motion.div>
+            </div>
         </div>
     );
 };
