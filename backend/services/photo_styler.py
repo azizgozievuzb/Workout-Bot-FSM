@@ -28,7 +28,7 @@ PROMPT_LIGHT = (
     "The result should be a portrait-oriented image suitable as a phone wallpaper background."
 )
 
-MODEL = "gemini-2.0-flash-exp"
+MODEL = "gemini-2.5-flash-image"
 FALLBACK_MODEL = "gemini-2.0-flash-preview-image-generation"
 
 
