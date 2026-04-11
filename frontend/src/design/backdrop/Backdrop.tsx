@@ -1,4 +1,4 @@
-import React, { useEffect, forwardRef } from 'react';
+import { useEffect, forwardRef } from 'react';
 import { motion, useMotionValue, useSpring, useTransform, AnimatePresence } from 'framer-motion';
 import Starfield from './Starfield';
 import CloudField from './CloudField';

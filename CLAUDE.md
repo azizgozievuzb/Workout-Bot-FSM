@@ -1,103 +1,54 @@
-# 🧠 CLAUDE.md — Манифест проекта
+# 🧠 CLAUDE.md — System Rules & Token Optimization
 
-> **Любой AI-агент (Antigravity, Cowork, Claude, Gemini) обязан прочитать этот файл ПЕРВЫМ.**
-> После этого прочитать `SESSION_STATUS.md` чтобы понять, на чём остановился предыдущий агент.
-
----
-
-## 🚀 О проекте
-
-- **Название:** Workout Bot (4G)
-- **Суть:** Telegram Mini App для 35-минутных тренировок. Камера записывает упражнения → AI (Gemini Vision) оценивает технику → начисляются звёзды → звёзды тратятся в магазине наград.
-- **Три роли:** Player (тренируется), Responsible (мотивирует и покупает бусты), Admin (управляет системой).
+> **CRITICAL: READ THIS FIRST.** This project operates under STRICT TOKEN LIMITS (Fair Use). You MUST minimize input reads and output length. Be a silent, efficient executor. 
+> Next, read `SESSION_STATUS.md` to get context.
 
 ---
 
-## 🛠 Технический стек (СТРОГО)
+## 🛑 TOKEN SAVING RULES (STRICTLY ENFORCED)
 
-| Слой | Технология |
-|------|-----------|
-| Backend | **Python 3.11 + Aiogram 3** |
-| Frontend (Mini App) | **Vite + React + TypeScript** |
-| База данных | **Supabase PostgreSQL** |
-| Логика поведения | **XState FSM** (блюпринты в `/fsm_blueprints/`) |
-| AI-анализ видео | **Google Gemini Vision API** |
-| Хостинг | **Railway** (бот) + **Vercel или Railway** (фронт) |
+1. **Zero-Yapping Policy:** NEVER explain your code unless explicitly asked. NEVER summarize what you just did. 
+2. **Terminal & Git Silence:** When running terminal commands (`git push`, `npm run dev`, `bash`), do NOT output the terminal logs or explain the `git diff`. Reply with a single word: "Done" or "Error: [brief description]".
+3. **Lazy File Reading:** Do NOT read all files in a directory. Read ONLY the specific file you are working on. Do not read `ROADMAP.md` or FSM blueprints unless the current task strictly requires it.
+4. **No Code Repetition:** When editing a file, output ONLY the modified functions/blocks with clear comments on where to insert them. Do NOT output the entire file.
+5. **Context Flush:** If a specific task is completed, advise the user to start a "New Chat" to clear the context cache.
 
 ---
 
-## 🤖 Роли AI-моделей
-
-| Модель | Роль | Когда использовать |
-|--------|------|-------------------|
-| **Opus 4.6** | 🏗 Архитектор | Большие планы, стратегические решения, FSM-проектирование, сложные рефакторы |
-| **Gemini 3.1 Pro** | 🏗 Архитектор | Большие планы, альтернативное мнение, когда лимиты Opus кончились |
-| **Sonnet 4.6** | 🔨 Строитель | Написание кода (основной), рефакторинг, реализация конкретных задач |
-| **Gemini 3 Flash** | 🔨 Строитель | Написание кода (вспомогательный), быстрые правки, мелкие задачи |
-| **Haiku 3** | 🔧 Помощник | Мелкие правки, форматирование, быстрые вопросы |
+## 🚀 Project Context: Workout Bot (4G)
+- **What:** Telegram Mini App for 35-min workouts. Camera records → Gemini Vision evaluates technique → Stars awarded → Shop.
+- **Roles:** Player (trains), Responsible (motivates/boosts), Admin (manages).
+- **Stack:** Python 3.11 + Aiogram 3 (Backend) | Vite + React + TS (Frontend) | Supabase PostgreSQL (DB) | XState FSM (Logic) | Gemini Vision API (AI).
 
 ---
 
-## 📐 Архитектурные правила
+## 📐 Architecture & Standards
 
-1. **FSM = Source of Truth.** Вся логика описана в XState-машинах (`/fsm_blueprints/`). Каждый Python-handler на бэкенде должен быть 1:1 маппингом XState-машины.
-2. **Таблица связей = `partnerships`** (не "couples", не "watchers_and_players"). Один Responsible может иметь нескольких Players (1:N).
-3. **Перед завершением сессии** — обновить `SESSION_STATUS.md`.
-4. **Секреты** — только в `.env`. Никогда не в коде, не в Git.
-
----
-
-## 🎨 Стандарты Frontend
-
-- **Стили:** Vanilla CSS (premium эстетика). НЕ использовать Tailwind, если не попросят.
-- **Компоненты:** Модульные, функциональные React-компоненты.
-- **Telegram SDK:** `@telegram-apps/sdk-react`
-- **State management:** `zustand`
-- **HTTP-клиент:** `axios` с JWT interceptor
+- **Source of Truth:** XState machines (`/fsm_blueprints/`). Python backend handlers MUST map 1:1 to these machines.
+- **DB Relations:** Use `partnerships` table (1 Responsible : N Players).
+- **Frontend:** Vanilla CSS (no Tailwind). `@telegram-apps/sdk-react`, `zustand`, `axios`.
+- **Backend:** `Pydantic` for validation, `APScheduler` for cron.
+- **Security:** Secrets ONLY in `.env`. Validate `initData` ONLY on the server.
+- **Hardware:** WakeLock + smart timer on Frontend is CRITICAL (prevents screen sleep during 35m workout).
 
 ---
 
-## 🐍 Стандарты Backend
+## 📁 File Map (Read ONLY when necessary)
 
-- **Handlers:** 1:1 маппинг с FSM из `/fsm_blueprints/`.
-- **Валидация:** `Pydantic` для всех входящих данных.
-- **Секреты:** `python-dotenv` для чтения `.env`.
-- **Планировщик:** `APScheduler` для cron-задач (сброс стриков, напоминания).
+| File / Dir | Purpose |
+|------------|---------|
+| `SESSION_STATUS.md` | Current task & last stop point. Update this before ending session. |
+| `PLAN.md` / `ROADMAP.md` | High-level checklist and detailed API/DB schema. |
+| `fsm_blueprints/` | Core logic (8 XState machines). *Do not read all at once!* |
 
----
-
-## 📁 Карта ключевых файлов
-
-| Файл | Назначение |
-|------|-----------|
-| `CLAUDE.md` | **ТЫ ЗДЕСЬ.** Манифест для всех AI. |
-| `SESSION_STATUS.md` | Текущая задача и точка остановки. **Читать вторым.** |
-| `PLAN.md` | Высокоуровневый чеклист этапов. |
-| `ROADMAP.md` | Детальная дорожная карта с БД-схемой, API, структурой. |
-| `RESEARCH_JOURNAL.md` | Результаты технических экспериментов. |
-| `INTRODUCTION.html` | Полная документация проекта (визуальная). |
-| `fsm_blueprints/` | 8 XState-машин — ядро логики. |
+**FSM Index (Reference only, read specific file on demand):**
+`000_rootMachine` (Router), `100_paymentMachine` (Stars/Promo), `101_onboardingMachine` (Reg/Pairing), `102_adminMachine` (Panel), `103_workoutGateMachine` (Lobby/Boosts), `104_responsibleMachine` (Mentor panel), `105_playerShopMachine` (Shop), `200_workoutSessionMachine` (Camera/AI/Timer).
 
 ---
 
-## 📦 FSM-машины (8 файлов)
-
-| Файл | Машина | Что делает |
-|------|--------|-----------|
-| `000_rootMachine.ts` | rootMachine | Роутер ролей: Player / Responsible / Admin |
-| `100_paymentMachine.ts` | paymentMachine | Оплата: Stars, промокоды, (крипто) |
-| `101_onboardingMachine.ts` | onboardingMachine | Регистрация: язык → роль → пол → опрос → фото → паринг |
-| `102_adminMachine.ts` | adminMachine | Админ: Users, Content, Stats, баны |
-| `103_workoutGateMachine.ts` | workoutGateMachine | Раздевалка: рейтинг, буст, → тренировка или магазин |
-| `104_responsibleMachine.ts` | responsibleMachine | Панель Responsible: прогресс, пинги, бусты X2 |
-| `105_playerShopMachine.ts` | playerShopMachine | Магазин Игрока: скипы, аватарки, лутбоксы |
-| `200_workoutSessionMachine.ts` | workoutSessionMachine | Тренировка: 16 упражнений × 40 сек, камера, AI verdict |
-
----
-
-## ⚠️ Критические правила
-
-1. **initData валидация** — ТОЛЬКО на сервере. Без этого любой может подменить пользователя.
-2. **WakeLock + умный таймер** — без них 35-мин тренировка сломается (экран погаснет).
-3. **Тестировать в реальном Telegram** — WebView ≠ обычный браузер.
-4. **Никаких секретов в Git** — только `.env.example` с пустыми полями.
+## 🤖 Workflow Protocol
+1. Read `SESSION_STATUS.md`.
+2. Execute the task concisely. 
+3. If writing code, verify against FSM logic.
+4. Update `SESSION_STATUS.md` upon task completion.
+5. Stop generating text immediately after the technical objective is met.

@@ -2,47 +2,144 @@
 
 > **AI-агент:** Прочитай этот файл ПОСЛЕ `CLAUDE.md`. Здесь написано, на чём остановился предыдущий агент.
 
-**Последнее обновление:** 2026-04-10
-**Последний агент:** Antigravity
+**Последнее обновление:** 2026-04-11 (ночь)
+**Последний агент:** Claude Sonnet 4.6
 
 ---
 
 ## 🎯 Текущий фокус
-Backend DevOps и деплой полностью стабилизированы. Проблема с Telegram-вебхуком и базой данных решена. 
-Переходим к Frontend Onboarding UI.
+ТЕСТИРОВАНИЕ онбординга v3 с двух Telegram-аккаунтов. Код задеплоен, миграции применены, промокоды в БД.
 
-## ✅ Недавние критические фиксы инфраструктуры (Backend)
-1. **Zero-downtime deploy webhook race condition**: В `backend/main.py` из `lifespan` при shutdown был *удален* вызов `bot.delete_webhook()`. Если его вернуть, при деплоях в Railway старый выключающийся контейнер будет удалять свежий вебхук нового контейнера! **НЕ ВОЗВРАЩАТЬ `delete_webhook` в shutdown.**
-2. **Supabase Legacy Keys**: Текущая версия библиотеки `supabase-python==2.10.0` **не поддерживает** новые ключи формата `sb_secret_...`. Приложение жёстко завязано на Legacy JWT ключи (начинаются на `ey...`). Railway использует именно его в `SUPABASE_SERVICE_KEY`. **НЕ ОБНОВЛЯТЬ `supabase` пакет без полного переписывания работы с API.**
-3. **Webhook URL Sanitization**: В `lifespan` добавлено жёсткое обрезание символов через `.strip().rstrip("/")`, чтобы пресекать "загрязненные" URL и дуг-слеши (например, `//webhook`), которые Telegram не может маршрутизировать.
-4. **Консолидированный Debug Webhook**: Прописано логирование `Processing Update ID:` в /webhook эндпоинте, что критически помогает отслеживать доставку событий от Telegram.
+## 🚀 СЛЕДУЮЩАЯ ЗАДАЧА — ТЕСТИРОВАНИЕ (начни с этого!)
 
-## ✅ Завершено ранее (Backend Vertical Slice)
-1. **Структура backend** — создана полная иерархия пакетов (`core/`, `db/`, `api/routers/`, `services/fsm/`, `handlers/`, `keyboards/`)
-2. **Config** — `core/config.py` через pydantic-settings, все секреты из `.env`
-3. **Security** — `core/security.py`: валидация initData (HMAC-SHA256) + JWT create/decode
-4. **Auth dependency** — `core/deps.py`: `get_current_user()` FastAPI dependency
-5. **Supabase client** — `db/client.py`: async singleton
-6. **SQL миграции** — `db/migrations/001_initial.sql`: таблицы users, partnerships, subscriptions, player_stats + RLS + triggers
-7. **Реальная FSM** — `services/fsm/onboarding_fsm.py`: `OnboardingFSM` (1:1 маппинг XState) + `OnboardingService` (работа с Supabase)
-8. **REST API & Telegram Integration** — Webhook + FastAPI в одном процессе, готово к production деплою.
+Все фиксы задеплоены на Railway. Миграции 001-005 применены. Промокоды в БД.
+
+**Тестовые промокоды (одноразовые!):**
+- `Promocod100` — basic (1 игрок)
+- `Promocod300` — premium (3 игрока)
+
+**Перед тестом сбрось состояние (если тестировал раньше):**
+```bash
+supabase db execute --sql "UPDATE users SET onboarding_state = NULL, onboarding_done = false, pending_promo_id = NULL, promo_attempts = 0, promo_locked_until = NULL WHERE telegram_username = 'ТВОЙ_USERNAME';"
+```
+
+**Тест Аккаунт 1 (Ответственный):**
+1. `/start` → бот приветствует как Ответственного
+2. Ввести промокод `Promocod100` (basic) или `Promocod300` (premium)
+3. Выбрать язык → пол → ввести имя игрока
+4. Получить пригласительную ссылку (⚠️ 7 дней TTL)
+5. Промокод сгорает ТОЛЬКО после генерации ссылки
+
+**Тест Аккаунт 2 (Игрок):**
+1. Перейти по ссылке
+2. Язык → пол → опрос → Mini App (фото)
+
+**Тест Smart /start (повторный визит):**
+- Есть активный игрок → кнопка Mini App
+- Есть pending ссылка → показать существующую ссылку
+- Нет игрока и нет ссылки → "введите новый промокод"
+- Ссылка сгорела (7 дней) → нужен НОВЫЙ промокод
+
+**Тест brute force:**
+- 3 неверных промокода подряд → блокировка на 1 час
+
+Скриншоты каждого шага. Если что-то не работает — фиксим.
+
+---
+
+## ✅ Завершено за сегодня (2026-04-11 ночь)
+
+### Фиксы из PROMPT_FIX_3_ISSUES.md
+1. **Убран мокап телефона** — `mobile-frame` (393×852px, scale 0.75, border-radius 50px) заменён на `app-root` (100%×100vh). Mini App теперь на весь экран.
+2. **Кнопки копирования ссылки** — вместо plain-text ссылки два инлайн-кнопки: "📋 Скопировать ссылку" (callback → код блок) и "📤 Поделиться" (switch_inline_query). Применено в обоих местах (генерация + повторный показ).
+
+---
+
+## ✅ Завершено за сегодня (2026-04-11)
+
+### Фиксы бота
+1. **Исправлен краш при генерации ссылки** — `pairing_code` NOT NULL constraint. Бот молчал после ввода имени игрока. Теперь пишет и в `pairing_code`, и в `pair_code`.
+2. **Добавлен error handling** — вместо молчания бот теперь отвечает сообщением об ошибке.
+3. **7-дневный TTL ссылок** — `expires_at` в partnerships. Истёкшая ссылка → статус `expired`, игрок видит "ссылка истекла".
+4. **Предупреждение при генерации** — "Ссылка действительна 7 дней. Приложение не несёт ответственности."
+
+### Новая система промокодов (v3)
+5. **Таблица `promo_codes` в БД** — одноразовые коды, VARCHAR(128), верхний/нижний регистр + цифры + спецсимволы.
+6. **1 промокод = 1 человек глобально** — код сгорает ТОЛЬКО после генерации ссылки (не при вводе).
+7. **Brute force защита** — 3 неверные попытки в час → блокировка на 1 час с предупреждением.
+8. **Удалены хардкоженные коды** — WORKOUT2026, BETA100, TESTPRO больше не работают.
+9. **Удалена команда /invite** — доп. приглашения переедут в Mini App.
+
+### Smart /start меню
+10. **Умный /start для завершивших онбординг:**
+    - Ответственный + есть активный игрок → кнопка Mini App
+    - Ответственный + есть pending ссылка → показать существующую
+    - Ответственный + нет игрока/ссылки → "введите новый промокод"
+    - Игрок → кнопка Mini App
+
+### Типы промокодов (в БД)
+11. **3 типа tier:** `basic` (1 игрок), `premium` (3 игрока), `upgrade` (basic→premium, для Mini App позже)
+
+### Миграции (все применены)
+- 001_initial.sql
+- 002_onboarding_v2.sql
+- 003_pair_link_expiry.sql — `expires_at`, статус `expired`
+- 004_promo_codes_table.sql — таблица `promo_codes`, `promo_attempts`, `pending_promo_id`
+- 005_promo_upgrade_type.sql — tier `upgrade`
+
+---
+
+## ✅ Завершено ранее
+
+### Backend
+1. **Полная структура backend** — пакеты core/, db/, api/routers/, services/fsm/, handlers/, keyboards/
+2. **Config, Security, Auth** — pydantic-settings, HMAC-SHA256, JWT, FastAPI dependencies
+3. **Supabase client** — async singleton
+4. **REST API** — auth, users, partnerships роуты
+5. **Деплой backend** — Railway (автодеплой при push)
+
+### Frontend
+1. **Vite + React + Three.js** — 3D кубы (Workout, Arsenal, Responsibility)
+2. **Axios + Zustand + useAuth** — клиент, стор, хук авторизации
+3. **OnboardingFlow** — компонент (нужна доработка)
+4. **Деплой frontend** — Vercel: https://workout-bot-fsm.vercel.app
+5. **BotFather** — Mini App URL обновлён
+
+### Инфраструктура
+1. **Supabase CLI** — установлен, подключён к проекту dlpdwmmfpzfxcelxqvlq
+2. **Vercel** — Build Command: `vite build`, Root Directory: frontend
+3. **Railway** — бэкенд деплой (автодеплой при push в main)
+
+---
+
+## 📝 Бизнес-правила (утверждены с Азизом)
+- Любой кто заходит напрямую → Ответственный
+- Игрок — ТОЛЬКО по пригласительной ссылке
+- **1 промокод = 1 ссылка = 1 человек глобально**
+- Basic: 1 игрок. Premium: 3 игрока (первая при онбординге, +2 в Mini App)
+- Upgrade промокод — только в Mini App (реализовать позже)
+- Ссылка живёт 7 дней, потом сгорает. Нужен новый промокод.
+- Один человек может быть и Ответственным и Игроком (но Игроком только у одного)
+- Фото обязательно только для Игрока, только в Mini App
+- 3 неверных промокода в час → блокировка на 1 час
+
+## 🔧 Известные проблемы фронтенда (исправить позже)
+- gesture-layer блокирует pointer events кнопок онбординга
+- Шаги Language/Role/Gender дублируются с ботом — убрать из фронтенда
+- Фото: убрать кнопку "Пропустить", добавить проверку лица
+- OnboardingFlow должен начинаться с SurveyStep → PhotoStep (для игрока)
 
 ## 🛠️ Ключевые файлы
 | Файл | Что делает |
 |------|-----------|
-| `backend/main.py` | Точка входа: бот + REST API с оптимизированным Zero-Downtime вебхуком |
-| `backend/db/client.py` | Async Supabase singleton (требует JWT ключи) |
-| `backend/services/fsm/onboarding_fsm.py` | Реальная FSM + OnboardingService |
-| `backend/handlers/onboarding.py` | Telegram bot handlers |
-| `backend/requirements.txt` | Python зависимости (ВНИМАНИЕ: жестко зафиксированы версии Aiogram vs Pydantic vs Supabase) |
+| backend/handlers/onboarding.py | Хэндлеры онбординга v3 |
+| backend/services/fsm/onboarding_fsm.py | FSM + промокоды из БД + brute force |
+| backend/keyboards/onboarding_keyboards.py | Клавиатуры + WebApp кнопка |
+| backend/db/migrations/003-005 | Миграции: TTL, promo_codes, upgrade tier |
+| frontend/src/components/onboarding/OnboardingFlow.tsx | UI онбординга (нужна доработка) |
 
-## 🚀 Следующие задачи
-1. **Frontend Onboarding UI** — React компоненты для 6 шагов онбординга поверх существующего дизайна (`App.tsx` → `OnboardingFlow.tsx`)
-2. **Axios + JWT** — `frontend/src/api/client.ts` с interceptor, `useAuth` hook
-3. **Окна Frontend** — Интеграция API в Telegram WebView.
-
-## 📝 Инструкция для СЛЕДУЮЩЕГО AI
-1. ПОВТОРЕНИЕ ДЛЯ СОХРАНЕНИЯ РАБОТОСПОСОБНОСТИ БЕКЕНДА: **Не трогай `main.py` (особенно shutdown-логику Webhook) и `requirements.txt` (особенно зависимости Supabase/Pydantic).** Бэкенд и деплой настроены 100% идеально.
-2. **Начинать с Frontend**: создать `frontend/src/api/client.ts`, `frontend/src/hooks/useAuth.ts`, `frontend/src/components/onboarding/OnboardingFlow.tsx`
-3. Стиль — Vanilla CSS (glassmorphism из App.css), НЕ Tailwind.
-4. Онбординг должен рендериться поверх существующего 3D backdrop (через `layoutMode`).
+## ⚠️ ВАЖНО
+- Пользователя зовут **Азиз** (не Николай)
+- Supabase CLI залогинен — перед возвратом компьютера Николаю выполнить `supabase logout`
+- MCP Николая отключены для экономии токенов
+- Промокоды создаёт Азиз вручную через SQL: `INSERT INTO promo_codes (code, tier) VALUES ('КОД', 'basic');`

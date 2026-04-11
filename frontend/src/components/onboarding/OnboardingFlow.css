@@ -1,0 +1,287 @@
+/* ==========================================================================
+   ONBOARDING FLOW — Glassmorphism over 3D backdrop
+   ========================================================================== */
+
+.onb-container {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  pointer-events: auto;
+}
+
+/* --- Glass Card --- */
+
+.onb-card {
+  width: 100%;
+  max-width: 360px;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 28px;
+  padding: 32px 24px;
+  pointer-events: auto;
+}
+
+/* --- Step content --- */
+
+.onb-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.onb-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #fff;
+  text-align: center;
+  letter-spacing: -0.3px;
+}
+
+.onb-subtitle {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.5);
+  text-align: center;
+  margin-top: -12px;
+}
+
+/* --- Buttons --- */
+
+.onb-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.onb-btn {
+  width: 100%;
+  padding: 16px 20px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: background 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+  font-family: inherit;
+}
+
+.onb-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.onb-btn:active {
+  transform: scale(0.97);
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.onb-btn--accent {
+  background: rgba(99, 102, 241, 0.3);
+  border-color: rgba(99, 102, 241, 0.4);
+}
+
+.onb-btn--accent:hover {
+  background: rgba(99, 102, 241, 0.4);
+}
+
+.onb-btn--accent:active {
+  background: rgba(99, 102, 241, 0.5);
+}
+
+.onb-btn--accent:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.onb-btn--secondary {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.5);
+  font-weight: 500;
+}
+
+.onb-btn--secondary:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.onb-btn-icon {
+  font-size: 22px;
+}
+
+/* --- Input --- */
+
+.onb-input {
+  width: 100%;
+  padding: 16px 20px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font-size: 18px;
+  font-weight: 600;
+  text-align: center;
+  letter-spacing: 4px;
+  font-family: inherit;
+  transition: border-color 0.15s ease;
+}
+
+.onb-input::placeholder {
+  color: rgba(255, 255, 255, 0.25);
+  letter-spacing: 1px;
+}
+
+.onb-input:focus {
+  outline: none;
+  border-color: rgba(99, 102, 241, 0.5);
+}
+
+/* --- Pair code display --- */
+
+.onb-code-display {
+  padding: 20px;
+  border-radius: 16px;
+  background: rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  color: #fff;
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: 6px;
+  text-align: center;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  width: 100%;
+}
+
+/* --- Photo placeholder --- */
+
+.onb-photo-placeholder {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  border: 2px dashed rgba(255, 255, 255, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.onb-photo-icon {
+  font-size: 32px;
+  opacity: 0.4;
+}
+
+/* --- Progress dots (survey) --- */
+
+.onb-progress {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+.onb-progress-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  transition: background 0.2s ease;
+}
+
+.onb-progress-dot.active {
+  background: rgba(99, 102, 241, 0.7);
+}
+
+/* --- Step indicator (bottom) --- */
+
+.onb-step-indicator {
+  display: flex;
+  gap: 6px;
+  margin-top: 24px;
+}
+
+.onb-step-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.onb-step-dot.active {
+  background: #fff;
+  transform: scale(1.3);
+}
+
+.onb-step-dot.done {
+  background: rgba(99, 102, 241, 0.6);
+}
+
+/* --- Light theme overrides --- */
+
+.light-theme .onb-card {
+  background: rgba(255, 255, 255, 0.6);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+.light-theme .onb-title { color: #111; }
+.light-theme .onb-subtitle { color: rgba(0, 0, 0, 0.4); }
+
+.light-theme .onb-btn {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.08);
+  color: #111;
+}
+
+.light-theme .onb-btn:hover {
+  background: rgba(0, 0, 0, 0.07);
+}
+
+.light-theme .onb-input {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.1);
+  color: #111;
+}
+
+.light-theme .onb-code-display {
+  background: rgba(99, 102, 241, 0.1);
+  color: #111;
+}
+
+.light-theme .onb-step-dot.active {
+  background: #111;
+}
+
+/* --- Mobile adaptive --- */
+
+@media (max-width: 393px) {
+  .onb-card {
+    padding: 24px 18px;
+    border-radius: 24px;
+  }
+
+  .onb-title {
+    font-size: 20px;
+  }
+
+  .onb-btn {
+    padding: 14px 16px;
+    font-size: 15px;
+  }
+
+  .onb-code-display {
+    font-size: 26px;
+    padding: 16px;
+  }
+}
