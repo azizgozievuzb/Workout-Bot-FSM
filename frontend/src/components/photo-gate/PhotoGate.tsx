@@ -196,7 +196,8 @@ const PhotoGate: React.FC = () => {
       const { data } = await api.post('/users/me/photo', { photo_base64: capturedImage });
       setPhotoUrl(data.profile_photo_url);
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Ошибка загрузки фото');
+      const detail = err.response?.data?.detail || err.message || 'Ошибка загрузки фото';
+      setError(detail);
       setPhase('preview');
     }
   }, [capturedImage, setPhotoUrl]);

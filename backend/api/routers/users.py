@@ -1,11 +1,14 @@
 """Users API — профиль + загрузка фото."""
 import base64
 import uuid
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from ...core.deps import get_current_user
 from ...db.client import get_supabase
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -24,7 +27,7 @@ class UserProfile(BaseModel):
 
 class PhotoUpload(BaseModel):
     """Base64-encoded JPEG photo."""
-    photo_base64: str  # data:image/jpeg;base64,... or raw base64
+    photo_base64: str
 
 
 class PhotoResponse(BaseModel):
@@ -63,38 +66,53 @@ async def upload_photo(
     except Exception:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid base64")
 
-    if len(photo_bytes) > 5 * 1024 * 1024:  # 5 MB limit
+    if len(photo_bytes) > 5 * 1024 * 1024:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Photo too large (max 5MB)")
 
-    # Upload to Supabase Storage (bucket: avatars)
     file_name = f"{tid}/{uuid.uuid4().hex}.jpg"
+
+    # Upload to Supabase Storage (bucket: avatars)
     try:
+        # First, try to remove old photos for this user
+        try:
+            existing = await db.storage.from_("avatars").list(str(tid))
+            if existing:
+                old_files = [f"{tid}/{f['name']}" for f in existing]
+                if old_files:
+                    await db.storage.from_("avatars").remove(old_files)
+        except Exception:
+            pass  # No old files or folder doesn't exist yet
+
+        # Upload new photo
         await db.storage.from_("avatars").upload(
-            file_name,
-            photo_bytes,
-            {"content-type": "image/jpeg", "upsert": "true"},
+            path=file_name,
+            file=photo_bytes,
+            file_options={"content-type": "image/jpeg", "x-upsert": "true"},
         )
     except Exception as e:
-        # If file exists, remove and retry
-        if "Duplicate" in str(e) or "already exists" in str(e):
-            await db.storage.from_("avatars").remove([file_name])
-            await db.storage.from_("avatars").upload(
-                file_name,
-                photo_bytes,
-                {"content-type": "image/jpeg"},
-            )
-        else:
-            raise HTTPException(status_code=500, detail=f"Storage error: {e}")
+        logger.error(f"Storage upload failed for user {tid}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Storage upload failed: {str(e)[:200]}",
+        )
 
     # Get public URL
-    public_url = db.storage.from_("avatars").get_public_url(file_name)
+    try:
+        public_url = db.storage.from_("avatars").get_public_url(file_name)
+    except Exception as e:
+        logger.error(f"get_public_url failed: {e}")
+        raise HTTPException(status_code=500, detail=f"URL generation failed: {e}")
 
     # Update user record
-    await (
-        db.table("users")
-        .update({"profile_photo_url": public_url})
-        .eq("telegram_id", tid)
-        .execute()
-    )
+    try:
+        await (
+            db.table("users")
+            .update({"profile_photo_url": public_url})
+            .eq("telegram_id", tid)
+            .execute()
+        )
+    except Exception as e:
+        logger.error(f"DB update failed for user {tid}: {e}")
+        raise HTTPException(status_code=500, detail=f"DB update failed: {e}")
 
     return PhotoResponse(profile_photo_url=public_url)
