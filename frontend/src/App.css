@@ -136,7 +136,7 @@ html, body {
     color: rgba(0, 0, 0, 0.4);
 }
 
-/* --- Close button — cosmic themed --- */
+/* --- Close button — naked cosmic cross --- */
 
 .overlay-close {
     position: absolute;
@@ -144,83 +144,56 @@ html, body {
     right: 16px;
     width: 40px;
     height: 40px;
-    border-radius: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    font-size: 0;  /* скрываем текст ✕, рисуем через pseudo */
+    border: none;
+    border-radius: 0;
+    font-size: 0;
     cursor: pointer;
     z-index: 60;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(255, 255, 255, 0.06);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    transition: transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
-    overflow: hidden;
+    background: transparent;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 0.2s ease;
 }
 
-/* Две линии крестика через pseudo-элементы */
+/* Dark: фиолетово-жёлтый градиент */
 .overlay-close::before,
 .overlay-close::after {
     content: '';
     position: absolute;
-    width: 16px;
-    height: 1.5px;
+    width: 20px;
+    height: 2px;
     border-radius: 1px;
-    background: rgba(255, 255, 255, 0.7);
-    transition: background 0.2s ease, transform 0.2s ease;
+    background: linear-gradient(90deg, #ffcc44, #c77dff);
+    opacity: 0.7;
+    filter: drop-shadow(0 0 3px rgba(255, 200, 60, 0.4));
+    transition: opacity 0.2s ease, filter 0.2s ease;
 }
 
-.overlay-close::before {
-    transform: rotate(45deg);
-}
-
-.overlay-close::after {
-    transform: rotate(-45deg);
-}
-
-/* Dark theme — мягное оранжевое свечение при наведении */
-.overlay-close:hover {
-    background: rgba(255, 140, 0, 0.12);
-    border-color: rgba(255, 140, 0, 0.25);
-    box-shadow: 0 0 12px rgba(255, 100, 0, 0.15);
-}
+.overlay-close::before { transform: rotate(45deg); }
+.overlay-close::after { transform: rotate(-45deg); }
 
 .overlay-close:hover::before,
 .overlay-close:hover::after {
-    background: rgba(255, 180, 100, 0.9);
+    opacity: 1;
+    filter: drop-shadow(0 0 6px rgba(255, 200, 60, 0.6)) drop-shadow(0 0 10px rgba(199, 125, 255, 0.3));
 }
 
-.overlay-close:active {
-    transform: scale(0.88);
-    background: rgba(255, 140, 0, 0.2);
-}
+.overlay-close:active { transform: scale(0.85); }
 
-/* Light theme — тёплые тона */
-.light-theme .overlay-close {
-    background: rgba(0, 0, 0, 0.04);
-    border-color: rgba(0, 0, 0, 0.08);
-}
-
+/* Light: розовато-оранжевый градиент */
 .light-theme .overlay-close::before,
 .light-theme .overlay-close::after {
-    background: rgba(0, 0, 0, 0.5);
-}
-
-.light-theme .overlay-close:hover {
-    background: rgba(255, 120, 50, 0.08);
-    border-color: rgba(255, 120, 50, 0.2);
-    box-shadow: 0 0 12px rgba(255, 100, 0, 0.1);
+    background: linear-gradient(90deg, #e8945a, #d4728a);
+    opacity: 0.65;
+    filter: drop-shadow(0 0 2px rgba(232, 148, 90, 0.3));
 }
 
 .light-theme .overlay-close:hover::before,
 .light-theme .overlay-close:hover::after {
-    background: rgba(180, 80, 0, 0.7);
-}
-
-.light-theme .overlay-close:active {
-    transform: scale(0.88);
-    background: rgba(255, 120, 50, 0.15);
+    opacity: 0.95;
+    filter: drop-shadow(0 0 5px rgba(232, 148, 90, 0.5)) drop-shadow(0 0 8px rgba(212, 114, 138, 0.25));
 }
 
 /* --- Dashboard --- */

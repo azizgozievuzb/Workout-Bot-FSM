@@ -56,10 +56,10 @@ const PlayerView: React.FC = () => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        Promise.all([getMyStats(), getActiveBoost()])
-            .then(([s, b]) => { setStats(s); setBoost(b); })
-            .catch(() => {})
-            .finally(() => setLoading(false));
+        let done = 0;
+        const check = () => { if (++done >= 2) setLoading(false); };
+        getMyStats().then(setStats).catch(() => {}).finally(check);
+        getActiveBoost().then(setBoost).catch(() => {}).finally(check);
     }, []);
 
     if (loading) return <div className="cube-section-title" style={{ textAlign: 'center' }}>Загрузка...</div>;

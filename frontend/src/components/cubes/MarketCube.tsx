@@ -55,13 +55,10 @@ const PlayerShop: React.FC = () => {
     const [toast, setToast] = useState('');
 
     useEffect(() => {
-        Promise.all([getShopItems(), getMyStats()])
-            .then(([shopItems, stats]) => {
-                setItems(shopItems);
-                setBalance(stats.star_balance);
-            })
-            .catch(() => {})
-            .finally(() => setLoading(false));
+        let done = 0;
+        const check = () => { if (++done >= 2) setLoading(false); };
+        getShopItems().then(setItems).catch(() => {}).finally(check);
+        getMyStats().then(s => setBalance(s.star_balance)).catch(() => {}).finally(check);
     }, []);
 
     const handleBuy = useCallback(async (e: React.MouseEvent, itemId: string) => {
