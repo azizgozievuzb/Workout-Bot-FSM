@@ -7,13 +7,32 @@
 
 ---
 
-## СЛЕДУЮЩАЯ ЗАДАЧА — UI-компоненты внутри кубов
+## СЛЕДУЮЩАЯ ЗАДАЧА — Подключение API к кубам + анимации переключения ролей
 
-Фронтенд инфраструктура dual-role готова (типы, стор, хелперы, API-сервис). Smoke-тесты написаны и проходят. Следующий шаг — UI-компоненты:
-1. **Action куб** — экран Игрока (тренировка) + экран Ответственного (мониторинг) + Gravity Collapse / Supernova переключатель ролей
-2. **Market куб** — магазин Игрока + магазин Ответственного
-3. **Bond куб** — activity feed UI (использует `api/activityFeed.ts`) + профиль + настройки
-4. **rootMachine** — обновить для новой навигации по кубам
+UI-скелеты всех 3 кубов готовы (мок-данные, dual-role toggle, locked screens). Следующие шаги:
+1. **API-подключение** — заменить мок-данные реальными запросами (activity feed, shop items, player stats)
+2. **Gravity Collapse / Supernova** — анимация переключения ролей (сейчас простой toggle)
+3. **rootMachine** — обновить для новой навигации по кубам
+4. **Тесты** — unit-тесты для cube-компонентов
+
+---
+
+## Завершено за 2026-04-12 (сессия 6 — UI-скелеты кубов)
+
+### Frontend: cube UI skeletons (мок-данные, без API)
+1. **ActionCube** — `frontend/src/components/cubes/ActionCube.tsx`: Player-вид (кнопка "Приступим", стрик, буст X2, fun fact, день отдыха) + Responsible-вид (список игроков с пинг-кнопками, буст X2) + locked screens
+2. **MarketCube** — `frontend/src/components/cubes/MarketCube.tsx`: Player-магазин (баланс 150, сетка 5 товаров с ценами) + Responsible-магазин (табы по игрокам, пополнение) + locked screens
+3. **BondCube** — `frontend/src/components/cubes/BondCube.tsx`: Player-лента (4 события, бейджики, профиль) + Responsible-лента (3 события, инвайт, уведомления, биллинг) + locked screens
+4. **cubes.css** — `frontend/src/styles/cubes.css`: glassmorphic карточки, role toggle (dark=чёрная дыра, light=звезда), shop grid, feed cards, badges, tabs, locked screens, balance display, rest day button
+5. **App.tsx** — `ModuleName` обновлён `Action|Market|Bond` (было `Workout|Arsenal|Responsibility`), dashboard карточки обновлены, fullscreen рендерит соответствующий *Cube компонент
+6. **overlay-body** — изменён с центрированного на flex-column для скроллируемого контента кубов
+7. **tsc --noEmit** — проходит чисто
+
+### Паттерн dual-role в кубах:
+- Каждый куб читает `useAuthStore` → строит `DualRoleUser` → использует `canPlay()` / `canMonitor()` / `isDualRole()`
+- Toggle-кнопка в углу (P/R) переключает между Player и Responsible видами
+- Если роль недоступна — серый locked screen с инструкцией разблокировки
+- `e.stopPropagation()` на всех интерактивных элементах чтобы тап не закрывал fullscreen
 
 ---
 

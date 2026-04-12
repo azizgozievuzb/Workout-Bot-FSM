@@ -4,11 +4,14 @@ import type { GlassCubesHandle } from './design/backdrop/GlassCubes';
 import { useAuth } from './hooks/useAuth';
 import OnboardingFlow from './components/onboarding/OnboardingFlow';
 import PhotoGate from './components/photo-gate/PhotoGate';
+import ActionCube from './components/cubes/ActionCube';
+import MarketCube from './components/cubes/MarketCube';
+import BondCube from './components/cubes/BondCube';
 import './App.css';
 
 // --- Типы ---
 type LayoutMode = 'chaos' | 'fullscreen' | 'dashboard';
-type ModuleName = 'Workout' | 'Arsenal' | 'Responsibility';
+type ModuleName = 'Action' | 'Market' | 'Bond';
 
 // --- Константы таймеров (мс) ---
 const TAP_MAX = 300;
@@ -158,7 +161,9 @@ const App: React.FC = () => {
                             <div className="overlay-fullscreen">
                                 <div className="overlay-title">{activeModule}</div>
                                 <div className="overlay-body">
-                                    <p style={{ opacity: 0.5 }}>Модуль «{activeModule}» — Шаг 3</p>
+                                    {activeModule === 'Action' && <ActionCube />}
+                                    {activeModule === 'Market' && <MarketCube />}
+                                    {activeModule === 'Bond' && <BondCube />}
                                 </div>
                             </div>
                         )}
@@ -167,7 +172,7 @@ const App: React.FC = () => {
                         {layoutMode === 'dashboard' && (
                             <div className="overlay-dashboard">
                                 <button className="overlay-close" onClick={handleClose}>✕</button>
-                                {(['Workout', 'Arsenal', 'Responsibility'] as ModuleName[]).map(mod => (
+                                {(['Action', 'Market', 'Bond'] as ModuleName[]).map(mod => (
                                     <div
                                         key={mod}
                                         className="dashboard-card"
