@@ -58,8 +58,18 @@ const PlayerView: React.FC = () => {
     useEffect(() => {
         let done = 0;
         const check = () => { if (++done >= 2) setLoading(false); };
-        getMyStats().then(setStats).catch(() => {}).finally(check);
-        getActiveBoost().then(setBoost).catch(() => {}).finally(check);
+        getMyStats()
+            .then(setStats)
+            .catch((err) => {
+                console.error('[ActionCube] getMyStats FAILED:', err?.response?.status, err?.response?.data, err?.message);
+            })
+            .finally(check);
+        getActiveBoost()
+            .then(setBoost)
+            .catch((err) => {
+                console.error('[ActionCube] getActiveBoost FAILED:', err?.response?.status, err?.response?.data, err?.message);
+            })
+            .finally(check);
     }, []);
 
     if (loading) return <div className="cube-section-title" style={{ textAlign: 'center' }}>Загрузка...</div>;

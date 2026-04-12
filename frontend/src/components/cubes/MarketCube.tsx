@@ -57,8 +57,18 @@ const PlayerShop: React.FC = () => {
     useEffect(() => {
         let done = 0;
         const check = () => { if (++done >= 2) setLoading(false); };
-        getShopItems().then(setItems).catch(() => {}).finally(check);
-        getMyStats().then(s => setBalance(s.star_balance)).catch(() => {}).finally(check);
+        getShopItems()
+            .then(setItems)
+            .catch((err) => {
+                console.error('[MarketCube] getShopItems FAILED:', err?.response?.status, err?.response?.data, err?.message);
+            })
+            .finally(check);
+        getMyStats()
+            .then(s => setBalance(s.star_balance))
+            .catch((err) => {
+                console.error('[MarketCube] getMyStats FAILED:', err?.response?.status, err?.response?.data, err?.message);
+            })
+            .finally(check);
     }, []);
 
     const handleBuy = useCallback(async (e: React.MouseEvent, itemId: string) => {
