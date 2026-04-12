@@ -16,20 +16,42 @@ interface RoleTransitionProps {
 
 const VOID_MS = 500;
 
-/* --- Gravity Collapse (dark) --- */
+/* --- Gravity Collapse (dark) — спиральное затягивание в чёрную дыру --- */
 const darkVariants = {
-    initial: { scale: 0, opacity: 0, scaleX: 0.3, scaleY: 2.5, y: -60 },
+    initial: {
+        scale: 0,
+        opacity: 0,
+        rotate: -180,
+        scaleX: 0.3,
+        y: -40,
+        filter: 'blur(6px)',
+    },
     animate: {
-        scale: 1, opacity: 1, scaleX: 1, scaleY: 1, y: 0,
-        transition: { duration: 0.6, ease: [0.16, 1, 0.3, 1] },
+        scale: 1,
+        opacity: 1,
+        rotate: 0,
+        scaleX: 1,
+        y: 0,
+        filter: 'blur(0px)',
+        transition: {
+            duration: 0.7,
+            ease: [0.16, 1, 0.3, 1],
+            rotate: { duration: 0.8, ease: [0.16, 1, 0.3, 1] },
+        },
     },
     exit: {
-        scaleX: 0.2,
-        scaleY: 2.8,
-        y: -80,
+        scale: 0.1,
         opacity: 0,
-        filter: 'blur(3px)',
-        transition: { duration: 0.65, ease: [0.55, 0, 1, 0.45] },
+        rotate: 180,
+        scaleX: 0.15,
+        y: -60,
+        filter: 'blur(5px)',
+        transition: {
+            duration: 0.7,
+            ease: [0.55, 0, 1, 0.45],
+            rotate: { duration: 0.7, ease: [0.76, 0, 0.24, 1] },
+            opacity: { duration: 0.5, delay: 0.15 },
+        },
     },
 };
 

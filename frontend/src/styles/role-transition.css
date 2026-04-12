@@ -278,7 +278,8 @@
     gap: 12px;
     width: 100%;
     padding-top: 70px;
-    will-change: transform, opacity;
+    will-change: transform, opacity, filter;
+    perspective: 800px;
 }
 
 /* ==========================================================================
@@ -305,9 +306,9 @@
 }
 
 @keyframes void-dark-pulse {
-    0% { opacity: 0; }
-    40% { opacity: 1; }
-    100% { opacity: 0.8; }
+    0% { opacity: 0; transform: rotate(0deg) scale(0.8); }
+    40% { opacity: 1; transform: rotate(45deg) scale(1.1); }
+    100% { opacity: 0.8; transform: rotate(90deg) scale(1); }
 }
 
 .rt-void-light {

@@ -136,36 +136,91 @@ html, body {
     color: rgba(0, 0, 0, 0.4);
 }
 
-/* --- Close button --- */
+/* --- Close button — cosmic themed --- */
 
 .overlay-close {
     position: absolute;
     top: 16px;
     right: 16px;
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    border: none;
-    font-size: 18px;
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    font-size: 0;  /* скрываем текст ✕, рисуем через pseudo */
     cursor: pointer;
     z-index: 60;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(255, 255, 255, 0.12);
-    color: #fff;
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    transition: transform 0.15s ease;
+    background: rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    transition: transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+    overflow: hidden;
 }
 
-.light-theme .overlay-close {
-    background: rgba(0, 0, 0, 0.08);
-    color: #222;
+/* Две линии крестика через pseudo-элементы */
+.overlay-close::before,
+.overlay-close::after {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 1.5px;
+    border-radius: 1px;
+    background: rgba(255, 255, 255, 0.7);
+    transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.overlay-close::before {
+    transform: rotate(45deg);
+}
+
+.overlay-close::after {
+    transform: rotate(-45deg);
+}
+
+/* Dark theme — мягное оранжевое свечение при наведении */
+.overlay-close:hover {
+    background: rgba(255, 140, 0, 0.12);
+    border-color: rgba(255, 140, 0, 0.25);
+    box-shadow: 0 0 12px rgba(255, 100, 0, 0.15);
+}
+
+.overlay-close:hover::before,
+.overlay-close:hover::after {
+    background: rgba(255, 180, 100, 0.9);
 }
 
 .overlay-close:active {
     transform: scale(0.88);
+    background: rgba(255, 140, 0, 0.2);
+}
+
+/* Light theme — тёплые тона */
+.light-theme .overlay-close {
+    background: rgba(0, 0, 0, 0.04);
+    border-color: rgba(0, 0, 0, 0.08);
+}
+
+.light-theme .overlay-close::before,
+.light-theme .overlay-close::after {
+    background: rgba(0, 0, 0, 0.5);
+}
+
+.light-theme .overlay-close:hover {
+    background: rgba(255, 120, 50, 0.08);
+    border-color: rgba(255, 120, 50, 0.2);
+    box-shadow: 0 0 12px rgba(255, 100, 0, 0.1);
+}
+
+.light-theme .overlay-close:hover::before,
+.light-theme .overlay-close:hover::after {
+    background: rgba(180, 80, 0, 0.7);
+}
+
+.light-theme .overlay-close:active {
+    transform: scale(0.88);
+    background: rgba(255, 120, 50, 0.15);
 }
 
 /* --- Dashboard --- */
