@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import type { DualRoleUser } from '../../stores/authStore';
 import { canPlay, canMonitor, isDualRole } from '../../utils/roles';
+import RoleTransition from '../shared/RoleTransition';
 import '../../styles/cubes.css';
 
 type ActiveView = 'player' | 'responsible';
@@ -35,18 +36,20 @@ const MarketCube: React.FC = () => {
 
     return (
         <div className="cube-module">
-            <button
-                className={`cube-role-toggle ${dual ? 'dual-active' : ''}`}
-                onClick={(e) => { e.stopPropagation(); toggleView(); }}
+            <RoleTransition
+                view={view}
+                dual={dual}
+                onToggle={toggleView}
+                lockedMessage={view === 'player'
+                    ? 'Введите промокод чтобы разблокировать'
+                    : 'Вам нужна пригласительная ссылка'}
             >
-                {view === 'player' ? 'P' : 'R'}
-            </button>
-
-            {view === 'player' ? (
-                canPlay(user) ? <PlayerShop /> : <LockedPlayer />
-            ) : (
-                canMonitor(user) ? <ResponsibleShop /> : <LockedResponsible />
-            )}
+                {view === 'player' ? (
+                    canPlay(user) ? <PlayerShop /> : <LockedPlayer />
+                ) : (
+                    canMonitor(user) ? <ResponsibleShop /> : <LockedResponsible />
+                )}
+            </RoleTransition>
         </div>
     );
 };

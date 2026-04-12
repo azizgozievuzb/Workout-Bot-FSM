@@ -1,0 +1,372 @@
+/* ==========================================================================
+   ROLE TRANSITION — Gravity Collapse (dark) / Supernova (light)
+   ========================================================================== */
+
+/* --- Button base --- */
+
+.rt-btn {
+    position: absolute;
+    top: 18px;
+    left: 18px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s ease, box-shadow 0.3s ease;
+    overflow: visible;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.rt-btn:active {
+    transform: scale(0.85);
+}
+
+.rt-letter {
+    position: relative;
+    z-index: 2;
+    font-size: 14px;
+    font-weight: 700;
+    pointer-events: none;
+    line-height: 1;
+}
+
+/* --- Rotating ring (accretion disk / rays) --- */
+
+.rt-ring {
+    position: absolute;
+    inset: -5px;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+/* ==========================================================================
+   DARK THEME — BLACK HOLE
+   ========================================================================== */
+
+.rt-dark {
+    background: radial-gradient(circle, #0a0a0a 30%, #222 100%);
+    color: rgba(255, 255, 255, 0.4);
+}
+
+/* Single role — dim */
+.rt-dark.rt-single {
+    box-shadow: 0 0 6px rgba(0, 0, 0, 0.6);
+    animation: bh-idle-dim 3s ease-in-out infinite;
+}
+
+/* Dual role — purple/blue glow + accretion disk */
+.rt-dark.rt-dual {
+    box-shadow:
+        0 0 8px rgba(0, 0, 0, 0.8),
+        0 0 16px rgba(100, 60, 255, 0.25),
+        0 0 32px rgba(100, 60, 255, 0.1);
+    animation: bh-idle 2.5s ease-in-out infinite;
+}
+
+.rt-dark.rt-dual .rt-ring {
+    opacity: 0.3;
+    border: 2px solid transparent;
+    background:
+        conic-gradient(
+            from 0deg,
+            transparent 0%, rgba(120, 80, 255, 0.4) 25%,
+            transparent 50%, rgba(80, 120, 255, 0.3) 75%,
+            transparent 100%
+        ) border-box;
+    -webkit-mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+    mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    animation: rt-spin 4s linear infinite;
+}
+
+/* Active — transitioning */
+.rt-dark.rt-active {
+    box-shadow:
+        0 0 12px rgba(0, 0, 0, 0.9),
+        0 0 28px rgba(120, 80, 255, 0.5),
+        0 0 56px rgba(100, 60, 255, 0.25);
+    animation: bh-active 0.4s ease-in-out infinite alternate;
+}
+
+.rt-dark.rt-active .rt-ring {
+    opacity: 0.7;
+    animation: rt-spin 1s linear infinite;
+}
+
+/* Denied pulse — 2 pulses */
+.rt-dark.rt-denied {
+    animation: bh-denied 0.3s ease-in-out 2 !important;
+}
+
+@keyframes bh-idle-dim {
+    0%, 100% { box-shadow: 0 0 6px rgba(0, 0, 0, 0.6); }
+    50% { box-shadow: 0 0 10px rgba(0, 0, 0, 0.7), 0 0 4px rgba(80, 80, 120, 0.15); }
+}
+
+@keyframes bh-idle {
+    0%, 100% {
+        box-shadow:
+            0 0 8px rgba(0, 0, 0, 0.8),
+            0 0 16px rgba(100, 60, 255, 0.25),
+            0 0 32px rgba(100, 60, 255, 0.1);
+    }
+    50% {
+        box-shadow:
+            0 0 10px rgba(0, 0, 0, 0.9),
+            0 0 22px rgba(120, 80, 255, 0.35),
+            0 0 40px rgba(100, 60, 255, 0.15);
+    }
+}
+
+@keyframes bh-active {
+    0% {
+        box-shadow:
+            0 0 12px rgba(0, 0, 0, 0.9),
+            0 0 28px rgba(120, 80, 255, 0.5),
+            0 0 56px rgba(100, 60, 255, 0.25);
+    }
+    100% {
+        box-shadow:
+            0 0 16px rgba(0, 0, 0, 1),
+            0 0 36px rgba(140, 100, 255, 0.6),
+            0 0 64px rgba(120, 80, 255, 0.3);
+    }
+}
+
+@keyframes bh-denied {
+    0%, 100% {
+        box-shadow: 0 0 8px rgba(0, 0, 0, 0.8), 0 0 16px rgba(100, 60, 255, 0.25);
+        transform: scale(1);
+    }
+    50% {
+        box-shadow: 0 0 16px rgba(0, 0, 0, 0.9), 0 0 32px rgba(140, 100, 255, 0.5);
+        transform: scale(1.15);
+    }
+}
+
+/* ==========================================================================
+   LIGHT THEME — STAR / SUPERNOVA
+   ========================================================================== */
+
+.rt-light {
+    background: radial-gradient(circle, #FFE55C 20%, #FFB800 60%, #FF9500 100%);
+    color: rgba(80, 50, 0, 0.6);
+}
+
+/* Single role — dim star */
+.rt-light.rt-single {
+    background: radial-gradient(circle, #F0D88A 20%, #D4B05C 60%, #C09840 100%);
+    box-shadow: 0 0 6px rgba(255, 200, 0, 0.2);
+    animation: star-idle-dim 3s ease-in-out infinite;
+}
+
+/* Dual role — bright star + rays */
+.rt-light.rt-dual {
+    box-shadow:
+        0 0 8px rgba(255, 215, 0, 0.4),
+        0 0 20px rgba(255, 180, 0, 0.2),
+        0 0 40px rgba(255, 165, 0, 0.08);
+    animation: star-idle 2s ease-in-out infinite;
+}
+
+.rt-light.rt-dual .rt-ring {
+    opacity: 0.35;
+    background:
+        conic-gradient(
+            from 0deg,
+            transparent 0%, rgba(255, 215, 0, 0.5) 12%,
+            transparent 25%, rgba(255, 200, 0, 0.4) 37%,
+            transparent 50%, rgba(255, 215, 0, 0.5) 62%,
+            transparent 75%, rgba(255, 200, 0, 0.4) 87%,
+            transparent 100%
+        );
+    animation: rt-spin 6s linear infinite;
+}
+
+/* Active — supernova flash */
+.rt-light.rt-active {
+    background: radial-gradient(circle, #FFF 20%, #FFE55C 60%, #FFB800 100%);
+    box-shadow:
+        0 0 16px rgba(255, 255, 255, 0.6),
+        0 0 32px rgba(255, 215, 0, 0.5),
+        0 0 64px rgba(255, 180, 0, 0.25);
+    animation: star-active 0.3s ease-in-out infinite alternate;
+    transform: scale(1.1);
+}
+
+.rt-light.rt-active .rt-ring {
+    opacity: 0.6;
+    animation: rt-spin 1.5s linear infinite;
+}
+
+/* Denied — 3 flickers */
+.rt-light.rt-denied {
+    animation: star-denied 0.25s ease-in-out 3 !important;
+}
+
+@keyframes star-idle-dim {
+    0%, 100% { box-shadow: 0 0 6px rgba(255, 200, 0, 0.2); transform: scale(1); }
+    50% { box-shadow: 0 0 10px rgba(255, 200, 0, 0.3); transform: scale(1.03); }
+}
+
+@keyframes star-idle {
+    0%, 100% {
+        box-shadow:
+            0 0 8px rgba(255, 215, 0, 0.4),
+            0 0 20px rgba(255, 180, 0, 0.2),
+            0 0 40px rgba(255, 165, 0, 0.08);
+        transform: scale(1);
+    }
+    50% {
+        box-shadow:
+            0 0 12px rgba(255, 215, 0, 0.5),
+            0 0 28px rgba(255, 180, 0, 0.3),
+            0 0 48px rgba(255, 165, 0, 0.12);
+        transform: scale(1.05);
+    }
+}
+
+@keyframes star-active {
+    0% {
+        box-shadow:
+            0 0 16px rgba(255, 255, 255, 0.6),
+            0 0 32px rgba(255, 215, 0, 0.5);
+    }
+    100% {
+        box-shadow:
+            0 0 24px rgba(255, 255, 255, 0.8),
+            0 0 48px rgba(255, 215, 0, 0.6);
+    }
+}
+
+@keyframes star-denied {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.12); opacity: 0.7; }
+}
+
+/* --- Shared spin --- */
+
+@keyframes rt-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* ==========================================================================
+   CONTENT WRAPPER
+   ========================================================================== */
+
+.rt-content {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    will-change: transform, opacity;
+}
+
+/* ==========================================================================
+   VOID OVERLAY — between exit and enter
+   ========================================================================== */
+
+.rt-void {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    pointer-events: none;
+    border-radius: inherit;
+}
+
+.rt-void-dark {
+    background: radial-gradient(
+        circle at 36px 36px,
+        rgba(100, 60, 255, 0.15) 0%,
+        rgba(0, 0, 0, 0.4) 40%,
+        transparent 80%
+    );
+}
+
+.rt-void-light {
+    background: radial-gradient(
+        circle at center,
+        rgba(255, 255, 255, 0.35) 0%,
+        rgba(255, 215, 0, 0.1) 40%,
+        transparent 80%
+    );
+}
+
+/* ==========================================================================
+   TOAST — locked role message
+   ========================================================================== */
+
+.rt-toast {
+    position: absolute;
+    top: 62px;
+    left: 18px;
+    right: 18px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.4;
+    z-index: 35;
+    pointer-events: none;
+    text-align: center;
+}
+
+.dark-theme .rt-toast {
+    background: rgba(30, 20, 60, 0.9);
+    color: rgba(255, 255, 255, 0.7);
+    border: 1px solid rgba(120, 80, 255, 0.2);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+
+.light-theme .rt-toast {
+    background: rgba(255, 250, 230, 0.95);
+    color: rgba(100, 70, 0, 0.8);
+    border: 1px solid rgba(255, 200, 0, 0.3);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+
+/* ==========================================================================
+   REDUCED MOTION — instant switch, no animations
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+    .rt-btn,
+    .rt-dark,
+    .rt-light,
+    .rt-dark.rt-single,
+    .rt-dark.rt-dual,
+    .rt-dark.rt-active,
+    .rt-dark.rt-denied,
+    .rt-light.rt-single,
+    .rt-light.rt-dual,
+    .rt-light.rt-active,
+    .rt-light.rt-denied {
+        animation: none !important;
+        transition: none !important;
+    }
+
+    .rt-ring {
+        display: none;
+    }
+
+    .rt-content {
+        will-change: auto;
+    }
+}

@@ -7,6 +7,7 @@ import PhotoGate from './components/photo-gate/PhotoGate';
 import ActionCube from './components/cubes/ActionCube';
 import MarketCube from './components/cubes/MarketCube';
 import BondCube from './components/cubes/BondCube';
+import { ThemeContext } from './contexts/ThemeContext';
 import './App.css';
 
 // --- Типы ---
@@ -117,6 +118,7 @@ const App: React.FC = () => {
     }, [setLayout]);
 
     return (
+        <ThemeContext.Provider value={theme}>
         <div className={`app-container ${theme}-theme`}>
             <div className="app-root">
                 {/* ОСНОВНОЙ КОНТЕНТ */}
@@ -194,6 +196,7 @@ const App: React.FC = () => {
                 </main>
             </div>
         </div>
+        </ThemeContext.Provider>
     );
 };
 

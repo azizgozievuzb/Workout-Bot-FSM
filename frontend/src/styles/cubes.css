@@ -5,6 +5,7 @@
 /* --- Common layout --- */
 
 .cube-module {
+    position: relative;
     display: flex;
     flex-direction: column;
     height: 100%;
@@ -13,51 +14,6 @@
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     padding-bottom: 24px;
-}
-
-/* --- Role toggle button --- */
-
-.cube-role-toggle {
-    position: absolute;
-    top: 18px;
-    left: 18px;
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    border: none;
-    cursor: pointer;
-    z-index: 30;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 18px;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.cube-role-toggle:active {
-    transform: scale(0.85);
-}
-
-/* dark: black hole */
-.dark-theme .cube-role-toggle {
-    background: radial-gradient(circle, #111 40%, #333 100%);
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.8), 0 0 20px rgba(100, 100, 255, 0.15);
-    color: rgba(255, 255, 255, 0.5);
-}
-
-.dark-theme .cube-role-toggle.dual-active {
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.8), 0 0 24px rgba(120, 80, 255, 0.35);
-}
-
-/* light: star */
-.light-theme .cube-role-toggle {
-    background: radial-gradient(circle, #FFD700 30%, #FFA500 100%);
-    box-shadow: 0 0 8px rgba(255, 215, 0, 0.4);
-    color: rgba(80, 50, 0, 0.7);
-}
-
-.light-theme .cube-role-toggle.dual-active {
-    box-shadow: 0 0 12px rgba(255, 215, 0, 0.6), 0 0 24px rgba(255, 180, 0, 0.3);
 }
 
 /* --- Glass card --- */

@@ -7,13 +7,28 @@
 
 ---
 
-## СЛЕДУЮЩАЯ ЗАДАЧА — Подключение API к кубам + анимации переключения ролей
+## СЛЕДУЮЩАЯ ЗАДАЧА
 
-UI-скелеты всех 3 кубов готовы (мок-данные, dual-role toggle, locked screens). Следующие шаги:
-1. **API-подключение** — заменить мок-данные реальными запросами (activity feed, shop items, player stats)
-2. **Gravity Collapse / Supernova** — анимация переключения ролей (сейчас простой toggle)
-3. **rootMachine** — обновить для новой навигации по кубам
-4. **Тесты** — unit-тесты для cube-компонентов
+1. API-подключение — заменить мок-данные реальными запросами
+2. rootMachine — обновить для новой навигации
+3. Unit-тесты для cube-компонентов
+
+---
+
+## Завершено за 2026-04-12 (сессия 7 — Gravity Collapse + Supernova)
+
+### Анимация переключения ролей
+1. **ThemeContext** — `frontend/src/contexts/ThemeContext.tsx`: React Context для передачи темы (`dark`/`light`) из App.tsx в компоненты без DOM-запросов
+2. **RoleTransition** — `frontend/src/components/shared/RoleTransition.tsx`: общий компонент анимации для всех 3 кубов. Фазы: idle → exiting → void (500ms) → entering → idle. framer-motion `AnimatePresence` mode="wait"
+3. **Gravity Collapse (dark)** — кнопка-чёрная дыра: radial-gradient #0a→#222, conic-gradient accretion disk (rt-ring), idle pulse (bh-idle), active intensified glow + fast spin. Exit: scale→0 + skew к точке кнопки (transformOrigin: 36px 36px). Void: radial glow от позиции кнопки. Enter: big bang expansion из точки
+4. **Supernova (light)** — кнопка-звезда: gold gradient, conic-gradient rays, idle pulse (star-idle), active white flash + scale 1.1. Exit: scale→1.15 + blur 10px (взрыв наружу). Void: golden glow от центра. Enter: crystallize из blur→sharp
+5. **Denied state** — dual=false: dark — 2 pulse (bh-denied), light — 3 flicker (star-denied) + toast с сообщением (2с, framer-motion fade)
+6. **Single vs dual** — rt-single (dim glow, no ring) vs rt-dual (active glow + rotating ring). Визуально очевидно доступна ли вторая роль
+7. **Accessibility** — `prefers-reduced-motion: reduce` → instant switch без анимации (JS check + CSS override)
+8. **Performance** — `will-change: transform, opacity`, GPU-accelerated properties only, blur ≤10px
+9. **cubes.css** — удалён старый `.cube-role-toggle`, добавлен `position: relative` на `.cube-module`
+10. **App.tsx** — обёрнут в `ThemeContext.Provider`
+11. **tsc --noEmit** — проходит чисто
 
 ---
 
