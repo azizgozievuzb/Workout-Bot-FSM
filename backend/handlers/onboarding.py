@@ -353,8 +353,23 @@ async def process_text_input(message: types.Message) -> None:
                 await message.answer("Неверный промокод.")
             return
 
-        # Promo valid — send FSM event with tier from DB
+        # Promo valid
         tier = promo_result["tier"]
+
+        # Admin — skip full onboarding, go straight to complete
+        if tier == "admin":
+            await svc.db.table("users").update({
+                "onboarding_state": "onboardingComplete",
+                "onboarding_done": True,
+            }).eq("telegram_id", message.from_user.id).execute()
+
+            await message.answer(
+                "🔑 Добро пожаловать, Админ!\n\nОткройте приложение:",
+                reply_markup=get_miniapp_keyboard(),
+            )
+            return
+
+        # Regular promo — send FSM event with tier from DB
         result = await svc.send_event(
             message.from_user.id,
             {"type": "SET_PROMO", "tier": tier},

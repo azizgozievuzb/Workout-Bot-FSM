@@ -227,7 +227,7 @@ class OnboardingService:
         return {"locked": False, "attempts_left": MAX_PROMO_ATTEMPTS - attempts}
 
     async def validate_promo_code(self, telegram_id: int, code: str) -> dict:
-        """Validate promo code from DB.
+        """Validate promo code from DB or admin env.
         Returns {"ok": True, "tier": str, "promo_id": str} or {"ok": False, "reason": str, ...}."""
 
         # 1. Rate limit check
@@ -238,6 +238,26 @@ class OnboardingService:
                 "reason": "rate_limited",
                 "minutes_left": rate["minutes_left"],
             }
+
+        # 1.5. Check admin promo code from env
+        from ...core.config import settings
+        if settings.ADMIN_PROMO_CODE and code.strip() == settings.ADMIN_PROMO_CODE:
+            # Grant admin + all roles
+            await (
+                self.db.table("users")
+                .update({
+                    "is_admin": True,
+                    "has_player_access": True,
+                    "has_responsible_access": True,
+                    "primary_role": "responsible",
+                    "role": "responsible",
+                    "promo_attempts": 0,
+                    "promo_locked_until": None,
+                })
+                .eq("telegram_id", telegram_id)
+                .execute()
+            )
+            return {"ok": True, "tier": "admin", "promo_id": None}
 
         # 2. Look up code in DB
         promo_res = (
