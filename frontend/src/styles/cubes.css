@@ -535,3 +535,78 @@
     background: rgba(0, 100, 200, 0.05);
     color: rgba(0, 0, 0, 0.4);
 }
+
+/* --- Promo invite block (ResponsibleView) --- */
+
+.promo-invite-block {
+    border-radius: 16px;
+    padding: 16px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.dark-theme .promo-invite-block {
+    background: rgba(99, 102, 241, 0.1);
+    border: 1px solid rgba(99, 102, 241, 0.2);
+}
+
+.light-theme .promo-invite-block {
+    background: rgba(99, 102, 241, 0.06);
+    border: 1px solid rgba(99, 102, 241, 0.15);
+}
+
+.promo-invite-label {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+}
+
+.dark-theme .promo-invite-label {
+    color: rgba(255, 255, 255, 0.45);
+}
+
+.light-theme .promo-invite-label {
+    color: rgba(0, 0, 0, 0.4);
+}
+
+.promo-invite-code {
+    font-size: 24px;
+    font-weight: 800;
+    letter-spacing: 3px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+.dark-theme .promo-invite-code {
+    color: #fff;
+}
+
+.light-theme .promo-invite-code {
+    color: #111;
+}
+
+.promo-invite-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+}
+
+.promo-invite-toast {
+    font-size: 12px;
+    font-weight: 600;
+    color: #CCFF00;
+    animation: fadeInOut 2s ease forwards;
+}
+
+.light-theme .promo-invite-toast {
+    color: #007AFF;
+}
+
+@keyframes fadeInOut {
+    0% { opacity: 0; }
+    15% { opacity: 1; }
+    85% { opacity: 1; }
+    100% { opacity: 0; }
+}

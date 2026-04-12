@@ -13,8 +13,10 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from .api.routers.activity_feed import router as activity_feed_router
+from .api.routers.admin import router as admin_router
 from .api.routers.auth import router as auth_router
 from .api.routers.partnerships import router as partnerships_router
+from .api.routers.promo import router as promo_router
 from .api.routers.users import router as users_router
 from .core.config import settings
 from .handlers.onboarding import onboarding_router
@@ -83,6 +85,8 @@ app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(partnerships_router)
 app.include_router(activity_feed_router)
+app.include_router(promo_router)
+app.include_router(admin_router)
 
 
 @app.get("/health")

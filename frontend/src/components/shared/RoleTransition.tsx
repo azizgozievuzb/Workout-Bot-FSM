@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from '../../contexts/ThemeContext';
+import PromoCodeModal from './PromoCodeModal';
 import '../../styles/role-transition.css';
 
 type Phase = 'idle' | 'exiting' | 'void' | 'entering';
@@ -49,6 +50,7 @@ const RoleTransition: React.FC<RoleTransitionProps> = ({
     const [showContent, setShowContent] = useState(true);
     const [toast, setToast] = useState(false);
     const [denied, setDenied] = useState(false);
+    const [promoOpen, setPromoOpen] = useState(false);
     const timerRef = useRef<ReturnType<typeof setTimeout>>();
     const isFirstRender = useRef(true);
     const prefersReduced = useRef(
@@ -66,10 +68,9 @@ const RoleTransition: React.FC<RoleTransitionProps> = ({
 
         if (!dual) {
             setDenied(true);
-            setToast(true);
+            setPromoOpen(true);
             timerRef.current = setTimeout(() => {
                 setDenied(false);
-                setToast(false);
             }, 2000);
             return;
         }
@@ -150,20 +151,17 @@ const RoleTransition: React.FC<RoleTransitionProps> = ({
                 )}
             </AnimatePresence>
 
-            {/* Denied toast */}
-            <AnimatePresence>
-                {toast && (
-                    <motion.div
-                        className="rt-toast"
-                        initial={{ opacity: 0, y: -8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -8 }}
-                        transition={{ duration: 0.2 }}
-                    >
-                        {lockedMessage}
-                    </motion.div>
-                )}
-            </AnimatePresence>
+            {/* Promo code modal instead of toast */}
+            <PromoCodeModal
+                open={promoOpen}
+                onClose={() => setPromoOpen(false)}
+                targetRole={view === 'player' ? 'responsible' : 'player'}
+                onSuccess={() => {
+                    setPromoOpen(false);
+                    // After adding role, toggle to the new view
+                    onToggle();
+                }}
+            />
         </>
     );
 };

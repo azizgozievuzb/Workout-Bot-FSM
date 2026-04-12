@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_HOURS: int = 24 * 30  # 30 дней
 
+    # Promo
+    ADMIN_PROMO_CODE: str = ""
+    BOT_USERNAME: str = "conectionWorkout_bot"
+
     # Gemini
     GEMINI_API_KEY: str = ""
 

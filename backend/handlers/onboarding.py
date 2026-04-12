@@ -6,12 +6,14 @@ Player flow:      /start PAIR_XXXXXX → validate → language → gender → su
 Повторный визит:  /start → smart menu (зависит от состояния)
 """
 import logging
+import re
 
 from aiogram import F, Router, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 
 from ..db.client import get_supabase
+from ..core.config import settings
 from ..keyboards.onboarding_keyboards import (
     get_gender_keyboard,
     get_language_keyboard,
@@ -24,7 +26,9 @@ logger = logging.getLogger(__name__)
 
 onboarding_router = Router(name="onboarding")
 
-BOT_USERNAME = "conectionWorkout_bot"
+BOT_USERNAME = getattr(settings, "BOT_USERNAME", None) or "conectionWorkout_bot"
+
+UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
 
 
 def get_share_keyboard(link: str) -> types.InlineKeyboardMarkup:
@@ -162,7 +166,23 @@ async def cmd_start(message: types.Message, state: FSMContext) -> None:
         return
 
     # ------------------------------------------------------------------
-    # PLAYER FLOW (deep link с PAIR_)
+    # NEW PROMO V2: deep link token (UUID format) → redirect to Mini App
+    # ------------------------------------------------------------------
+    if deeplink and UUID_RE.match(deeplink):
+        mini_app_url = settings.MINI_APP_URL.rstrip("/")
+        await message.answer(
+            "Вас пригласили! Откройте приложение для активации:",
+            reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
+                [types.InlineKeyboardButton(
+                    text="🚀 Открыть приложение",
+                    url=f"https://t.me/{BOT_USERNAME}?startapp={deeplink}",
+                )],
+            ]),
+        )
+        return
+
+    # ------------------------------------------------------------------
+    # PLAYER FLOW (deep link с PAIR_) — legacy backward compat
     # ------------------------------------------------------------------
     if deeplink.startswith("PAIR_"):
         code = deeplink[5:]
@@ -305,40 +325,32 @@ async def process_survey(callback: types.CallbackQuery) -> None:
 
 @onboarding_router.message(F.text)
 async def process_text_input(message: types.Message) -> None:
-    if message.text.startswith("/"):
-        return
-
     svc = await get_svc()
     db_state, _ = await svc.get_state(message.from_user.id)
 
     # --- PROMO CODE (DB validation) ---
     if db_state == "resp_promo":
+        # Block commands (/start caught by cmd_start above)
+        if message.text.startswith('/'):
+            await message.answer("Пожалуйста, введите только промокод.")
+            return
+
         promo_result = await svc.validate_promo_code(
             message.from_user.id, message.text.strip()
         )
 
         if not promo_result["ok"]:
-            reason = promo_result["reason"]
-
-            if reason == "rate_limited":
+            if promo_result.get("reason") == "rate_limited" or promo_result.get("locked"):
                 minutes = promo_result.get("minutes_left", 60)
                 await message.answer(
-                    f"⛔ Слишком много попыток. Повторите через {minutes} мин."
+                    f"❌ Слишком много попыток. Повторите через {minutes} мин."
                 )
-                return
-
-            if reason == "promo_already_used":
-                msg = "Этот промокод уже был использован."
-            else:
-                msg = "Неверный промокод."
-
-            if promo_result.get("locked"):
-                msg += "\n\n⛔ Вы исчерпали 3 попытки. Повторите через 1 час."
             elif promo_result.get("attempts_left") is not None:
-                left = promo_result["attempts_left"]
-                msg += f"\n\nОсталось попыток: {left}"
-
-            await message.answer(msg)
+                await message.answer(
+                    f"Осталось {promo_result['attempts_left']} попыток, введите код повторно."
+                )
+            else:
+                await message.answer("Неверный промокод.")
             return
 
         # Promo valid — send FSM event with tier from DB
@@ -355,9 +367,14 @@ async def process_text_input(message: types.Message) -> None:
             "Промокод принят!\n\nВыберите язык / Tilni tanlang / Choose language:",
             reply_markup=get_language_keyboard(),
         )
+        return
+
+    # Ignore commands in other states
+    if message.text.startswith("/"):
+        return
 
     # --- PLAYER NAME → GENERATE LINK ---
-    elif db_state == "resp_player_name":
+    if db_state == "resp_player_name":
         name = message.text.strip()
         if not name:
             await message.answer("Имя не может быть пустым. Попробуйте ещё раз:")
@@ -398,3 +415,13 @@ async def process_text_input(message: types.Message) -> None:
         )
 
 
+# ---------------------------------------------------------------------------
+# Non-text handler (stickers, photos, voice etc.) during promo input
+# ---------------------------------------------------------------------------
+
+@onboarding_router.message(~F.text)
+async def handle_non_text_in_promo(message: types.Message) -> None:
+    svc = await get_svc()
+    db_state, _ = await svc.get_state(message.from_user.id)
+    if db_state == "resp_promo":
+        await message.answer("Пожалуйста, введите только промокод.")

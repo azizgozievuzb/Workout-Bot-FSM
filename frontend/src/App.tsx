@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import Backdrop from './design/backdrop/Backdrop';
 import type { GlassCubesHandle } from './design/backdrop/GlassCubes';
 import { useAuth } from './hooks/useAuth';
@@ -22,6 +23,18 @@ const HOLD_DASHBOARD = 3000; // 3 сек → toggle dashboard
 const SWIPE_UP_THRESHOLD = 80; // px минимальная дистанция свайпа вверх
 const HOLD_FOR_SWIPE = 500; // мс минимальное удержание перед свайпом
 
+const MODULES: ModuleName[] = ['Action', 'Market', 'Bond'];
+const nextModule = (cur: ModuleName, dir: 1 | -1): ModuleName => {
+    const idx = MODULES.indexOf(cur);
+    return MODULES[(idx + dir + MODULES.length) % MODULES.length];
+};
+
+const carouselVariants = {
+    enter: (dir: number) => ({ x: dir ? dir * 300 : 0, opacity: 0 }),
+    center: { x: 0, opacity: 1 },
+    exit: (dir: number) => ({ x: dir ? -dir * 300 : 0, opacity: 0 }),
+};
+
 const App: React.FC = () => {
     const { isLoading, onboardingDone, photoUrl, error, role } = useAuth();
     const [theme, setTheme] = useState<'dark' | 'light'>('dark');
@@ -34,7 +47,9 @@ const App: React.FC = () => {
     // --- Gesture state ---
     const pointerDownAt = useRef<number>(0);
     const pointerPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-    const pointerStartY = useRef<number>(0); // для свайпа
+    const pointerStartX = useRef<number>(0); // для горизонтального свайпа
+    const pointerStartY = useRef<number>(0); // для вертикального свайпа
+    const [swipeDir, setSwipeDir] = useState<number>(0);
     const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const holdFired = useRef<boolean>(false);
     const layoutModeRef = useRef<LayoutMode>('chaos');
@@ -64,6 +79,7 @@ const App: React.FC = () => {
                 y: e.clientY - rect.top,
             };
         }
+        pointerStartX.current = e.clientX;
         pointerStartY.current = e.clientY;
 
         clearTimers();
@@ -86,11 +102,22 @@ const App: React.FC = () => {
         const elapsed = Date.now() - pointerDownAt.current;
         clearTimers();
 
-        // --- Свайп вверх при удержании → смена темы ---
         const deltaY = pointerStartY.current - e.clientY; // положительный = вверх
+        const deltaX = e.clientX - pointerStartX.current;  // положительный = вправо
+
+        // --- Горизонтальный свайп в fullscreen → карусель ---
+        if (layoutModeRef.current === 'fullscreen' && activeModule
+            && elapsed < 500 && Math.abs(deltaX) > 50 && Math.abs(deltaX) > Math.abs(deltaY)) {
+            const dir: 1 | -1 = deltaX < 0 ? 1 : -1;
+            setSwipeDir(dir);
+            setActiveModule(nextModule(activeModule, dir));
+            return;
+        }
+
+        // --- Свайп вверх при удержании → смена темы ---
         if (elapsed > HOLD_FOR_SWIPE && deltaY > SWIPE_UP_THRESHOLD) {
             setTheme(prev => prev === 'dark' ? 'light' : 'dark');
-            return; // не обрабатываем как тап
+            return;
         }
 
         // --- Тап ---
@@ -98,16 +125,15 @@ const App: React.FC = () => {
             const cur = layoutModeRef.current;
 
             if (cur === 'chaos') {
-                // Тап по кубу → fullscreen, тап в пустоту → ничего
                 const hit = cubesRef.current?.checkHit(pointerPos.current.x, pointerPos.current.y);
                 if (hit) {
+                    setSwipeDir(0);
                     setLayout('fullscreen');
                     setActiveModule(hit.label as ModuleName);
                 }
-            // fullscreen & dashboard: тап НЕ выходит — только long press 3с
             }
         }
-    }, [clearTimers, setLayout]);
+    }, [clearTimers, setLayout, activeModule]);
 
     return (
         <ThemeContext.Provider value={theme}>
@@ -136,7 +162,7 @@ const App: React.FC = () => {
                     <div className="ui-overlay" style={{ pointerEvents: layoutMode !== 'chaos' || hasOverlay ? 'auto' : 'none' }}>
 
                         {/* === ONBOARDING === */}
-                        {!isLoading && !onboardingDone && role === 'player' && !!photoUrl && <OnboardingFlow />}
+                        {!isLoading && !onboardingDone && !!photoUrl && <OnboardingFlow />}
 
                         {/* === AUTH ERROR === */}
                         {error && (
@@ -150,14 +176,30 @@ const App: React.FC = () => {
                             </div>
                         )}
 
-                        {/* === FULLSCREEN MODULE === */}
+                        {/* === FULLSCREEN MODULE (carousel) === */}
                         {layoutMode === 'fullscreen' && activeModule && (
                             <div className="overlay-fullscreen" onPointerDown={handleGestureDown} onPointerUp={handleGestureUp}>
                                 <div className="overlay-title">{activeModule}</div>
-                                <div className="overlay-body">
-                                    {activeModule === 'Action' && <ActionCube />}
-                                    {activeModule === 'Market' && <MarketCube />}
-                                    {activeModule === 'Bond' && <BondCube />}
+                                <AnimatePresence mode="wait" custom={swipeDir}>
+                                    <motion.div
+                                        key={activeModule}
+                                        custom={swipeDir}
+                                        variants={carouselVariants}
+                                        initial="enter"
+                                        animate="center"
+                                        exit="exit"
+                                        transition={{ duration: 0.25, ease: 'easeInOut' }}
+                                        className="overlay-body"
+                                    >
+                                        {activeModule === 'Action' && <ActionCube />}
+                                        {activeModule === 'Market' && <MarketCube />}
+                                        {activeModule === 'Bond' && <BondCube />}
+                                    </motion.div>
+                                </AnimatePresence>
+                                <div className="carousel-dots">
+                                    {MODULES.map(m => (
+                                        <span key={m} className={`carousel-dot ${m === activeModule ? 'active' : ''}`} />
+                                    ))}
                                 </div>
                             </div>
                         )}

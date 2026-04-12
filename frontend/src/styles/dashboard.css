@@ -4,21 +4,20 @@
 
 .dashboard-panel {
     background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: none;
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
-    border-radius: 24px;
+    border-radius: 0;
     overflow: hidden;
     display: flex;
     flex-direction: column;
     width: 100%;
-    max-width: 400px;
-    margin: auto;
+    height: 100%;
 }
 
 .light-theme .dashboard-panel {
     background: rgba(255, 255, 255, 0.4);
-    border: 1px solid rgba(0, 0, 0, 0.06);
+    border: none;
 }
 
 /* --- Divider --- */
@@ -37,13 +36,10 @@
 
 .dashboard-section {
     padding: 16px 20px;
-}
-
-.dashboard-section-header {
+    flex: 1;
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    cursor: pointer;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .dashboard-section-title {
@@ -54,6 +50,72 @@
 
 .light-theme .dashboard-section-title {
     color: rgba(0, 0, 0, 0.8);
+}
+
+/* --- Primary items (always visible) --- */
+
+.dashboard-primary {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+}
+
+.dashboard-primary-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.08);
+    cursor: pointer;
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.8);
+    transition: background 0.15s;
+}
+
+.dashboard-primary-item:active {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.dashboard-primary-item.accent {
+    background: rgba(59, 130, 246, 0.3);
+    color: #fff;
+    font-weight: 600;
+}
+
+.dashboard-primary-item.accent:active {
+    background: rgba(59, 130, 246, 0.45);
+}
+
+.light-theme .dashboard-primary-item {
+    background: rgba(0, 0, 0, 0.06);
+    color: rgba(0, 0, 0, 0.8);
+}
+
+.light-theme .dashboard-primary-item:active {
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.light-theme .dashboard-primary-item.accent {
+    background: rgba(59, 130, 246, 0.2);
+    color: #1e40af;
+}
+
+/* --- More toggle --- */
+
+.dashboard-more-toggle {
+    margin-top: 8px;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.4);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.light-theme .dashboard-more-toggle {
+    color: rgba(0, 0, 0, 0.4);
 }
 
 .dashboard-section-arrow {

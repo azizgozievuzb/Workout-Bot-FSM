@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import type { DualRoleUser } from '../../stores/authStore';
 import { canPlay, canMonitor, isDualRole } from '../../utils/roles';
+import { getMyPlayerCode } from '../../api/promo';
 import RoleTransition from '../shared/RoleTransition';
 import '../../styles/cubes.css';
 
@@ -81,34 +82,83 @@ const MOCK_PLAYERS = [
     { id: 2, name: 'Марина', initials: 'М', streak: 3, trained: false },
 ];
 
-const ResponsibleView: React.FC = () => (
-    <>
-        <div className="cube-section-title">Ваши игроки</div>
+interface PlayerCodeData {
+    code: string | null;
+    deep_link: string | null;
+    is_used: boolean;
+}
 
-        <div className="cube-card">
-            {MOCK_PLAYERS.map(p => (
-                <div className="cube-player-row" key={p.id}>
-                    <div className="cube-avatar">{p.initials}</div>
-                    <div className="cube-player-info">
-                        <div className="cube-player-name">{p.name}</div>
-                        <div className="cube-player-meta">
-                            Стрик: {p.streak} · {p.trained ? 'Тренировался' : 'Не тренировался'}
-                        </div>
-                    </div>
-                    <div className="cube-player-actions">
-                        <button className="cube-btn-sm" onClick={(e) => e.stopPropagation()}>
-                            Пинг
+const ResponsibleView: React.FC = () => {
+    const [playerCodeData, setPlayerCodeData] = useState<PlayerCodeData | null>(null);
+    const [toast, setToast] = useState('');
+
+    useEffect(() => {
+        getMyPlayerCode()
+            .then((data) => setPlayerCodeData(data))
+            .catch(() => {});
+    }, []);
+
+    const copyCode = useCallback((e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!playerCodeData?.code) return;
+        navigator.clipboard.writeText(playerCodeData.code);
+        setToast('Скопировано!');
+        setTimeout(() => setToast(''), 2000);
+    }, [playerCodeData]);
+
+    const copyLink = useCallback((e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!playerCodeData?.deep_link) return;
+        navigator.clipboard.writeText(playerCodeData.deep_link);
+        setToast('Скопировано!');
+        setTimeout(() => setToast(''), 2000);
+    }, [playerCodeData]);
+
+    return (
+        <>
+            {playerCodeData && playerCodeData.code && !playerCodeData.is_used && (
+                <div className="promo-invite-block">
+                    <div className="promo-invite-label">Пригласите игрока</div>
+                    <div className="promo-invite-code">{playerCodeData.code}</div>
+                    <div className="promo-invite-actions">
+                        <button className="cube-btn-sm" onClick={copyCode}>
+                            📋 Скопировать код
+                        </button>
+                        <button className="cube-btn-sm" onClick={copyLink}>
+                            🔗 Скопировать ссылку
                         </button>
                     </div>
+                    {toast && <div className="promo-invite-toast">{toast}</div>}
                 </div>
-            ))}
-        </div>
+            )}
 
-        <button className="cube-btn-primary" onClick={(e) => e.stopPropagation()}>
-            Буст X2
-        </button>
-    </>
-);
+            <div className="cube-section-title">Ваши игроки</div>
+
+            <div className="cube-card">
+                {MOCK_PLAYERS.map(p => (
+                    <div className="cube-player-row" key={p.id}>
+                        <div className="cube-avatar">{p.initials}</div>
+                        <div className="cube-player-info">
+                            <div className="cube-player-name">{p.name}</div>
+                            <div className="cube-player-meta">
+                                Стрик: {p.streak} · {p.trained ? 'Тренировался' : 'Не тренировался'}
+                            </div>
+                        </div>
+                        <div className="cube-player-actions">
+                            <button className="cube-btn-sm" onClick={(e) => e.stopPropagation()}>
+                                Пинг
+                            </button>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            <button className="cube-btn-primary" onClick={(e) => e.stopPropagation()}>
+                Буст X2
+            </button>
+        </>
+    );
+};
 
 /* ---------- LOCKED SCREENS ---------- */
 

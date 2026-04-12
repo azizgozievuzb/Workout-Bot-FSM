@@ -22,6 +22,7 @@ interface AuthState {
   photoDarkUrl: string | null;
   photoLightUrl: string | null;
   isAuthenticated: boolean;
+  player_code: string | null;
   setAuth: (data: {
     token: string;
     role: string;
@@ -36,6 +37,8 @@ interface AuthState {
   }) => void;
   setPhotoUrl: (url: string) => void;
   setStyledPhotos: (darkUrl: string | null, lightUrl: string | null) => void;
+  setPlayerCode: (code: string | null) => void;
+  addRole: (role: 'player' | 'responsible') => void;
   clearAuth: () => void;
 }
 
@@ -50,6 +53,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   photoUrl: null,
   photoDarkUrl: null,
   photoLightUrl: null,
+  player_code: null,
   isAuthenticated: false,
   setAuth: (data) =>
     set({
@@ -67,6 +71,14 @@ export const useAuthStore = create<AuthState>((set) => ({
     }),
   setPhotoUrl: (url) => set({ photoUrl: url }),
   setStyledPhotos: (darkUrl, lightUrl) => set({ photoDarkUrl: darkUrl, photoLightUrl: lightUrl }),
+  setPlayerCode: (code) => set({ player_code: code }),
+  addRole: (role) =>
+    set((state) => ({
+      ...(role === 'player'
+        ? { has_player_access: true }
+        : { has_responsible_access: true }),
+      role: state.is_admin ? 'admin' : state.primary_role,
+    })),
   clearAuth: () =>
     set({
       token: null,
@@ -79,6 +91,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       photoUrl: null,
       photoDarkUrl: null,
       photoLightUrl: null,
+      player_code: null,
       isAuthenticated: false,
     }),
 }));

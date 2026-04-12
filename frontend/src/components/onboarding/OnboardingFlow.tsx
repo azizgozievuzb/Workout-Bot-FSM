@@ -1,307 +1,271 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../../api/client';
+import { activatePromo, activatePromoLink } from '../../api/promo';
 import { useAuthStore } from '../../stores/authStore';
 import './OnboardingFlow.css';
 
-// --- Animation variants ---
-const slideVariants = {
-  enter: (dir: number) => ({ x: dir > 0 ? 300 : -300, opacity: 0 }),
-  center: { x: 0, opacity: 1 },
-  exit: (dir: number) => ({ x: dir > 0 ? -300 : 300, opacity: 0 }),
-};
+type OnboardingStep = 'promo' | 'congratulations' | 'photo' | 'complete';
 
-const transition = { type: 'spring' as const, stiffness: 300, damping: 30 };
-
-const ENCOURAGEMENTS = [
-  'Отличный выбор!',
-  'Так держать!',
-  'Почти готово...',
-];
-
-// --- Types ---
-interface StepProps {
-  onNext: (data?: Record<string, any>) => void;
-}
-
-type OnboardingStep = 'survey' | 'photo';
-
-const STEP_ORDER: OnboardingStep[] = ['survey', 'photo'];
-
-// ============================================================
-// STEP 1: Survey (determines startingWindow)
-// ============================================================
-const SURVEY_QUESTIONS = [
-  {
-    question: 'Как часто вы тренируетесь?',
-    options: [
-      { label: 'Никогда', value: 0 },
-      { label: '1–2 раза в неделю', value: 1 },
-      { label: '3+ раз в неделю', value: 2 },
-    ],
-  },
-  {
-    question: 'Сколько отжиманий можете сделать за раз?',
-    options: [
-      { label: '0–5', value: 0 },
-      { label: '6–15', value: 1 },
-      { label: '16+', value: 2 },
-    ],
-  },
-  {
-    question: 'Ваш уровень физической подготовки?',
-    options: [
-      { label: 'Начинающий', value: 0 },
-      { label: 'Средний', value: 1 },
-      { label: 'Продвинутый', value: 2 },
-    ],
-  },
-];
-
-const SurveyStep: React.FC<StepProps> = ({ onNext }) => {
-  const [qIndex, setQIndex] = useState(0);
-  const [answers, setAnswers] = useState<number[]>([]);
-  const [showEncouragement, setShowEncouragement] = useState(false);
-  const [isTransitioning, setIsTransitioning] = useState(false);
-
-  const handleAnswer = (value: number) => {
-    if (isTransitioning) return;
-    const next = [...answers, value];
-
-    if (qIndex < SURVEY_QUESTIONS.length - 1) {
-      setIsTransitioning(true);
-      setShowEncouragement(true);
-      setAnswers(next);
-
-      // Show encouragement, then transition to next question
-      setTimeout(() => {
-        setShowEncouragement(false);
-        setTimeout(() => {
-          setQIndex(qIndex + 1);
-          setIsTransitioning(false);
-        }, 300);
-      }, 1200);
-    } else {
-      const total = next.reduce((a, b) => a + b, 0);
-      const level = total <= 2 ? 'beginner' : total <= 4 ? 'intermediate' : 'advanced';
-      onNext({ survey_answers: next, starting_level: level });
-    }
-  };
-
-  const q = SURVEY_QUESTIONS[qIndex];
-
-  return (
-    <div className="onb-step">
-      <div className="onb-progress">
-        {SURVEY_QUESTIONS.map((_, i) => (
-          <div key={i} className={`onb-progress-dot ${i <= qIndex ? 'active' : ''}`} />
-        ))}
-      </div>
-
-      <AnimatePresence mode="wait">
-        {showEncouragement ? (
-          <motion.p
-            key="encouragement"
-            className="onb-encouragement"
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            transition={{ duration: 0.3 }}
-          >
-            {ENCOURAGEMENTS[qIndex] || ENCOURAGEMENTS[0]}
-          </motion.p>
-        ) : (
-          <motion.div
-            key={`q-${qIndex}`}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.4 }}
-          >
-            <h2 className="onb-title">{q.question}</h2>
-            <div className="onb-buttons">
-              {q.options.map((opt) => (
-                <button key={opt.value} className="onb-btn" onClick={() => handleAnswer(opt.value)}>
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-};
-
-// ============================================================
-// STEP 2: Photo (stub — skip for now)
-// ============================================================
-const PhotoStep: React.FC<StepProps> = ({ onNext }) => (
-  <div className="onb-step">
-    <h2 className="onb-title">Фото профиля</h2>
-    <p className="onb-subtitle">Загрузите селфи для аватара</p>
-    <div className="onb-photo-placeholder">
-      <span className="onb-photo-icon">📷</span>
-    </div>
-    <div className="onb-buttons">
-      <button className="onb-btn onb-btn--secondary" onClick={() => onNext({})}>
-        Пропустить
-      </button>
-    </div>
-  </div>
-);
-
-// ============================================================
-// WAITING SCREEN — while AI processes the photo
-// ============================================================
-const WaitingScreen: React.FC = () => (
-  <motion.div
-    className="onb-step onb-waiting"
-    initial={{ opacity: 0 }}
-    animate={{ opacity: 1 }}
-    transition={{ duration: 0.6 }}
-  >
-    <div className="onb-particles">
-      {Array.from({ length: 12 }).map((_, i) => (
-        <motion.div
-          key={i}
-          className="onb-particle"
-          animate={{
-            y: [0, -30, 0],
-            opacity: [0.3, 1, 0.3],
-            scale: [0.8, 1.2, 0.8],
-          }}
-          transition={{
-            duration: 2 + Math.random() * 1.5,
-            repeat: Infinity,
-            delay: Math.random() * 2,
-          }}
-          style={{
-            left: `${10 + Math.random() * 80}%`,
-            top: `${20 + Math.random() * 60}%`,
-          }}
-        />
-      ))}
-    </div>
-    <h2 className="onb-title">Создаём ваш персональный мир...</h2>
-    <p className="onb-subtitle">AI стилизует ваше фото</p>
-  </motion.div>
-);
-
-// ============================================================
-// MAIN FLOW
-// ============================================================
 const OnboardingFlow: React.FC = () => {
-  const [stepIndex, setStepIndex] = useState(0);
-  const [direction, setDirection] = useState(1);
-  const [collectedData, setCollectedData] = useState<Record<string, any>>({});
-  const [waitingForPhoto, setWaitingForPhoto] = useState(false);
-  const { setAuth, token, photoUrl } = useAuthStore();
+    const [step, setStep] = useState<OnboardingStep>('promo');
+    const [code, setCode] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+    const [attemptsLeft, setAttemptsLeft] = useState(3);
+    const [lockedMinutes, setLockedMinutes] = useState(0);
+    const [grantedRole, setGrantedRole] = useState('');
+    const [playerCode, setPlayerCode] = useState('');
+    const [responsibleName, setResponsibleName] = useState('');
+    const [deepLinkChecked, setDeepLinkChecked] = useState(false);
 
-  const currentStep = STEP_ORDER[stepIndex];
+    const { setAuth, setPlayerCode: storeSetPlayerCode, token } = useAuthStore();
+    const lockTimerRef = useRef<ReturnType<typeof setInterval>>();
 
-  // Poll photo_processing status when waiting
-  useEffect(() => {
-    if (!waitingForPhoto) return;
-    let cancelled = false;
+    // Deep link auto-activation
+    useEffect(() => {
+        const startParam = window.Telegram?.WebApp?.initDataUnsafe?.start_param;
+        if (!startParam || deepLinkChecked) return;
+        setDeepLinkChecked(true);
 
-    const checkStatus = async () => {
-      try {
-        const { data } = await api.get('/users/me/photo-status');
-        if (!cancelled && data.photo_processing === false) {
-          setWaitingForPhoto(false);
-          // Complete onboarding
-          try {
-            await api.put('/users/me', { onboarding_done: true });
-          } catch { /* silent */ }
-          setAuth({ token: token!, role: 'player', onboardingDone: true });
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(startParam)) return;
+
+        setLoading(true);
+        activatePromoLink(startParam)
+            .then((data) => {
+                setGrantedRole('player');
+                setResponsibleName(data.responsible_name || '');
+                handleRoleSuccess('player', '', data.responsible_name || '');
+            })
+            .catch(() => {
+                // Deep link failed — show normal promo input
+                setDeepLinkChecked(true);
+            })
+            .finally(() => setLoading(false));
+    }, [deepLinkChecked]);
+
+    // Lock countdown timer
+    useEffect(() => {
+        if (lockedMinutes <= 0) return;
+        lockTimerRef.current = setInterval(() => {
+            setLockedMinutes((m) => {
+                if (m <= 1) {
+                    clearInterval(lockTimerRef.current);
+                    return 0;
+                }
+                return m - 1;
+            });
+        }, 60000);
+        return () => clearInterval(lockTimerRef.current);
+    }, [lockedMinutes]);
+
+    const handleRoleSuccess = useCallback((role: string, pCode: string, rName: string) => {
+        setGrantedRole(role);
+        setStep('congratulations');
+
+        if (role === 'responsible') {
+            storeSetPlayerCode(pCode);
+            setAuth({
+                token: token!,
+                role: 'responsible',
+                primary_role: 'responsible',
+                has_responsible_access: true,
+                onboardingDone: false,
+            });
+        } else if (role === 'player') {
+            setAuth({
+                token: token!,
+                role: 'player',
+                primary_role: 'player',
+                has_player_access: true,
+                onboardingDone: false,
+            });
+        } else if (role === 'admin') {
+            setAuth({
+                token: token!,
+                role: 'admin',
+                is_admin: true,
+                has_player_access: true,
+                has_responsible_access: true,
+                onboardingDone: false,
+            });
         }
-      } catch { /* silent */ }
-    };
+    }, [token, setAuth, storeSetPlayerCode]);
 
-    const interval = setInterval(checkStatus, 3000);
-    checkStatus();
+    const handleActivate = useCallback(async () => {
+        if (!code.trim() || loading) return;
+        setLoading(true);
+        setError('');
 
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [waitingForPhoto, setAuth, token]);
-
-  const handleNext = useCallback(
-    async (data?: Record<string, any>) => {
-      const merged = { ...collectedData, ...data };
-      setCollectedData(merged);
-
-      // Send update to backend
-      try {
-        await api.put('/users/me', data);
-      } catch {
-        // Non-blocking — continue onboarding even if update fails
-      }
-
-      if (stepIndex < STEP_ORDER.length - 1) {
-        setDirection(1);
-        setStepIndex(stepIndex + 1);
-      } else {
-        // Last step done — check if photo is still processing
-        if (photoUrl) {
-          try {
-            const { data: status } = await api.get('/users/me/photo-status');
-            if (status.photo_processing) {
-              setWaitingForPhoto(true);
-              return;
-            }
-          } catch { /* silent */ }
-        }
-        // No photo or processing done — complete immediately
         try {
-          await api.put('/users/me', { onboarding_done: true });
+            const data = await activatePromo(code.trim());
+            setPlayerCode(data.player_code || '');
+            setResponsibleName(data.responsible_name || '');
+            handleRoleSuccess(data.role_granted, data.player_code || '', data.responsible_name || '');
+        } catch (err: any) {
+            const detail = err.response?.data?.detail || 'Ошибка активации';
+            setError(detail);
+
+            if (err.response?.status === 429) {
+                const match = detail.match(/(\d+)\s*мин/);
+                if (match) setLockedMinutes(parseInt(match[1]));
+            } else {
+                const attMatch = detail.match(/Осталось попыток:\s*(\d+)/);
+                if (attMatch) setAttemptsLeft(parseInt(attMatch[1]));
+                else if (detail.includes('исчерпали')) setAttemptsLeft(0);
+            }
+        } finally {
+            setLoading(false);
+        }
+    }, [code, loading, handleRoleSuccess]);
+
+    const handleContinue = useCallback(async () => {
+        setStep('photo');
+    }, []);
+
+    const handlePhotoDone = useCallback(async () => {
+        try {
+            await api.put('/users/me', { onboarding_done: true });
         } catch { /* silent */ }
-        setAuth({ token: token!, role: 'player', onboardingDone: true });
-      }
-    },
-    [stepIndex, collectedData, setAuth, token, photoUrl]
-  );
+        setAuth({ token: token!, role: grantedRole || 'player', onboardingDone: true });
+    }, [token, grantedRole, setAuth]);
 
-  if (waitingForPhoto) {
-    return (
-      <div className="onb-container">
-        <WaitingScreen />
-      </div>
-    );
-  }
+    // --- Promo step ---
+    if (step === 'promo') {
+        const isLocked = lockedMinutes > 0;
+        return (
+            <div className="onb-container" onClick={(e) => e.stopPropagation()}>
+                <div className="promo-screen">
+                    <motion.div
+                        className="promo-card onb-card"
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.4 }}
+                    >
+                        <h2 className="onb-title">Добро пожаловать</h2>
+                        <p className="onb-subtitle">Введите промокод для активации</p>
 
-  const StepComponent = {
-    survey: SurveyStep,
-    photo: PhotoStep,
-  }[currentStep];
+                        <input
+                            className="promo-input onb-input"
+                            type="text"
+                            autoComplete="off"
+                            autoCapitalize="characters"
+                            maxLength={12}
+                            value={code}
+                            onChange={(e) => { setCode(e.target.value.toUpperCase()); setError(''); }}
+                            placeholder="ПРОМОКОД"
+                            disabled={isLocked || loading}
+                            onClick={(e) => e.stopPropagation()}
+                        />
 
-  return (
-    <div className="onb-container">
-      <AnimatePresence mode="wait" custom={direction}>
-        <motion.div
-          key={currentStep}
-          className="onb-card"
-          custom={direction}
-          variants={slideVariants}
-          initial="enter"
-          animate="center"
-          exit="exit"
-          transition={transition}
-        >
-          <StepComponent onNext={handleNext} />
-        </motion.div>
-      </AnimatePresence>
+                        {error && <div className="promo-error">{error}</div>}
 
-      {/* Step indicator */}
-      <div className="onb-step-indicator">
-        {STEP_ORDER.map((_, i) => (
-          <div key={i} className={`onb-step-dot ${i === stepIndex ? 'active' : i < stepIndex ? 'done' : ''}`} />
-        ))}
-      </div>
-    </div>
-  );
+                        {isLocked ? (
+                            <div className="promo-locked">
+                                Слишком много попыток. Повторите через {lockedMinutes} мин.
+                            </div>
+                        ) : (
+                            <div className="promo-attempts">
+                                Осталось попыток: {attemptsLeft}
+                            </div>
+                        )}
+
+                        <button
+                            className="promo-submit onb-btn onb-btn--accent"
+                            onClick={(e) => { e.stopPropagation(); handleActivate(); }}
+                            disabled={!code.trim() || isLocked || loading}
+                        >
+                            {loading ? 'Проверяем...' : 'Активировать'}
+                        </button>
+                    </motion.div>
+                </div>
+            </div>
+        );
+    }
+
+    // --- Congratulations step ---
+    if (step === 'congratulations') {
+        return (
+            <div className="onb-container" onClick={(e) => e.stopPropagation()}>
+                <div className="congrats-screen">
+                    <motion.div
+                        className="onb-card"
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ duration: 0.5 }}
+                        style={{ textAlign: 'center' }}
+                    >
+                        <div className="congrats-icon">
+                            {grantedRole === 'admin' ? '👑' : '🎉'}
+                        </div>
+                        <h2 className="congrats-title">
+                            {grantedRole === 'responsible' && 'Поздравляю, вы Ответственный!'}
+                            {grantedRole === 'player' && 'Поздравляю, вы Игрок!'}
+                            {grantedRole === 'admin' && 'Добро пожаловать, Админ'}
+                        </h2>
+
+                        {grantedRole === 'player' && responsibleName && (
+                            <p className="congrats-role">Ваш Ответственный: {responsibleName}</p>
+                        )}
+
+                        {grantedRole === 'responsible' && playerCode && (
+                            <div className="congrats-code">
+                                <div className="congrats-code-label">Код для вашего Игрока</div>
+                                <div className="congrats-code-value">{playerCode}</div>
+                                <div className="congrats-code-hint">
+                                    Вы найдёте его в разделе Action
+                                </div>
+                            </div>
+                        )}
+
+                        <button
+                            className="promo-submit onb-btn onb-btn--accent"
+                            onClick={(e) => { e.stopPropagation(); handleContinue(); }}
+                            style={{ marginTop: 24 }}
+                        >
+                            Далее
+                        </button>
+                    </motion.div>
+                </div>
+            </div>
+        );
+    }
+
+    // --- Photo step (reuse existing PhotoGate from App.tsx) ---
+    // When step === 'photo', we mark onboarding as needing photo
+    // The actual PhotoGate is rendered by App.tsx when !photoUrl
+    if (step === 'photo') {
+        return (
+            <div className="onb-container" onClick={(e) => e.stopPropagation()}>
+                <div className="congrats-screen">
+                    <motion.div
+                        className="onb-card"
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.4 }}
+                        style={{ textAlign: 'center' }}
+                    >
+                        <div className="congrats-icon">📸</div>
+                        <h2 className="congrats-title">Фото профиля</h2>
+                        <p className="onb-subtitle">
+                            Сделайте селфи для персонального аватара
+                        </p>
+
+                        <button
+                            className="promo-submit onb-btn onb-btn--accent"
+                            onClick={(e) => { e.stopPropagation(); handlePhotoDone(); }}
+                            style={{ marginTop: 24 }}
+                        >
+                            Открыть приложение
+                        </button>
+                    </motion.div>
+                </div>
+            </div>
+        );
+    }
+
+    return null;
 };
 
 export default OnboardingFlow;

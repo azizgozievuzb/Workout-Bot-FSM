@@ -3,7 +3,7 @@
 > **AI-агент:** Прочитай этот файл ПОСЛЕ `CLAUDE.md`. Здесь написано, на чём остановился предыдущий агент.
 
 **Последнее обновление:** 2026-04-12
-**Последний агент:** Cowork (Claude Opus 4.6)
+**Последний агент:** Claude Opus 4.6
 
 ---
 
@@ -12,6 +12,82 @@
 1. API-подключение — заменить мок-данные реальными запросами
 2. rootMachine — обновить для новой навигации
 3. Unit-тесты для cube-компонентов
+4. Запустить миграцию 010_promo_v2.sql в Supabase SQL Editor
+
+---
+
+## Завершено за 2026-04-12 (сессия 12 — Карусель + Dashboard fullscreen + Промокод-модалка)
+
+### Задача 1: Свайп-карусель в fullscreen
+1. **App.tsx** — `AnimatePresence mode="wait"` + `motion.div` с `carouselVariants` (slide left/right). `nextModule()` зацикленная навигация Action→Market→Bond→Action
+2. **Горизонтальный свайп** — `pointerStartX` + deltaX > 50px + elapsed < 500ms + `|deltaX| > |deltaY|` (не конфликтует с вертикальным свайпом темы)
+3. **Carousel dots** — 3 точки внизу fullscreen, активная увеличена (`carousel-dot.active`)
+4. **Первый вход** — `swipeDir=0` → fade без слайда (carouselVariants проверяет `dir ? dir*300 : 0`)
+
+### Задача 2: Dashboard fullscreen
+5. **dashboard.css** — `.dashboard-panel`: убраны `max-width: 400px`, `margin: auto`, `border-radius`. `height: 100%`
+6. **App.css** — `.overlay-dashboard`: `padding: 0` (убраны `align-items: center`, `justify-content: center`)
+7. **DashboardSection.tsx** — `PRIMARY_ITEMS` (видны сразу: кнопки workout/shop, стрик, баланс) + `MORE_ITEMS` (в dropdown "Ещё ▼": статистика, отдых, лутбоксы, достижения, настройки)
+8. **`.dashboard-section`** — `flex: 1` (равное распределение высоты между секциями)
+9. **Новые CSS** — `.dashboard-primary`, `.dashboard-primary-item` (`.accent` = синий), `.dashboard-more-toggle`
+
+### Задача 3: Промокод-модалка
+10. **Уже реализовано в сессии 10** — `PromoCodeModal.tsx` + `RoleTransition.tsx` (promoOpen вместо toast). API-активация через `activatePromo()`, `addRole()`, `setPlayerCode()`
+
+### Проверка
+11. **tsc --noEmit** — чисто
+
+---
+
+## Завершено за 2026-04-12 (сессия 11 — Бот-обработчик промокода + админ player_code)
+
+### Задача 1: onboarding.py — единое сообщение + блокировка
+1. **Ошибка промокода** — одно сообщение: `"Осталось X попыток, введите код повторно."` или `"❌ Слишком много попыток. Повторите через X мин."`
+2. **Блокировка команд** — в `resp_promo` любая команда кроме `/start` → `"Пожалуйста, введите только промокод."`
+3. **Non-text handler** — стикеры/фото/голосовые в `resp_promo` → `"Пожалуйста, введите только промокод."`
+
+### Задача 2: promo.py — админ-код генерирует player_code
+4. **_create_player_code()** — общий хелпер, используется и для responsible, и для admin (без дублирования)
+5. **Админ-блок** — проверка `is_admin` (защита от повторной активации), `primary_role=responsible`, `onboarding_done=True`, генерация player_code
+6. **Responsible-блок** — переведён на `_create_player_code()` хелпер
+
+### Задача 3: config.py + .env.example
+7. **config.py** — `ADMIN_PROMO_CODE: str = ""` ✓ (из env, не хардкод)
+8. **.env.example** — `ADMIN_PROMO_CODE`, `BOT_USERNAME` ✓
+9. **ast.parse** — оба файла OK
+
+---
+
+## Завершено за 2026-04-12 (сессия 10 — Промокод-система v2, фронтенд)
+
+### Задача: Фронтенд промокод-системы (PROMPT_PROMO_FRONTEND.md)
+1. **promo.ts** — `frontend/src/api/promo.ts`: activatePromo, activatePromoLink, getMyPlayerCode
+2. **authStore** — добавлены player_code, setPlayerCode, addRole (для добавления второй роли)
+3. **OnboardingFlow.tsx** — полностью переписан: promo → congratulations → photo → complete. Deep link auto-activation через start_param (UUID). Rate limit UI (3 попытки, обратный отсчёт блокировки)
+4. **PromoCodeModal.tsx** — новый компонент: модалка для разблокировки второй роли при тапе на кнопку P/R
+5. **ActionCube.tsx** — ResponsibleView: invite-блок с промокодом (getMyPlayerCode API), копирование кода/ссылки, toast
+6. **RoleTransition.tsx** — при denied открывается PromoCodeModal вместо toast
+7. **App.tsx** — onboarding показывается для всех ролей (убрано условие role === 'player')
+8. **CSS** — OnboardingFlow.css (promo-screen, congrats-screen), cubes.css (promo-invite-block), promo-modal.css (модалка)
+9. **tsc --noEmit** — чисто
+
+---
+
+## Завершено за 2026-04-12 (сессия 9 — Промокод-система v2, бэкенд)
+
+### Задача: Новая промокод-система (backend)
+1. **Миграция 010** — `backend/db/migrations/010_promo_v2.sql`: code_type (responsible/player/admin), parent_code_id, responsible_id, deep_link_token, expires_at + индексы
+2. **POST /promo/activate** — `backend/api/routers/promo.py`: универсальная активация. Rate limit (3/час), admin code из env, responsible_code → генерация player_code, player_code → partnership + mark used
+3. **GET /promo/my-player-code** — возвращает неиспользованный player_code + deep_link для ответственного
+4. **POST /promo/activate-link/{token}** — активация через deep link token (та же логика что player_code)
+5. **POST /admin/promo/create** — `backend/api/routers/admin.py`: генерация N responsible-кодов (формат R-XXXXXX), только для is_admin=true
+6. **GET /admin/promo/list** — список всех кодов с фильтрами (code_type, is_used, tier)
+7. **auth.py** — добавлено поле `has_promo_code: bool` в TokenResponse + логика проверки
+8. **onboarding.py** — обработка UUID deep link токена: `/start <uuid>` → redirect в Mini App с startapp параметром. Старый PAIR_ flow сохранён
+9. **config.py** — добавлены `ADMIN_PROMO_CODE`, `BOT_USERNAME` в Settings
+10. **.env.example** — добавлены `ADMIN_PROMO_CODE`, `BOT_USERNAME`
+11. **main.py** — подключены promo_router и admin_router
+12. **Все .py файлы парсятся без ошибок** (ast.parse OK)
 
 ---
 

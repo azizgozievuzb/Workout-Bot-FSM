@@ -25,6 +25,8 @@ class TokenResponse(BaseModel):
     has_player_access: bool = False
     has_responsible_access: bool = False
     is_admin: bool = False
+    # Promo v2: has unused player_code (for responsibles)
+    has_promo_code: bool = False
 
 
 @router.post("/telegram", response_model=TokenResponse)
@@ -60,17 +62,32 @@ async def telegram_auth(body: TelegramAuthRequest) -> TokenResponse:
     # Получаем актуальные данные
     user_res = (
         await db.table("users")
-        .select("role, onboarding_done, profile_photo_url, photo_dark_url, photo_light_url, primary_role, has_player_access, has_responsible_access, is_admin")
+        .select("id, role, onboarding_done, profile_photo_url, photo_dark_url, photo_light_url, primary_role, has_player_access, has_responsible_access, is_admin")
         .eq("telegram_id", telegram_id)
         .single()
         .execute()
     )
     user_data = user_res.data
+    user_uuid = user_data.get("id")
 
     # Backward-compat: compute `role` from dual-role fields
     primary = user_data.get("primary_role")
     is_admin = user_data.get("is_admin", False)
     compat_role = "admin" if is_admin else (primary or user_data.get("role"))
+
+    # Check for unused player_code (for responsibles)
+    has_promo = False
+    if user_uuid:
+        promo_res = (
+            await db.table("promo_codes")
+            .select("id")
+            .eq("responsible_id", user_uuid)
+            .eq("code_type", "player")
+            .eq("is_used", False)
+            .limit(1)
+            .execute()
+        )
+        has_promo = bool(promo_res.data)
 
     token = create_access_token(telegram_id, compat_role)
 
@@ -85,4 +102,5 @@ async def telegram_auth(body: TelegramAuthRequest) -> TokenResponse:
         has_player_access=user_data.get("has_player_access", False),
         has_responsible_access=user_data.get("has_responsible_access", False),
         is_admin=is_admin,
+        has_promo_code=has_promo,
     )
