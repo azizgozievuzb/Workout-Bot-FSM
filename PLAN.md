@@ -31,29 +31,43 @@
 > **Примечание:** schedulerMachine реализуется не как XState-машина, а как набор cron-задач в APScheduler на бэкенде (см. ROADMAP.md, Шаг 3.4).
 
 ## Этап 2: Инфраструктура 🏗
-- [ ] Создать структуру папок `backend/` и `frontend/`.
-- [ ] Настроить Supabase (проект, таблицы, Storage).
-- [ ] Создать `.env.example` файлы.
-- [ ] Настроить хостинг (Railway).
+- [x] Создать структуру папок `backend/` и `frontend/`.
+- [x] Настроить Supabase (проект, таблицы, Storage).
+- [x] Создать `.env.example` файлы.
+- [x] Настроить хостинг (Railway + Vercel).
 
 ## Этап 3: Backend (Python + Aiogram) 🐍
-- [ ] Настройка Supabase PostgreSQL (таблицы из ROADMAP.md).
+- [x] Настройка Supabase PostgreSQL (миграции 001-010).
 - [ ] Реализация API для приёма видео от Mini App.
-- [ ] Интеграция с Gemini Vision API (анализ 16 кусков видео).
-- [ ] Написание handlers для всех 8 FSM-машин.
+- [x] Интеграция с Gemini Vision API (AI-стилизация фото).
+- [x] Onboarding handler (промокод → язык → пол → имя → PAIR-ссылка).
+- [x] Промокод-система v2 (code_type: responsible/player/admin, deep link, admin endpoints).
+- [x] Dual-role система (primary_role + has_player_access + has_responsible_access).
+- [x] Activity Feed API (GET /feed, POST /feed/read, GET /feed/unread-count).
 - [ ] Scheduler (APScheduler): стрики, напоминания, подписки.
+- [ ] Видео-анализ тренировки через Gemini Vision.
 
 ## Этап 4: Frontend (Vite + React) ⚛️
-- [ ] Инициализация Telegram SDK.
+- [x] Инициализация Telegram SDK + 3D chaos mode (Three.js кубы/овалы).
+- [x] Тёмная/светлая тема + gesture layer (long press, swipe).
+- [x] Онбординг: промокод → поздравление → фото → приложение.
+- [x] 3 куба: ActionCube, MarketCube, BondCube (UI-скелеты с мок-данными).
+- [x] Dual-role система: toggle P/R, Gravity Collapse / Supernova анимации.
+- [x] Свайп-карусель между кубами в fullscreen.
+- [x] Dashboard (статический режим) на весь экран с dropdown меню.
+- [x] PromoCodeModal для разблокировки второй роли.
+- [x] Invite-блок в ActionCube (промокод + deep link для приглашения игрока).
+- [ ] **Admin Cube** — 4-й куб для админа (создание промокодов, управление).
+- [ ] API-подключение — заменить мок-данные реальными запросами.
 - [ ] Интерфейс тренировки (камера + таймеры + WakeLock).
-- [ ] Локальное хранение видео до "коммита".
-- [ ] Магазин, панель Responsible, онбординг.
+- [ ] Магазин ответственного (подарки для игрока).
 - [ ] Экран результатов (AI score, звёзды, стрик).
 
 ## Этап 5: Testing & Production 🚀
-- [ ] Unit-тесты критичных функций.
-- [ ] E2E тест в реальном Telegram.
-- [ ] Деплой на Railway.
+- [x] Smoke-тесты dual-role (backend + frontend, 29/29 passed).
+- [ ] Unit-тесты для cube-компонентов.
+- [x] E2E тест в реальном Telegram (онбординг + промокод + кубы).
+- [x] Деплой на Railway (backend) + Vercel (frontend).
 - [ ] Webhook + мониторинг (Sentry).
 
 ---

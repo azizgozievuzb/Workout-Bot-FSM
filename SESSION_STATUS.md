@@ -3,16 +3,40 @@
 > **AI-агент:** Прочитай этот файл ПОСЛЕ `CLAUDE.md`. Здесь написано, на чём остановился предыдущий агент.
 
 **Последнее обновление:** 2026-04-12
-**Последний агент:** Claude Opus 4.6
+**Последний агент:** Cowork (Claude Opus 4.6)
 
 ---
 
-## СЛЕДУЮЩАЯ ЗАДАЧА
+## СЛЕДУЮЩАЯ ЗАДАЧА — Admin Cube (4-й куб для Азиза)
 
+Админ-код работает, Азиз заходит как админ (`is_admin=true` + dual-role). Сейчас видит те же 3 куба. Нужен **4-й куб "Admin"** — видим только когда `is_admin=true`.
+
+### Admin Cube содержит:
+1. **Создание промокодов** — кнопка "Создать промокод для Ответственного" → вызывает `POST /admin/promo/create`
+2. **Список промокодов** — таблица всех кодов с фильтрами (тип, использован/нет, привязанный юзер) → `GET /admin/promo/list`
+3. **Позже:** управление пользователями, статистика, биллинг
+
+### Реализация:
+- Создать `frontend/src/components/cubes/AdminCube.tsx`
+- В `App.tsx` — если `is_admin`, показывать 4-й куб в chaos mode и carousel
+- В `Backdrop` — добавить 4-й объект (куб/овал) для админа
+- Backend API уже готов: `POST /admin/promo/create`, `GET /admin/promo/list`
+
+### После Admin Cube:
 1. API-подключение — заменить мок-данные реальными запросами
 2. rootMachine — обновить для новой навигации
 3. Unit-тесты для cube-компонентов
-4. Запустить миграцию 010_promo_v2.sql в Supabase SQL Editor
+
+---
+
+## Завершено за 2026-04-12 (сессия 13 — Cowork — фикс админ-кода в боте)
+
+### Фикс: ADMIN_PROMO_CODE не проверялся в боте
+1. **onboarding_fsm.py** — `validate_promo_code()`: добавлена проверка `settings.ADMIN_PROMO_CODE` ДО поиска в БД. Админ-код сразу ставит `is_admin=true`, `has_player_access=true`, `has_responsible_access=true`, `primary_role='responsible'`
+2. **onboarding.py** — если `tier == "admin"` → пропускается полный онбординг (язык/пол/имя), сразу `onboarding_done=true` + кнопка "Открыть приложение"
+3. **Импорт** — `from ...core.config import settings` (относительный, как в остальных файлах)
+4. **Миграция 010** — выполнена в Supabase SQL Editor ✅
+5. **`ADMIN_PROMO_CODE=095709570957`** — задан в Railway env ✅
 
 ---
 
