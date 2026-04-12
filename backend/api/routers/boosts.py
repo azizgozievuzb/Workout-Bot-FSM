@@ -50,9 +50,11 @@ async def buy_boost(
         await db.table("users")
         .select("id")
         .eq("telegram_id", user["telegram_id"])
-        .single()
+        .maybe_single()
         .execute()
     )
+    if not user_res.data:
+        raise HTTPException(status_code=404, detail="User not found")
     responsible_id = user_res.data["id"]
 
     # Проверить партнёрство
@@ -101,9 +103,11 @@ async def get_active_boost(user: dict = Depends(get_current_user)):
         await db.table("users")
         .select("id")
         .eq("telegram_id", user["telegram_id"])
-        .single()
+        .maybe_single()
         .execute()
     )
+    if not user_res.data:
+        raise HTTPException(status_code=404, detail="User not found")
     user_id = user_res.data["id"]
 
     # Найти партнёрство где я — Player

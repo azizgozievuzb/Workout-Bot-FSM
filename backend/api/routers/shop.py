@@ -55,9 +55,11 @@ async def purchase_item(
         await db.table("users")
         .select("id")
         .eq("telegram_id", user["telegram_id"])
-        .single()
+        .maybe_single()
         .execute()
     )
+    if not user_res.data:
+        raise HTTPException(status_code=404, detail="User not found")
     user_id = user_res.data["id"]
 
     # Получить товар
@@ -66,7 +68,7 @@ async def purchase_item(
         .select("*")
         .eq("id", body.item_id)
         .eq("is_active", True)
-        .single()
+        .maybe_single()
         .execute()
     )
     if not item_res.data:
@@ -80,7 +82,7 @@ async def purchase_item(
         await db.table("player_stats")
         .select("star_balance")
         .eq("player_id", user_id)
-        .single()
+        .maybe_single()
         .execute()
     )
     if not stats_res.data:
