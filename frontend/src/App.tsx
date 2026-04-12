@@ -105,6 +105,7 @@ const App: React.FC = () => {
                     setActiveModule(hit.label as ModuleName);
                 }
             // fullscreen & dashboard: тап НЕ выходит — только long press 3с
+            }
         }
     }, [clearTimers, setLayout]);
 
