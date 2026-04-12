@@ -18,27 +18,34 @@ const VOID_MS = 500;
 
 /* --- Gravity Collapse (dark) --- */
 const darkVariants = {
-    initial: { scale: 0, opacity: 0, skewX: '8deg' },
+    initial: { scale: 0, opacity: 0, scaleX: 0.3, scaleY: 2.5, y: -60 },
     animate: {
-        scale: 1, opacity: 1, skewX: '0deg',
-        transition: { duration: 0.55, ease: [0.16, 1, 0.3, 1] },
+        scale: 1, opacity: 1, scaleX: 1, scaleY: 1, y: 0,
+        transition: { duration: 0.6, ease: [0.16, 1, 0.3, 1] },
     },
     exit: {
-        scale: 0, opacity: 0, skewX: '-5deg',
-        transition: { duration: 0.5, ease: [0.55, 0, 1, 0.45] },
+        scaleX: 0.2,
+        scaleY: 2.8,
+        y: -80,
+        opacity: 0,
+        filter: 'blur(3px)',
+        transition: { duration: 0.65, ease: [0.55, 0, 1, 0.45] },
     },
 };
 
 /* --- Supernova (light) --- */
 const lightVariants = {
-    initial: { scale: 0.8, opacity: 0, filter: 'blur(8px)' },
+    initial: { scale: 0.3, opacity: 0, filter: 'blur(12px) brightness(2)', rotate: -5 },
     animate: {
-        scale: 1, opacity: 1, filter: 'blur(0px)',
-        transition: { duration: 0.55, ease: [0.16, 1, 0.3, 1] },
+        scale: 1, opacity: 1, filter: 'blur(0px) brightness(1)', rotate: 0,
+        transition: { duration: 0.6, ease: [0.16, 1, 0.3, 1] },
     },
     exit: {
-        scale: 1.15, opacity: 0, filter: 'blur(10px)',
-        transition: { duration: 0.45, ease: [0.55, 0, 1, 0.45] },
+        scale: 1.4,
+        opacity: 0,
+        filter: 'blur(8px) brightness(1.8)',
+        rotate: 3,
+        transition: { duration: 0.55, ease: [0.22, 0, 0.36, 1] },
     },
 };
 
@@ -58,13 +65,14 @@ const RoleTransition: React.FC<RoleTransitionProps> = ({
             ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
             : false
     );
+    const transitioning = useRef(false);
 
     useEffect(() => { isFirstRender.current = false; }, []);
     useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
 
     const handleTap = useCallback((e: React.MouseEvent) => {
         e.stopPropagation();
-        if (phase !== 'idle') return;
+        if (phase !== 'idle' || transitioning.current) return;
 
         if (!dual) {
             setDenied(true);
@@ -76,25 +84,32 @@ const RoleTransition: React.FC<RoleTransitionProps> = ({
         }
 
         if (prefersReduced.current) {
+            transitioning.current = true;
             onToggle();
+            setTimeout(() => { transitioning.current = false; }, 100);
             return;
         }
 
+        transitioning.current = true;
         setPhase('exiting');
         setShowContent(false);
     }, [phase, dual, onToggle]);
 
     const handleExitComplete = useCallback(() => {
+        if (phase !== 'exiting') return;
         setPhase('void');
         timerRef.current = setTimeout(() => {
             onToggle();
             setShowContent(true);
             setPhase('entering');
         }, VOID_MS);
-    }, [onToggle]);
+    }, [onToggle, phase]);
 
     const handleAnimComplete = useCallback(() => {
-        if (phase === 'entering') setPhase('idle');
+        if (phase === 'entering') {
+            setPhase('idle');
+            transitioning.current = false;
+        }
     }, [phase]);
 
     const isDark = theme === 'dark';

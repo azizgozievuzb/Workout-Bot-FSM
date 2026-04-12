@@ -22,8 +22,6 @@ type ModuleName = 'Action' | 'Market' | 'Bond' | 'Admin';
 // --- Константы таймеров (мс) ---
 const TAP_MAX = 300;
 const HOLD_DASHBOARD = 3000; // 3 сек → toggle dashboard
-const SWIPE_UP_THRESHOLD = 80; // px минимальная дистанция свайпа вверх
-const HOLD_FOR_SWIPE = 500; // мс минимальное удержание перед свайпом
 
 const carouselVariants = {
     enter: (dir: number) => ({ x: dir ? dir * 300 : 0, opacity: 0 }),
@@ -50,6 +48,8 @@ const App: React.FC = () => {
     const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const holdFired = useRef<boolean>(false);
     const layoutModeRef = useRef<LayoutMode>('chaos');
+    const wheelCooldown = useRef(false);
+    const lastTapTime = useRef(0);
 
     const MODULES: ModuleName[] = is_admin
         ? ['Action', 'Market', 'Bond', 'Admin']
@@ -89,15 +89,11 @@ const App: React.FC = () => {
 
         clearTimers();
 
-        // Удержание 2.5с → toggle: chaos↔dashboard
+        // Удержание 2.5с → toggle: chaos→dashboard (only from chaos)
         holdTimer.current = setTimeout(() => {
             holdFired.current = true;
-            const cur = layoutModeRef.current;
-            if (cur === 'chaos') {
+            if (layoutModeRef.current === 'chaos') {
                 setLayout('dashboard');
-                setActiveModule(null);
-            } else {
-                setLayout('chaos');
                 setActiveModule(null);
             }
         }, HOLD_DASHBOARD);
@@ -107,8 +103,19 @@ const App: React.FC = () => {
         const elapsed = Date.now() - pointerDownAt.current;
         clearTimers();
 
-        const deltaY = pointerStartY.current - e.clientY; // положительный = вверх
-        const deltaX = e.clientX - pointerStartX.current;  // положительный = вправо
+        const deltaY = pointerStartY.current - e.clientY;
+        const deltaX = e.clientX - pointerStartX.current;
+
+        // --- Двойной тап в верхних 80px → смена темы (все режимы) ---
+        if (elapsed < TAP_MAX && !holdFired.current && pointerStartY.current < 80) {
+            const now = Date.now();
+            if (now - lastTapTime.current < 400) {
+                setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+                lastTapTime.current = 0;
+                return;
+            }
+            lastTapTime.current = now;
+        }
 
         // --- Горизонтальный свайп в fullscreen → карусель ---
         if (layoutModeRef.current === 'fullscreen' && activeModule
@@ -116,12 +123,6 @@ const App: React.FC = () => {
             const dir: 1 | -1 = deltaX < 0 ? 1 : -1;
             setSwipeDir(dir);
             setActiveModule(nextMod(activeModule, dir));
-            return;
-        }
-
-        // --- Свайп вверх при удержании → смена темы ---
-        if (elapsed > HOLD_FOR_SWIPE && deltaY > SWIPE_UP_THRESHOLD) {
-            setTheme(prev => prev === 'dark' ? 'light' : 'dark');
             return;
         }
 
@@ -139,6 +140,17 @@ const App: React.FC = () => {
             }
         }
     }, [clearTimers, setLayout, activeModule, nextMod]);
+
+    const handleWheel = useCallback((e: React.WheelEvent) => {
+        if (layoutModeRef.current !== 'fullscreen' || !activeModule || wheelCooldown.current) return;
+        const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : 0;
+        if (Math.abs(delta) < 30) return;
+        wheelCooldown.current = true;
+        const dir: 1 | -1 = delta > 0 ? 1 : -1;
+        setSwipeDir(dir);
+        setActiveModule(nextMod(activeModule, dir));
+        setTimeout(() => { wheelCooldown.current = false; }, 400);
+    }, [activeModule, nextMod]);
 
     return (
         <ThemeContext.Provider value={theme}>
@@ -183,7 +195,8 @@ const App: React.FC = () => {
 
                         {/* === FULLSCREEN MODULE (carousel) === */}
                         {layoutMode === 'fullscreen' && activeModule && (
-                            <div className="overlay-fullscreen" onPointerDown={handleGestureDown} onPointerUp={handleGestureUp}>
+                            <div className="overlay-fullscreen" onPointerDown={handleGestureDown} onPointerUp={handleGestureUp} onWheel={handleWheel}>
+                                <button className="overlay-close" onClick={(e) => { e.stopPropagation(); setLayout('chaos'); setActiveModule(null); }}>✕</button>
                                 <div className="overlay-title">{activeModule}</div>
                                 <AnimatePresence mode="wait" custom={swipeDir}>
                                     <motion.div
@@ -217,6 +230,7 @@ const App: React.FC = () => {
                                 onPointerDown={handleGestureDown}
                                 onPointerUp={handleGestureUp}
                             >
+                                <button className="overlay-close" onClick={(e) => { e.stopPropagation(); setLayout('chaos'); setActiveModule(null); }}>✕</button>
                                 <div className="dashboard-panel">
                                     {(is_admin ? ['Action', 'Market', 'Bond', 'Admin'] as ModuleName[] : ['Action', 'Market', 'Bond'] as ModuleName[]).map((mod, i, arr) => (
                                         <React.Fragment key={mod}>

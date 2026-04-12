@@ -295,20 +295,36 @@
 
 .rt-void-dark {
     background: radial-gradient(
-        circle at 42px 36px,
-        rgba(255, 140, 0, 0.15) 0%,
-        rgba(0, 0, 0, 0.4) 40%,
-        transparent 80%
+        ellipse 80px 120px at 42px 36px,
+        rgba(255, 100, 0, 0.25) 0%,
+        rgba(255, 60, 0, 0.15) 30%,
+        rgba(0, 0, 0, 0.6) 60%,
+        transparent 100%
     );
+    animation: void-dark-pulse 0.5s ease-in-out;
+}
+
+@keyframes void-dark-pulse {
+    0% { opacity: 0; }
+    40% { opacity: 1; }
+    100% { opacity: 0.8; }
 }
 
 .rt-void-light {
     background: radial-gradient(
         circle at center,
-        rgba(255, 255, 255, 0.35) 0%,
-        rgba(255, 215, 0, 0.1) 40%,
+        rgba(255, 255, 255, 0.7) 0%,
+        rgba(255, 230, 150, 0.4) 25%,
+        rgba(255, 180, 80, 0.15) 50%,
         transparent 80%
     );
+    animation: void-light-flash 0.5s ease-out;
+}
+
+@keyframes void-light-flash {
+    0% { opacity: 0; transform: scale(0.5); }
+    30% { opacity: 1; transform: scale(1.2); }
+    100% { opacity: 0.7; transform: scale(1); }
 }
 
 /* ==========================================================================
