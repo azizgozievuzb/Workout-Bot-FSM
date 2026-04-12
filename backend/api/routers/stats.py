@@ -55,14 +55,17 @@ async def get_my_stats(user: dict = Depends(get_current_user)):
 
     if not stats_res.data:
         # Автосоздание записи для нового игрока
-        insert_res = (
-            await db.table("player_stats")
-            .insert({"player_id": user_id})
-            .execute()
-        )
-        stats_res.data = insert_res.data[0] if insert_res.data else {}
+        try:
+            insert_res = (
+                await db.table("player_stats")
+                .insert({"player_id": user_id})
+                .execute()
+            )
+            stats_res.data = insert_res.data[0] if insert_res.data else {}
+        except Exception:
+            stats_res.data = {}
 
-    d = stats_res.data
+    d = stats_res.data or {}
     return PlayerStatsResponse(
         global_score=d.get("global_score", 0),
         three_day_score=d.get("three_day_score", 0),
