@@ -40,7 +40,10 @@ function getInitData(): string {
 }
 
 export function useAuth() {
-  const { isAuthenticated, role, onboardingDone, photoUrl, photoDarkUrl, photoLightUrl, setAuth, setStyledPhotos, clearAuth } = useAuthStore();
+  const {
+    isAuthenticated, role, primary_role, has_player_access, has_responsible_access, is_admin,
+    onboardingDone, photoUrl, photoDarkUrl, photoLightUrl, setAuth, setStyledPhotos, clearAuth,
+  } = useAuthStore();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -65,7 +68,7 @@ export function useAuth() {
 
         if (!initData) {
           if (import.meta.env.DEV) {
-            setAuth('dev-token', 'player', false, null);
+            setAuth({ token: 'dev-token', role: 'player', onboardingDone: false });
             setToken('dev-token');
             setIsLoading(false);
             return;
@@ -83,7 +86,18 @@ export function useAuth() {
 
         if (!cancelled) {
           setToken(data.access_token);
-          setAuth(data.access_token, data.role, data.onboarding_done, data.profile_photo_url, data.photo_dark_url, data.photo_light_url);
+          setAuth({
+            token: data.access_token,
+            role: data.role,
+            primary_role: data.primary_role,
+            has_player_access: data.has_player_access,
+            has_responsible_access: data.has_responsible_access,
+            is_admin: data.is_admin,
+            onboardingDone: data.onboarding_done,
+            photoUrl: data.profile_photo_url,
+            photoDarkUrl: data.photo_dark_url,
+            photoLightUrl: data.photo_light_url,
+          });
         }
       } catch (err: any) {
         if (!cancelled) {
@@ -133,5 +147,9 @@ export function useAuth() {
     };
   }, [isAuthenticated, photoUrl, photoDarkUrl, photoLightUrl, setStyledPhotos]);
 
-  return { isLoading, isAuthenticated, role, onboardingDone, photoUrl, photoDarkUrl, photoLightUrl, error, clearAuth };
+  return {
+    isLoading, isAuthenticated, role, primary_role,
+    has_player_access, has_responsible_access, is_admin,
+    onboardingDone, photoUrl, photoDarkUrl, photoLightUrl, error, clearAuth,
+  };
 }

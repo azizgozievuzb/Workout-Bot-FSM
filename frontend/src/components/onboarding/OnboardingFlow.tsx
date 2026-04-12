@@ -214,7 +214,7 @@ const OnboardingFlow: React.FC = () => {
           try {
             await api.put('/users/me', { onboarding_done: true });
           } catch { /* silent */ }
-          setAuth(token!, 'player', true);
+          setAuth({ token: token!, role: 'player', onboardingDone: true });
         }
       } catch { /* silent */ }
     };
@@ -258,7 +258,7 @@ const OnboardingFlow: React.FC = () => {
         try {
           await api.put('/users/me', { onboarding_done: true });
         } catch { /* silent */ }
-        setAuth(token!, 'player', true);
+        setAuth({ token: token!, role: 'player', onboardingDone: true });
       }
     },
     [stepIndex, collectedData, setAuth, token, photoUrl]

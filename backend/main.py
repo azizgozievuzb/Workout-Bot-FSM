@@ -12,6 +12,7 @@ from aiogram.types import Update
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
+from .api.routers.activity_feed import router as activity_feed_router
 from .api.routers.auth import router as auth_router
 from .api.routers.partnerships import router as partnerships_router
 from .api.routers.users import router as users_router
@@ -81,6 +82,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(partnerships_router)
+app.include_router(activity_feed_router)
 
 
 @app.get("/health")

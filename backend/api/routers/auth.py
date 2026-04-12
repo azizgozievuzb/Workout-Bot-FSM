@@ -20,6 +20,11 @@ class TokenResponse(BaseModel):
     profile_photo_url: str | None = None
     photo_dark_url: str | None = None
     photo_light_url: str | None = None
+    # Dual-role fields (migration 007)
+    primary_role: str | None = None
+    has_player_access: bool = False
+    has_responsible_access: bool = False
+    is_admin: bool = False
 
 
 @router.post("/telegram", response_model=TokenResponse)
@@ -55,20 +60,29 @@ async def telegram_auth(body: TelegramAuthRequest) -> TokenResponse:
     # Получаем актуальные данные
     user_res = (
         await db.table("users")
-        .select("role, onboarding_done, profile_photo_url, photo_dark_url, photo_light_url")
+        .select("role, onboarding_done, profile_photo_url, photo_dark_url, photo_light_url, primary_role, has_player_access, has_responsible_access, is_admin")
         .eq("telegram_id", telegram_id)
         .single()
         .execute()
     )
     user_data = user_res.data
 
-    token = create_access_token(telegram_id, user_data["role"])
+    # Backward-compat: compute `role` from dual-role fields
+    primary = user_data.get("primary_role")
+    is_admin = user_data.get("is_admin", False)
+    compat_role = "admin" if is_admin else (primary or user_data.get("role"))
+
+    token = create_access_token(telegram_id, compat_role)
 
     return TokenResponse(
         access_token=token,
-        role=user_data["role"],
+        role=compat_role,
         onboarding_done=user_data.get("onboarding_done", False),
         profile_photo_url=user_data.get("profile_photo_url"),
         photo_dark_url=user_data.get("photo_dark_url"),
         photo_light_url=user_data.get("photo_light_url"),
+        primary_role=primary,
+        has_player_access=user_data.get("has_player_access", False),
+        has_responsible_access=user_data.get("has_responsible_access", False),
+        is_admin=is_admin,
     )

@@ -180,7 +180,12 @@ async def cmd_start(message: types.Message, state: FSMContext) -> None:
         db = await get_supabase()
         await (
             db.table("users")
-            .update({"onboarding_state": "player_language", "role": "player"})
+            .update({
+                "onboarding_state": "player_language",
+                "role": "player",
+                "primary_role": "player",
+                "has_player_access": True,
+            })
             .eq("telegram_id", message.from_user.id)
             .execute()
         )
@@ -205,7 +210,12 @@ async def cmd_start(message: types.Message, state: FSMContext) -> None:
     db = await get_supabase()
     await (
         db.table("users")
-        .update({"onboarding_state": "resp_promo", "role": "responsible"})
+        .update({
+            "onboarding_state": "resp_promo",
+            "role": "responsible",
+            "primary_role": "responsible",
+            "has_responsible_access": True,
+        })
         .eq("telegram_id", message.from_user.id)
         .execute()
     )

@@ -7,17 +7,49 @@
 
 ---
 
-## СЛЕДУЮЩАЯ ЗАДАЧА — Реализация внутренних экранов 3 кубов
+## СЛЕДУЮЩАЯ ЗАДАЧА — UI-компоненты внутри кубов
 
-Визуальная часть готова (голограммные кубы + объёмные овалы). Следующий шаг — наполнить кубы реальным контентом:
-1. **Action** — интерфейс Игрока (тренировка) + интерфейс Ответственного (мониторинг) + Gravity Collapse / Supernova переключение ролей
-2. **Market** — магазин для Игрока (покупка) + магазин для Ответственного (пополнение)
-3. **Bond** — activity feed + push-тизеры + профиль + настройки
+Фронтенд инфраструктура dual-role готова (типы, стор, хелперы, API-сервис). Smoke-тесты написаны и проходят. Следующий шаг — UI-компоненты:
+1. **Action куб** — экран Игрока (тренировка) + экран Ответственного (мониторинг) + Gravity Collapse / Supernova переключатель ролей
+2. **Market куб** — магазин Игрока + магазин Ответственного
+3. **Bond куб** — activity feed UI (использует `api/activityFeed.ts`) + профиль + настройки
+4. **rootMachine** — обновить для новой навигации по кубам
 
-Также нужно:
-- Обновить схему БД (primary_role, has_player_access, has_responsible_access, is_admin, rest_days, activity_feed)
-- Реализовать API для activity_feed
-- Обновить rootMachine для новой навигации
+---
+
+## Завершено за 2026-04-12 (сессия 5 — Smoke-тесты dual-role)
+
+### Backend: smoke tests (`backend/tests/test_dual_role.py`)
+1. **Pydantic schema validation** — TokenResponse имеет dual-role поля (primary_role, has_player_access, has_responsible_access, is_admin), все bool-типы корректны. FeedResponse/UnreadCountResponse/MarkReadResponse — схемы валидны. **12/12 passed**
+2. **Endpoint availability** — POST /auth/telegram доступен (422 без body). Feed endpoints — 404 (не задеплоены, код ещё untracked в git)
+3. **Integration mode** — полные тесты с BOT_TOKEN (auth → feed GET/POST). Запуск: `BOT_TOKEN=xxx python3 backend/tests/test_dual_role.py`
+
+### Frontend: role utils tests (`frontend/src/utils/__tests__/roles.test.ts`)
+4. **vitest** установлен как devDependency
+5. **17 тестов** для isDualRole, canPlay, canMonitor, isAdmin, getActiveRoles — 4 мок-юзера (player-only, responsible-only, dual-role, admin). **17/17 passed**
+
+---
+
+## Завершено за 2026-04-12 (сессия 4 — Frontend dual-role infra)
+
+### Frontend: dual-role типы, стор, утилиты, API
+1. **Типы** — `authStore.ts`: экспортируемые `PrimaryRole`, `LegacyRole`, `DualRoleUser` interface. Новые поля: `primary_role`, `has_player_access`, `has_responsible_access`, `is_admin`. Старое `role` сохранено для совместимости
+2. **Zustand store** — `setAuth()` принимает объект с новыми полями. Fallback: если бэкенд не вернул dual-role поля, вычисляются из legacy `role`
+3. **useAuth hook** — парсит все dual-role поля из `/auth/telegram` ответа, возвращает их компонентам
+4. **OnboardingFlow** — обновлён под новую сигнатуру `setAuth()`
+5. **Role helpers** — `frontend/src/utils/roles.ts`: `isDualRole()`, `canPlay()`, `canMonitor()`, `isAdmin()`, `getActiveRoles()`
+6. **Activity Feed API** — `frontend/src/api/activityFeed.ts`: `getFeed()`, `markAsRead()`, `getUnreadCount()` через общий axios instance
+7. **TypeScript** — `tsc --noEmit` проходит чисто
+
+---
+
+## Завершено за 2026-04-12 (сессия 3 — Backend dual-role)
+
+### Backend: dual-role system (миграции 007-009)
+1. **Pydantic-модели** — `backend/models/user.py`: `UserDualRole` (primary_role, has_player_access, has_responsible_access, is_admin), `PlayerStatsRest` (rest_days_remaining, rest_days_used_this_month)
+2. **Auth endpoint** — `TokenResponse` возвращает dual-role поля. Backward-compat: `role` вычисляется из `primary_role` + `is_admin`
+3. **Onboarding** — при регистрации игрока пишет `primary_role="player"`, `has_player_access=true`. Ответственный: `primary_role="responsible"`, `has_responsible_access=true`. Старое поле `role` пишется параллельно
+4. **Activity Feed API** — `backend/api/routers/activity_feed.py`: GET /feed (пагинация), POST /feed/read (mark read), GET /feed/unread-count. Подключён в main.py
 
 ---
 
