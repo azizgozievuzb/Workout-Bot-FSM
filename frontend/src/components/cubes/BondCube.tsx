@@ -1,30 +1,47 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import type { DualRoleUser } from '../../stores/authStore';
 import { canPlay, canMonitor, isDualRole } from '../../utils/roles';
+import { getFeed, markAsRead } from '../../api/activityFeed';
+import type { FeedItem } from '../../api/activityFeed';
 import RoleTransition from '../shared/RoleTransition';
 import '../../styles/cubes.css';
 
 type ActiveView = 'player' | 'responsible';
 
-const PLAYER_FEED = [
-    { id: 1, icon: '⚡', text: 'Ответственный активировал буст X2', time: '2 часа назад' },
-    { id: 2, icon: '🔔', text: 'Пинг от Ответственного', time: '5 часов назад' },
-    { id: 3, icon: '🏆', text: 'Новое достижение: 7 дней стрик', time: 'Вчера' },
-    { id: 4, icon: '🎁', text: 'Получен подарок: аватар "Космонавт"', time: '2 дня назад' },
-];
+const EVENT_ICONS: Record<string, string> = {
+    workout_done: '💪',
+    streak_lost: '💔',
+    shop_purchase: '🛒',
+    boost_activated: '⚡',
+    ping: '🔔',
+    milestone: '🏆',
+};
 
-const RESPONSIBLE_FEED = [
-    { id: 1, icon: '💪', text: 'Алексей завершил тренировку +45', time: '1 час назад' },
-    { id: 2, icon: '💔', text: 'Марина потеряла стрик', time: '3 часа назад' },
-    { id: 3, icon: '🛒', text: 'Дима купил аватар', time: 'Вчера' },
-];
+function feedText(item: FeedItem): string {
+    const p = item.payload || {};
+    switch (item.event_type) {
+        case 'workout_done': return `${p.player_name || 'Игрок'} завершил тренировку ${p.score ? `+${p.score}` : ''}`;
+        case 'streak_lost': return `${p.player_name || 'Игрок'} потерял стрик`;
+        case 'shop_purchase': return `${p.player_name || 'Игрок'} купил ${p.item_name || 'предмет'}`;
+        case 'boost_activated': return `Буст X2 активирован${p.hours ? ` на ${p.hours}ч` : ''}`;
+        case 'ping': return `Пинг от ${p.sender_name || 'партнёра'}`;
+        case 'milestone': return `Достижение: ${p.title || 'новое'}`;
+        default: return item.event_type;
+    }
+}
 
-const BADGES = [
-    { id: 1, icon: '🔥' },
-    { id: 2, icon: '⭐' },
-    { id: 3, icon: '🎯' },
-];
+function timeAgo(dateStr: string): string {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'только что';
+    if (mins < 60) return `${mins} мин назад`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}ч назад`;
+    const days = Math.floor(hours / 24);
+    if (days === 1) return 'Вчера';
+    return `${days} дн назад`;
+}
 
 const BondCube: React.FC = () => {
     const { primary_role, has_player_access, has_responsible_access, is_admin } = useAuthStore();
@@ -62,63 +79,103 @@ const BondCube: React.FC = () => {
 
 /* ---------- PLAYER BOND ---------- */
 
-const PlayerBond: React.FC = () => (
-    <>
-        <div className="cube-section-title">Лента</div>
+const PlayerBond: React.FC = () => {
+    const [feed, setFeed] = useState<FeedItem[]>([]);
+    const [loading, setLoading] = useState(true);
 
-        {PLAYER_FEED.map(item => (
-            <div className="cube-feed-card" key={item.id}>
-                <div className="cube-feed-icon">{item.icon}</div>
-                <div>
-                    <div className="cube-feed-text">{item.text}</div>
-                    <div className="cube-feed-time">{item.time}</div>
+    useEffect(() => {
+        getFeed(20, 0)
+            .then((res) => {
+                setFeed(res.items);
+                const unread = res.items.filter(i => !i.is_read).map(i => i.id);
+                if (unread.length > 0) markAsRead(unread).catch(() => {});
+            })
+            .catch(() => {})
+            .finally(() => setLoading(false));
+    }, []);
+
+    return (
+        <>
+            <div className="cube-section-title">Лента</div>
+
+            {loading ? (
+                <div className="cube-section-title" style={{ textAlign: 'center' }}>Загрузка...</div>
+            ) : feed.length === 0 ? (
+                <div className="cube-locked">
+                    <div className="cube-locked-text">Пока нет событий</div>
                 </div>
-            </div>
-        ))}
+            ) : (
+                feed.map(item => (
+                    <div className="cube-feed-card" key={item.id}>
+                        <div className="cube-feed-icon">{EVENT_ICONS[item.event_type] || '📌'}</div>
+                        <div>
+                            <div className="cube-feed-text">{feedText(item)}</div>
+                            <div className="cube-feed-time">{timeAgo(item.created_at)}</div>
+                        </div>
+                    </div>
+                ))
+            )}
 
-        <div className="cube-section-title">Достижения</div>
-
-        <div className="cube-badges">
-            {BADGES.map(b => (
-                <div className="cube-badge" key={b.id}>{b.icon}</div>
-            ))}
-        </div>
-
-        <button className="cube-btn-secondary" onClick={(e) => e.stopPropagation()}>
-            Профиль и настройки
-        </button>
-    </>
-);
+            <button className="cube-btn-secondary" onClick={(e) => e.stopPropagation()}>
+                Профиль и настройки
+            </button>
+        </>
+    );
+};
 
 /* ---------- RESPONSIBLE BOND ---------- */
 
-const ResponsibleBond: React.FC = () => (
-    <>
-        <div className="cube-section-title">Лента игроков</div>
+const ResponsibleBond: React.FC = () => {
+    const [feed, setFeed] = useState<FeedItem[]>([]);
+    const [loading, setLoading] = useState(true);
 
-        {RESPONSIBLE_FEED.map(item => (
-            <div className="cube-feed-card" key={item.id}>
-                <div className="cube-feed-icon">{item.icon}</div>
-                <div>
-                    <div className="cube-feed-text">{item.text}</div>
-                    <div className="cube-feed-time">{item.time}</div>
+    useEffect(() => {
+        getFeed(20, 0)
+            .then((res) => {
+                setFeed(res.items);
+                const unread = res.items.filter(i => !i.is_read).map(i => i.id);
+                if (unread.length > 0) markAsRead(unread).catch(() => {});
+            })
+            .catch(() => {})
+            .finally(() => setLoading(false));
+    }, []);
+
+    return (
+        <>
+            <div className="cube-section-title">Лента игроков</div>
+
+            {loading ? (
+                <div className="cube-section-title" style={{ textAlign: 'center' }}>Загрузка...</div>
+            ) : feed.length === 0 ? (
+                <div className="cube-locked">
+                    <div className="cube-locked-text">Пока нет событий</div>
                 </div>
-            </div>
-        ))}
+            ) : (
+                feed.map(item => (
+                    <div className="cube-feed-card" key={item.id}>
+                        <div className="cube-feed-icon">{EVENT_ICONS[item.event_type] || '📌'}</div>
+                        <div>
+                            <div className="cube-feed-text">{feedText(item)}</div>
+                            <div className="cube-feed-time">{timeAgo(item.created_at)}</div>
+                        </div>
+                    </div>
+                ))
+            )}
 
-        <button className="cube-btn-primary" onClick={(e) => e.stopPropagation()}>
-            Инвайт-ссылка
-        </button>
+            <button className="cube-btn-primary" onClick={(e) => e.stopPropagation()}>
+                Инвайт-ссылка
+            </button>
 
-        <button className="cube-btn-secondary" onClick={(e) => e.stopPropagation()}>
-            Настройки уведомлений
-        </button>
+            <button className="cube-btn-secondary" onClick={(e) => e.stopPropagation()}>
+                Настройки уведомлений
+            </button>
 
-        <button className="cube-btn-secondary" onClick={(e) => e.stopPropagation()}>
-            Подписка и биллинг
-        </button>
-    </>
-);
+            <button className="cube-btn-secondary" onClick={(e) => e.stopPropagation()}>
+                Подписка и биллинг
+            </button>
+        </>
+    );
+};
 
 /* ---------- LOCKED ---------- */
 

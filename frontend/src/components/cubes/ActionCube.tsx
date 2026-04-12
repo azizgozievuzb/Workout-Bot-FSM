@@ -3,6 +3,12 @@ import { useAuthStore } from '../../stores/authStore';
 import type { DualRoleUser } from '../../stores/authStore';
 import { canPlay, canMonitor, isDualRole } from '../../utils/roles';
 import { getMyPlayerCode } from '../../api/promo';
+import { getMyStats } from '../../api/stats';
+import { getPartnerStats } from '../../api/stats';
+import type { PlayerStats, PartnerStats } from '../../api/stats';
+import { getActiveBoost } from '../../api/boosts';
+import { buyBoost } from '../../api/boosts';
+import type { ActiveBoost } from '../../api/boosts';
 import RoleTransition from '../shared/RoleTransition';
 import '../../styles/cubes.css';
 
@@ -44,43 +50,61 @@ const ActionCube: React.FC = () => {
 
 /* ---------- PLAYER ---------- */
 
-const PlayerView: React.FC = () => (
-    <>
-        <button className="cube-btn-primary" onClick={(e) => e.stopPropagation()}>
-            Приступим
-        </button>
+const PlayerView: React.FC = () => {
+    const [stats, setStats] = useState<PlayerStats | null>(null);
+    const [boost, setBoost] = useState<ActiveBoost | null>(null);
+    const [loading, setLoading] = useState(true);
 
-        <div className="cube-card">
-            <div className="cube-stat">
-                <span>Стрик</span>
-                <span className="cube-stat-value">5 дней</span>
+    useEffect(() => {
+        Promise.all([getMyStats(), getActiveBoost()])
+            .then(([s, b]) => { setStats(s); setBoost(b); })
+            .catch(() => {})
+            .finally(() => setLoading(false));
+    }, []);
+
+    if (loading) return <div className="cube-section-title" style={{ textAlign: 'center' }}>Загрузка...</div>;
+    if (!stats) return <div className="cube-section-title" style={{ textAlign: 'center' }}>Не удалось загрузить</div>;
+
+    return (
+        <>
+            <button className="cube-btn-primary" onClick={(e) => e.stopPropagation()}>
+                Приступим
+            </button>
+
+            <div className="cube-card">
+                <div className="cube-stat">
+                    <span>Стрик</span>
+                    <span className="cube-stat-value">
+                        {stats.current_streak} {stats.current_streak === 1 ? 'день' : stats.current_streak < 5 ? 'дня' : 'дней'}
+                    </span>
+                </div>
             </div>
-        </div>
 
-        <div className="cube-card">
-            <div className="cube-stat">
-                <span>Буст X2</span>
-                <span className="cube-stat-value" style={{ color: '#CCFF00' }}>активен 2ч</span>
+            {boost && boost.active && (
+                <div className="cube-card">
+                    <div className="cube-stat">
+                        <span>Буст X2</span>
+                        <span className="cube-stat-value" style={{ color: '#CCFF00' }}>
+                            активен {Math.ceil(boost.hours_left || 0)}ч
+                        </span>
+                    </div>
+                </div>
+            )}
+
+            <div className="cube-funfact">
+                Знаешь ли ты, что регулярные тренировки улучшают качество сна на 65%? Твоё тело скажет спасибо!
             </div>
-        </div>
 
-        <div className="cube-funfact">
-            Знаешь ли ты, что регулярные тренировки улучшают качество сна на 65%? Твоё тело скажет спасибо!
-        </div>
-
-        {/* Rest day — mock: show for female */}
-        <button className="cube-rest-btn" onClick={(e) => e.stopPropagation()}>
-            День отдыха (осталось 3/3)
-        </button>
-    </>
-);
+            {stats.rest_days_remaining > 0 && (
+                <button className="cube-rest-btn" onClick={(e) => e.stopPropagation()}>
+                    День отдыха (осталось {stats.rest_days_remaining}/3)
+                </button>
+            )}
+        </>
+    );
+};
 
 /* ---------- RESPONSIBLE ---------- */
-
-const MOCK_PLAYERS = [
-    { id: 1, name: 'Алексей', initials: 'А', streak: 12, trained: true },
-    { id: 2, name: 'Марина', initials: 'М', streak: 3, trained: false },
-];
 
 interface PlayerCodeData {
     code: string | null;
@@ -90,12 +114,21 @@ interface PlayerCodeData {
 
 const ResponsibleView: React.FC = () => {
     const [playerCodeData, setPlayerCodeData] = useState<PlayerCodeData | null>(null);
+    const [players, setPlayers] = useState<PartnerStats[]>([]);
+    const [loading, setLoading] = useState(true);
     const [toast, setToast] = useState('');
 
     useEffect(() => {
         getMyPlayerCode()
             .then((data) => setPlayerCodeData(data))
             .catch(() => {});
+    }, []);
+
+    useEffect(() => {
+        getPartnerStats()
+            .then(setPlayers)
+            .catch(() => {})
+            .finally(() => setLoading(false));
     }, []);
 
     const copyCode = useCallback((e: React.MouseEvent) => {
@@ -114,6 +147,17 @@ const ResponsibleView: React.FC = () => {
         setTimeout(() => setToast(''), 2000);
     }, [playerCodeData]);
 
+    const handleBoost = useCallback(async (e: React.MouseEvent, playerId: string) => {
+        e.stopPropagation();
+        try {
+            const res = await buyBoost(playerId);
+            setToast(res.message);
+        } catch (err: any) {
+            setToast(err?.response?.data?.detail || 'Ошибка');
+        }
+        setTimeout(() => setToast(''), 3000);
+    }, []);
+
     return (
         <>
             {playerCodeData && playerCodeData.code && !playerCodeData.is_used && (
@@ -128,34 +172,42 @@ const ResponsibleView: React.FC = () => {
                             🔗 Скопировать ссылку
                         </button>
                     </div>
-                    {toast && <div className="promo-invite-toast">{toast}</div>}
                 </div>
             )}
 
+            {toast && <div className="admin-toast">{toast}</div>}
+
             <div className="cube-section-title">Ваши игроки</div>
 
-            <div className="cube-card">
-                {MOCK_PLAYERS.map(p => (
-                    <div className="cube-player-row" key={p.id}>
-                        <div className="cube-avatar">{p.initials}</div>
-                        <div className="cube-player-info">
-                            <div className="cube-player-name">{p.name}</div>
-                            <div className="cube-player-meta">
-                                Стрик: {p.streak} · {p.trained ? 'Тренировался' : 'Не тренировался'}
+            {loading ? (
+                <div className="cube-section-title" style={{ textAlign: 'center' }}>Загрузка...</div>
+            ) : players.length === 0 ? (
+                <div className="cube-locked">
+                    <div className="cube-locked-text">Нет привязанных игроков</div>
+                </div>
+            ) : (
+                <div className="cube-card">
+                    {players.map(p => (
+                        <div className="cube-player-row" key={p.player_id}>
+                            <div className="cube-avatar">{p.first_name.charAt(0)}</div>
+                            <div className="cube-player-info">
+                                <div className="cube-player-name">{p.first_name}</div>
+                                <div className="cube-player-meta">
+                                    Стрик: {p.current_streak} · {p.last_workout_date || 'Нет тренировок'}
+                                </div>
+                            </div>
+                            <div className="cube-player-actions">
+                                <button className="cube-btn-sm" onClick={(e) => e.stopPropagation()}>
+                                    Пинг
+                                </button>
+                                <button className="cube-btn-sm" onClick={(e) => handleBoost(e, p.player_id)}>
+                                    ⚡X2
+                                </button>
                             </div>
                         </div>
-                        <div className="cube-player-actions">
-                            <button className="cube-btn-sm" onClick={(e) => e.stopPropagation()}>
-                                Пинг
-                            </button>
-                        </div>
-                    </div>
-                ))}
-            </div>
-
-            <button className="cube-btn-primary" onClick={(e) => e.stopPropagation()}>
-                Буст X2
-            </button>
+                    ))}
+                </div>
+            )}
         </>
     );
 };
