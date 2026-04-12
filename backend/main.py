@@ -18,6 +18,9 @@ from .api.routers.auth import router as auth_router
 from .api.routers.partnerships import router as partnerships_router
 from .api.routers.promo import router as promo_router
 from .api.routers.users import router as users_router
+from .api.routers.stats import router as stats_router
+from .api.routers.shop import router as shop_router
+from .api.routers.boosts import router as boosts_router
 from .core.config import settings
 from .handlers.onboarding import onboarding_router
 
@@ -87,6 +90,9 @@ app.include_router(partnerships_router)
 app.include_router(activity_feed_router)
 app.include_router(promo_router)
 app.include_router(admin_router)
+app.include_router(stats_router)
+app.include_router(shop_router)
+app.include_router(boosts_router)
 
 
 @app.get("/health")
