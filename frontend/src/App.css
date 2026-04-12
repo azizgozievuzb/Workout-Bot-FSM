@@ -144,8 +144,8 @@ html, body {
     right: 16px;
     width: 40px;
     height: 40px;
-    border: none;
     border-radius: 0;
+    border: none;
     font-size: 0;
     cursor: pointer;
     z-index: 60;
@@ -157,7 +157,7 @@ html, body {
     transition: transform 0.2s ease;
 }
 
-/* Dark: фиолетово-жёлтый градиент */
+/* Две линии крестика — космическая туманность (dark) */
 .overlay-close::before,
 .overlay-close::after {
     content: '';
@@ -165,35 +165,47 @@ html, body {
     width: 20px;
     height: 2px;
     border-radius: 1px;
-    background: linear-gradient(90deg, #ffcc44, #c77dff);
+    transition: filter 0.2s ease, opacity 0.2s ease;
+    /* Градиент: оранжевый → фиолетовый (как Carina Nebula) */
+    background: linear-gradient(90deg, #ff8c42, #c77dff);
     opacity: 0.7;
-    filter: drop-shadow(0 0 3px rgba(255, 200, 60, 0.4));
-    transition: opacity 0.2s ease, filter 0.2s ease;
+    filter: drop-shadow(0 0 3px rgba(255, 140, 66, 0.4));
 }
 
-.overlay-close::before { transform: rotate(45deg); }
-.overlay-close::after { transform: rotate(-45deg); }
+.overlay-close::before {
+    transform: rotate(45deg);
+}
+
+.overlay-close::after {
+    transform: rotate(-45deg);
+}
 
 .overlay-close:hover::before,
 .overlay-close:hover::after {
     opacity: 1;
-    filter: drop-shadow(0 0 6px rgba(255, 200, 60, 0.6)) drop-shadow(0 0 10px rgba(199, 125, 255, 0.3));
+    filter: drop-shadow(0 0 6px rgba(255, 140, 66, 0.6)) drop-shadow(0 0 12px rgba(199, 125, 255, 0.3));
 }
 
-.overlay-close:active { transform: scale(0.85); }
+.overlay-close:active {
+    transform: scale(0.85);
+}
 
-/* Light: розовато-оранжевый градиент */
+/* Light theme — золотисто-розовый */
 .light-theme .overlay-close::before,
 .light-theme .overlay-close::after {
-    background: linear-gradient(90deg, #e8945a, #d4728a);
-    opacity: 0.65;
-    filter: drop-shadow(0 0 2px rgba(232, 148, 90, 0.3));
+    background: linear-gradient(90deg, #d4956b, #c47a8a);
+    opacity: 0.6;
+    filter: drop-shadow(0 0 2px rgba(212, 149, 107, 0.3));
 }
 
 .light-theme .overlay-close:hover::before,
 .light-theme .overlay-close:hover::after {
-    opacity: 0.95;
-    filter: drop-shadow(0 0 5px rgba(232, 148, 90, 0.5)) drop-shadow(0 0 8px rgba(212, 114, 138, 0.25));
+    opacity: 0.9;
+    filter: drop-shadow(0 0 5px rgba(212, 149, 107, 0.5)) drop-shadow(0 0 10px rgba(196, 122, 138, 0.25));
+}
+
+.light-theme .overlay-close:active {
+    transform: scale(0.85);
 }
 
 /* --- Dashboard --- */

@@ -55,19 +55,39 @@ const darkVariants = {
     },
 };
 
-/* --- Supernova (light) --- */
+/* --- Supernova (light) — разлёт осколков за пределы экрана --- */
 const lightVariants = {
-    initial: { scale: 0.3, opacity: 0, filter: 'blur(12px) brightness(2)', rotate: -5 },
+    initial: {
+        scale: 0.1,
+        opacity: 0,
+        y: 300,
+        rotate: 8,
+        filter: 'blur(16px) brightness(2.5)',
+    },
     animate: {
-        scale: 1, opacity: 1, filter: 'blur(0px) brightness(1)', rotate: 0,
-        transition: { duration: 0.6, ease: [0.16, 1, 0.3, 1] },
+        scale: 1,
+        opacity: 1,
+        y: 0,
+        rotate: 0,
+        filter: 'blur(0px) brightness(1)',
+        transition: {
+            duration: 0.65,
+            ease: [0.16, 1, 0.3, 1],
+            filter: { duration: 0.4 },
+        },
     },
     exit: {
-        scale: 1.4,
+        scale: 2.5,
         opacity: 0,
-        filter: 'blur(8px) brightness(1.8)',
-        rotate: 3,
-        transition: { duration: 0.55, ease: [0.22, 0, 0.36, 1] },
+        y: -200,
+        rotate: -6,
+        filter: 'blur(12px) brightness(3)',
+        transition: {
+            duration: 0.6,
+            ease: [0.55, 0, 1, 0.45],
+            opacity: { duration: 0.35, delay: 0.1 },
+            scale: { duration: 0.6, ease: [0.76, 0, 0.24, 1] },
+        },
     },
 };
 
