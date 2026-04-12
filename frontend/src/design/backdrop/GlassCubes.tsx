@@ -89,6 +89,7 @@ interface GlassCubesProps {
     theme?: 'dark' | 'light';
     count?: number;
     active?: boolean;
+    isAdmin?: boolean;
 }
 
 /**
@@ -102,6 +103,7 @@ const GlassCubes = forwardRef<GlassCubesHandle, GlassCubesProps>(({
     theme = 'dark',
     count = 3,
     active = true,
+    isAdmin = false,
 }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const cubesRef = useRef<Cube[]>([]);
@@ -125,23 +127,26 @@ const GlassCubes = forwardRef<GlassCubesHandle, GlassCubesProps>(({
 
     // Initialize cubes spread across screen
     useEffect(() => {
+        const actualCount = isAdmin ? 4 : count;
+
         const hues = theme === 'dark'
-            ? [210, 270, 190]   // blue, purple, cyan
-            : [45, 35, 55];     // gold, amber, warm
+            ? [210, 270, 190, 0]      // blue, purple, cyan, red
+            : [45, 35, 55, 10];       // gold, amber, warm, red-orange
 
         // Fixed starting positions: spread across full screen
         const startPos = [
-            { x: -0.6, y: -0.85 },  // top-left
-            { x:  0.5, y:  0.80 },  // bottom-right
-            { x:  0.0, y:  0.05 },  // center
+            { x: -0.6, y: -0.85 },   // top-left
+            { x:  0.5, y:  0.80 },   // bottom-right
+            { x:  0.0, y:  0.05 },   // center
+            { x: -0.45, y:  0.50 },  // 4th cube
         ];
 
-        const labels = ['Action', 'Market', 'Bond'];
+        const labels = ['Action', 'Market', 'Bond', 'Admin'];
 
-        cubesRef.current = Array.from({ length: count }, (_, i) => ({
+        cubesRef.current = Array.from({ length: actualCount }, (_, i) => ({
             label: labels[i % labels.length],
-            x: startPos[i % 3].x + (Math.random() - 0.5) * 0.15,
-            y: startPos[i % 3].y + (Math.random() - 0.5) * 0.15,
+            x: startPos[i % startPos.length].x + (Math.random() - 0.5) * 0.15,
+            y: startPos[i % startPos.length].y + (Math.random() - 0.5) * 0.15,
             z: 0.5 + Math.random() * 0.5,
             vx: (Math.random() - 0.5) * 0.0702,  // +35% от 0.052
             vy: (Math.random() - 0.5) * 0.0438,  // +35% от 0.0325
@@ -161,7 +166,7 @@ const GlassCubes = forwardRef<GlassCubesHandle, GlassCubesProps>(({
             },
             hue: hues[i % hues.length],
         }));
-    }, [count, theme]);
+    }, [count, theme, isAdmin]);
 
     useEffect(() => {
         const canvas = canvasRef.current;

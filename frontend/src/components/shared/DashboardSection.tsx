@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-type ModuleName = 'Action' | 'Market' | 'Bond';
+type ModuleName = 'Action' | 'Market' | 'Bond' | 'Admin';
 
 interface MenuItem {
     icon: string;
@@ -28,6 +28,10 @@ const PRIMARY_ITEMS: Record<ModuleName, MenuItem[]> = {
         { icon: '\u{1F4F0}', label: '3 новых', key: 'feed' },
         { icon: '\u{1F464}', label: 'Профиль', key: 'profile' },
     ],
+    Admin: [
+        { icon: '\u{1F511}', label: 'Промокоды', key: 'promos', accent: true },
+        { icon: '\u{1F4CA}', label: 'Статистика', key: 'admin-stats' },
+    ],
 };
 
 const MORE_ITEMS: Record<ModuleName, MenuItem[]> = {
@@ -41,6 +45,10 @@ const MORE_ITEMS: Record<ModuleName, MenuItem[]> = {
     Bond: [
         { icon: '\u{1F3C6}', label: 'Достижения', key: 'achievements' },
         { icon: '\u2699\u{FE0F}', label: 'Настройки', key: 'settings' },
+    ],
+    Admin: [
+        { icon: '\u{1F465}', label: 'Пользователи', key: 'users' },
+        { icon: '\u{1F4B0}', label: 'Биллинг', key: 'billing' },
     ],
 };
 

@@ -8,26 +8,22 @@ import PhotoGate from './components/photo-gate/PhotoGate';
 import ActionCube from './components/cubes/ActionCube';
 import MarketCube from './components/cubes/MarketCube';
 import BondCube from './components/cubes/BondCube';
+import AdminCube from './components/cubes/AdminCube';
 import { ThemeContext } from './contexts/ThemeContext';
+import { useAuthStore } from './stores/authStore';
 import './App.css';
 import DashboardSection from './components/shared/DashboardSection';
 import './styles/dashboard.css';
 
 // --- Типы ---
 type LayoutMode = 'chaos' | 'fullscreen' | 'dashboard';
-type ModuleName = 'Action' | 'Market' | 'Bond';
+type ModuleName = 'Action' | 'Market' | 'Bond' | 'Admin';
 
 // --- Константы таймеров (мс) ---
 const TAP_MAX = 300;
 const HOLD_DASHBOARD = 3000; // 3 сек → toggle dashboard
 const SWIPE_UP_THRESHOLD = 80; // px минимальная дистанция свайпа вверх
 const HOLD_FOR_SWIPE = 500; // мс минимальное удержание перед свайпом
-
-const MODULES: ModuleName[] = ['Action', 'Market', 'Bond'];
-const nextModule = (cur: ModuleName, dir: 1 | -1): ModuleName => {
-    const idx = MODULES.indexOf(cur);
-    return MODULES[(idx + dir + MODULES.length) % MODULES.length];
-};
 
 const carouselVariants = {
     enter: (dir: number) => ({ x: dir ? dir * 300 : 0, opacity: 0 }),
@@ -37,6 +33,7 @@ const carouselVariants = {
 
 const App: React.FC = () => {
     const { isLoading, onboardingDone, photoUrl, error, role } = useAuth();
+    const { is_admin } = useAuthStore();
     const [theme, setTheme] = useState<'dark' | 'light'>('dark');
     const [layoutMode, setLayoutMode] = useState<LayoutMode>('chaos');
     const [activeModule, setActiveModule] = useState<ModuleName | null>(null);
@@ -53,6 +50,14 @@ const App: React.FC = () => {
     const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const holdFired = useRef<boolean>(false);
     const layoutModeRef = useRef<LayoutMode>('chaos');
+
+    const MODULES: ModuleName[] = is_admin
+        ? ['Action', 'Market', 'Bond', 'Admin']
+        : ['Action', 'Market', 'Bond'];
+    const nextMod = (cur: ModuleName, dir: 1 | -1): ModuleName => {
+        const idx = MODULES.indexOf(cur);
+        return MODULES[(idx + dir + MODULES.length) % MODULES.length];
+    };
 
     // Определяем, должен ли gesture-layer быть активен
     const hasOverlay = !photoUrl || (!onboardingDone && role === 'player');
@@ -110,7 +115,7 @@ const App: React.FC = () => {
             && elapsed < 500 && Math.abs(deltaX) > 50 && Math.abs(deltaX) > Math.abs(deltaY)) {
             const dir: 1 | -1 = deltaX < 0 ? 1 : -1;
             setSwipeDir(dir);
-            setActiveModule(nextModule(activeModule, dir));
+            setActiveModule(nextMod(activeModule, dir));
             return;
         }
 
@@ -133,7 +138,7 @@ const App: React.FC = () => {
                 }
             }
         }
-    }, [clearTimers, setLayout, activeModule]);
+    }, [clearTimers, setLayout, activeModule, nextMod]);
 
     return (
         <ThemeContext.Provider value={theme}>
@@ -194,6 +199,7 @@ const App: React.FC = () => {
                                         {activeModule === 'Action' && <ActionCube />}
                                         {activeModule === 'Market' && <MarketCube />}
                                         {activeModule === 'Bond' && <BondCube />}
+                                        {activeModule === 'Admin' && <AdminCube />}
                                     </motion.div>
                                 </AnimatePresence>
                                 <div className="carousel-dots">
@@ -212,7 +218,7 @@ const App: React.FC = () => {
                                 onPointerUp={handleGestureUp}
                             >
                                 <div className="dashboard-panel">
-                                    {(['Action', 'Market', 'Bond'] as ModuleName[]).map((mod, i, arr) => (
+                                    {(is_admin ? ['Action', 'Market', 'Bond', 'Admin'] as ModuleName[] : ['Action', 'Market', 'Bond'] as ModuleName[]).map((mod, i, arr) => (
                                         <React.Fragment key={mod}>
                                             <DashboardSection module={mod} onOpen={() => {
                                                 setLayout('fullscreen');

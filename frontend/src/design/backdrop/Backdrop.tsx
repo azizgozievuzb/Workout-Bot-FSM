@@ -23,7 +23,7 @@ interface BackdropProps {
  *   3. Vignette
  */
 const Backdrop = forwardRef<GlassCubesHandle, BackdropProps>(({ theme = 'dark' }, ref) => {
-    const { photoUrl, photoDarkUrl, photoLightUrl } = useAuthStore();
+    const { photoUrl, photoDarkUrl, photoLightUrl, is_admin } = useAuthStore();
     const mouseX = useMotionValue(0.5);
     const mouseY = useMotionValue(0.5);
     const springX = useSpring(mouseX, { stiffness: 25, damping: 30 });
@@ -75,7 +75,7 @@ const Backdrop = forwardRef<GlassCubesHandle, BackdropProps>(({ theme = 'dark' }
             }
 
             {/* LAYER 2.5: Glass cubes with energy blobs */}
-            <GlassCubes ref={ref} theme={theme} count={3} />
+            <GlassCubes ref={ref} theme={theme} count={is_admin ? 4 : 3} isAdmin={is_admin} />
 
             {/* LAYER 3: Vignette */}
             <div className="ui-vignette" />

@@ -610,3 +610,24 @@
     85% { opacity: 1; }
     100% { opacity: 0; }
 }
+
+/* --- Admin toast --- */
+
+.admin-toast {
+    text-align: center;
+    padding: 8px 14px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    animation: fadeInOut 3s ease forwards;
+}
+
+.dark-theme .admin-toast {
+    background: rgba(204, 255, 0, 0.1);
+    color: #CCFF00;
+}
+
+.light-theme .admin-toast {
+    background: rgba(0, 122, 255, 0.08);
+    color: #007AFF;
+}
