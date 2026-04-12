@@ -174,8 +174,9 @@ html, body {
     background: rgba(0, 0, 0, 0.45);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
-    gap: 12px;
-    padding: 50px 14px 14px;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
 }
@@ -183,46 +184,6 @@ html, body {
 .light-theme .overlay-dashboard {
     background: rgba(255, 255, 255, 0.5);
 }
-
-.dashboard-card {
-    position: relative;
-    z-index: 60;
-    flex: 1 1 0;
-    min-height: 0;
-    border-radius: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    transition: transform 0.15s ease, background 0.15s ease;
-}
-
-.light-theme .dashboard-card {
-    background: rgba(255, 255, 255, 0.45);
-    border: 1px solid rgba(0, 0, 0, 0.06);
-}
-
-.dashboard-card:active {
-    transform: scale(0.97);
-    background: rgba(255, 255, 255, 0.15);
-}
-
-.light-theme .dashboard-card:active {
-    background: rgba(255, 255, 255, 0.7);
-}
-
-.dashboard-card-label {
-    font-size: 22px;
-    font-weight: 700;
-    letter-spacing: -0.3px;
-}
-
-.dark-theme .dashboard-card-label { color: rgba(255, 255, 255, 0.85); }
-.light-theme .dashboard-card-label { color: rgba(0, 0, 0, 0.75); }
 
 /* --- Auth loading screen (prevents cube flash before PhotoGate) --- */
 

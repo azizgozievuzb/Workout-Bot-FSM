@@ -15,6 +15,45 @@
 
 ---
 
+## Завершено за 2026-04-12 (сессия 8 — UX-фиксы: жесты, dashboard, кнопка роли)
+
+### Задача 1: Жесты — fullscreen exit только long press 3с
+1. **handleGestureUp** — убран блок `cur === 'fullscreen'` → тап больше не сворачивает куб
+2. **handleGestureDown** — setTimeout уже обрабатывал `else` (не chaos) → chaos, теперь покрывает fullscreen→chaos
+3. **gesture-layer** — `pointer-events: auto` только в chaos mode. В fullscreen/dashboard — `none`, события идут через overlay
+4. **overlay-fullscreen** — добавлены `onPointerDown/onPointerUp` для жестов (long press + swipe)
+5. **overlay-dashboard** — аналогично, жесты на самом overlay
+
+### Задача 2: Кнопка роли — 48px, EHT + Cassiopeia A
+6. **rt-btn** — 48×48px, top: 12px, font-size: 22px
+7. **Dark theme (EHT)** — radial-gradient чёрный диск + оранжевое кольцо аккреционного диска, ассиметричный box-shadow (верх ярче), idle: `hue-rotate` вращение свечения
+8. **Light theme (Cassiopeia A)** — 5 radial-gradient (зелёный, красный, синий, жёлтый, белое ядро), idle: `brightness` + `hue-rotate` пульсация
+9. **Single vs dual** — single: приглушённые цвета. dual: полная яркость + вращающийся ring
+10. **Letter P/R** — dark: белая с glow. light: тёмная с text-shadow
+11. **rt-content** — padding-top: 70px (контент ниже кнопки)
+12. **rt-toast** — top: 72px (под увеличенной кнопкой)
+13. **rt-void-dark** — gradient center обновлён 42px 36px
+14. **RoleTransition.tsx** — transformOrigin: '42px 36px'
+
+### Задача 3: Dashboard — единая панель с dropdown-секциями
+15. **DashboardSection.tsx** — новый компонент: заголовок + стрелка ▼ + AnimatePresence dropdown
+16. **Подменю:** Action (4 пункта), Market (3 пункта), Bond (4 пункта)
+17. **dashboard.css** — `.dashboard-panel` glassmorphic, `.dashboard-divider`, `.dashboard-section-*`, `.dashboard-dropdown-item` + light theme
+18. **App.tsx** — убран крестик (overlay-close), новая структура: overlay-dashboard → dashboard-panel → DashboardSection × 3
+19. **App.css** — удалены `.dashboard-card*` стили, `.overlay-dashboard` обновлён (center alignment)
+20. **handleClose** — удалён (не используется)
+
+### Задача 4: Gesture matrix
+| Контекст | Тап | Long press 3с | Hold + swipe up |
+|---|---|---|---|
+| Chaos | Куб → fullscreen | → Dashboard | Смена темы |
+| Fullscreen | Ничего (UI куба) | → Chaos | Смена темы |
+| Dashboard | Ничего (dropdown) | → Chaos | Смена темы |
+
+21. **tsc --noEmit** — чисто
+
+---
+
 ## Завершено за 2026-04-12 (сессия 7 — Gravity Collapse + Supernova)
 
 ### Анимация переключения ролей

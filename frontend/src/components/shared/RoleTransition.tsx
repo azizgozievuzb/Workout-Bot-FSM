@@ -142,7 +142,7 @@ const RoleTransition: React.FC<RoleTransitionProps> = ({
                         exit="exit"
                         onAnimationComplete={handleAnimComplete}
                         style={{
-                            transformOrigin: isDark ? '36px 36px' : 'center center',
+                            transformOrigin: isDark ? '42px 36px' : 'center center',
                         }}
                     >
                         {children}

@@ -1,15 +1,15 @@
 /* ==========================================================================
-   ROLE TRANSITION — Gravity Collapse (dark) / Supernova (light)
+   ROLE TRANSITION — EHT Black Hole (dark) / Cassiopeia A (light)
    ========================================================================== */
 
 /* --- Button base --- */
 
 .rt-btn {
     position: absolute;
-    top: 18px;
+    top: 12px;
     left: 18px;
-    width: 36px;
-    height: 36px;
+    width: 48px;
+    height: 48px;
     border-radius: 50%;
     border: none;
     cursor: pointer;
@@ -29,13 +29,13 @@
 .rt-letter {
     position: relative;
     z-index: 2;
-    font-size: 14px;
+    font-size: 22px;
     font-weight: 700;
     pointer-events: none;
     line-height: 1;
 }
 
-/* --- Rotating ring (accretion disk / rays) --- */
+/* --- Rotating ring (accretion disk / nebula wisps) --- */
 
 .rt-ring {
     position: absolute;
@@ -48,37 +48,69 @@
 }
 
 /* ==========================================================================
-   DARK THEME — BLACK HOLE
+   DARK THEME — EHT BLACK HOLE
    ========================================================================== */
 
 .rt-dark {
-    background: radial-gradient(circle, #0a0a0a 30%, #222 100%);
-    color: rgba(255, 255, 255, 0.4);
-}
-
-/* Single role — dim */
-.rt-dark.rt-single {
-    box-shadow: 0 0 6px rgba(0, 0, 0, 0.6);
-    animation: bh-idle-dim 3s ease-in-out infinite;
-}
-
-/* Dual role — purple/blue glow + accretion disk */
-.rt-dark.rt-dual {
+    background: radial-gradient(circle at 50% 50%,
+        #000000 0%,
+        #000000 35%,
+        #1a0800 40%,
+        #ff6b00 48%,
+        #ffaa00 52%,
+        #ff8c00 56%,
+        #cc4400 62%,
+        #440000 70%,
+        transparent 75%
+    );
     box-shadow:
-        0 0 8px rgba(0, 0, 0, 0.8),
-        0 0 16px rgba(100, 60, 255, 0.25),
-        0 0 32px rgba(100, 60, 255, 0.1);
-    animation: bh-idle 2.5s ease-in-out infinite;
+        0 -3px 15px rgba(255, 160, 0, 0.6),
+        0 3px 8px rgba(255, 100, 0, 0.2),
+        0 0 25px rgba(255, 120, 0, 0.3),
+        inset 0 0 8px rgba(0, 0, 0, 0.9);
+    border: 1px solid rgba(255, 140, 0, 0.3);
+}
+
+.rt-dark .rt-letter {
+    color: #fff;
+    text-shadow: 0 0 6px rgba(255, 255, 255, 0.5);
+}
+
+/* Single role — dim gray-orange */
+.rt-dark.rt-single {
+    background: radial-gradient(circle at 50% 50%,
+        #000000 0%,
+        #000000 35%,
+        #1a0a00 40%,
+        #664400 48%,
+        #887755 52%,
+        #664400 56%,
+        #332200 62%,
+        #1a0a00 70%,
+        transparent 75%
+    );
+    box-shadow:
+        0 -2px 8px rgba(150, 100, 0, 0.2),
+        0 0 12px rgba(120, 80, 0, 0.15),
+        inset 0 0 8px rgba(0, 0, 0, 0.9);
+    border: 1px solid rgba(150, 100, 0, 0.15);
+    animation: bh-idle-dim 4s ease-in-out infinite;
+}
+
+/* Dual role — bright accretion disk + ring */
+.rt-dark.rt-dual {
+    animation: bh-idle 3s ease-in-out infinite;
 }
 
 .rt-dark.rt-dual .rt-ring {
-    opacity: 0.3;
+    opacity: 0.5;
     border: 2px solid transparent;
     background:
         conic-gradient(
             from 0deg,
-            transparent 0%, rgba(120, 80, 255, 0.4) 25%,
-            transparent 50%, rgba(80, 120, 255, 0.3) 75%,
+            transparent 0%, rgba(255, 140, 0, 0.5) 20%,
+            transparent 40%, rgba(255, 180, 0, 0.4) 60%,
+            transparent 80%, rgba(255, 120, 0, 0.3) 95%,
             transparent 100%
         ) border-box;
     -webkit-mask:
@@ -95,9 +127,10 @@
 /* Active — transitioning */
 .rt-dark.rt-active {
     box-shadow:
-        0 0 12px rgba(0, 0, 0, 0.9),
-        0 0 28px rgba(120, 80, 255, 0.5),
-        0 0 56px rgba(100, 60, 255, 0.25);
+        0 -5px 20px rgba(255, 180, 0, 0.8),
+        0 5px 12px rgba(255, 120, 0, 0.4),
+        0 0 35px rgba(255, 140, 0, 0.5),
+        inset 0 0 8px rgba(0, 0, 0, 0.9);
     animation: bh-active 0.4s ease-in-out infinite alternate;
 }
 
@@ -112,98 +145,88 @@
 }
 
 @keyframes bh-idle-dim {
-    0%, 100% { box-shadow: 0 0 6px rgba(0, 0, 0, 0.6); }
-    50% { box-shadow: 0 0 10px rgba(0, 0, 0, 0.7), 0 0 4px rgba(80, 80, 120, 0.15); }
+    0%, 100% { filter: hue-rotate(0deg) brightness(0.9); }
+    50% { filter: hue-rotate(10deg) brightness(1); }
 }
 
 @keyframes bh-idle {
-    0%, 100% {
-        box-shadow:
-            0 0 8px rgba(0, 0, 0, 0.8),
-            0 0 16px rgba(100, 60, 255, 0.25),
-            0 0 32px rgba(100, 60, 255, 0.1);
-    }
-    50% {
-        box-shadow:
-            0 0 10px rgba(0, 0, 0, 0.9),
-            0 0 22px rgba(120, 80, 255, 0.35),
-            0 0 40px rgba(100, 60, 255, 0.15);
-    }
+    0%, 100% { filter: hue-rotate(0deg); }
+    50% { filter: hue-rotate(20deg); }
 }
 
 @keyframes bh-active {
-    0% {
-        box-shadow:
-            0 0 12px rgba(0, 0, 0, 0.9),
-            0 0 28px rgba(120, 80, 255, 0.5),
-            0 0 56px rgba(100, 60, 255, 0.25);
-    }
-    100% {
-        box-shadow:
-            0 0 16px rgba(0, 0, 0, 1),
-            0 0 36px rgba(140, 100, 255, 0.6),
-            0 0 64px rgba(120, 80, 255, 0.3);
-    }
+    0% { filter: hue-rotate(0deg) brightness(1.1); }
+    100% { filter: hue-rotate(30deg) brightness(1.3); }
 }
 
 @keyframes bh-denied {
-    0%, 100% {
-        box-shadow: 0 0 8px rgba(0, 0, 0, 0.8), 0 0 16px rgba(100, 60, 255, 0.25);
-        transform: scale(1);
-    }
-    50% {
-        box-shadow: 0 0 16px rgba(0, 0, 0, 0.9), 0 0 32px rgba(140, 100, 255, 0.5);
-        transform: scale(1.15);
-    }
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.15); }
 }
 
 /* ==========================================================================
-   LIGHT THEME — STAR / SUPERNOVA
+   LIGHT THEME — CASSIOPEIA A (Supernova Remnant)
    ========================================================================== */
 
 .rt-light {
-    background: radial-gradient(circle, #FFE55C 20%, #FFB800 60%, #FF9500 100%);
-    color: rgba(80, 50, 0, 0.6);
-}
-
-/* Single role — dim star */
-.rt-light.rt-single {
-    background: radial-gradient(circle, #F0D88A 20%, #D4B05C 60%, #C09840 100%);
-    box-shadow: 0 0 6px rgba(255, 200, 0, 0.2);
-    animation: star-idle-dim 3s ease-in-out infinite;
-}
-
-/* Dual role — bright star + rays */
-.rt-light.rt-dual {
+    background:
+        radial-gradient(circle at 45% 40%, rgba(0, 255, 150, 0.7) 0%, transparent 30%),
+        radial-gradient(circle at 60% 55%, rgba(255, 50, 80, 0.6) 0%, transparent 25%),
+        radial-gradient(circle at 40% 60%, rgba(80, 80, 255, 0.6) 0%, transparent 28%),
+        radial-gradient(circle at 55% 35%, rgba(255, 200, 50, 0.5) 0%, transparent 22%),
+        radial-gradient(circle at 50% 50%, #fff 0%, #ffeedd 20%, #ffccaa 40%, #ee8866 60%, transparent 70%);
     box-shadow:
-        0 0 8px rgba(255, 215, 0, 0.4),
-        0 0 20px rgba(255, 180, 0, 0.2),
-        0 0 40px rgba(255, 165, 0, 0.08);
-    animation: star-idle 2s ease-in-out infinite;
+        0 0 12px rgba(255, 100, 50, 0.5),
+        0 0 25px rgba(255, 180, 80, 0.3),
+        0 0 4px rgba(255, 255, 255, 0.8);
+    border: 1px solid rgba(255, 200, 150, 0.4);
+}
+
+.rt-light .rt-letter {
+    color: #1a0a00;
+    text-shadow: 0 0 4px rgba(255, 255, 255, 0.6);
+}
+
+/* Single role — faded remnant */
+.rt-light.rt-single {
+    background:
+        radial-gradient(circle at 45% 40%, rgba(0, 255, 150, 0.3) 0%, transparent 30%),
+        radial-gradient(circle at 60% 55%, rgba(255, 50, 80, 0.25) 0%, transparent 25%),
+        radial-gradient(circle at 40% 60%, rgba(80, 80, 255, 0.25) 0%, transparent 28%),
+        radial-gradient(circle at 55% 35%, rgba(255, 200, 50, 0.2) 0%, transparent 22%),
+        radial-gradient(circle at 50% 50%, #eee 0%, #e8d8c8 20%, #d4b8a0 40%, #c0a088 60%, transparent 70%);
+    box-shadow:
+        0 0 6px rgba(200, 120, 80, 0.3),
+        0 0 12px rgba(200, 150, 100, 0.15);
+    border: 1px solid rgba(200, 160, 120, 0.3);
+    animation: cas-idle-dim 4s ease-in-out infinite;
+}
+
+/* Dual role — bright remnant + colorful wisps */
+.rt-light.rt-dual {
+    animation: cas-idle 3s ease-in-out infinite;
 }
 
 .rt-light.rt-dual .rt-ring {
-    opacity: 0.35;
+    opacity: 0.4;
     background:
         conic-gradient(
             from 0deg,
-            transparent 0%, rgba(255, 215, 0, 0.5) 12%,
-            transparent 25%, rgba(255, 200, 0, 0.4) 37%,
-            transparent 50%, rgba(255, 215, 0, 0.5) 62%,
-            transparent 75%, rgba(255, 200, 0, 0.4) 87%,
-            transparent 100%
+            transparent 0%, rgba(0, 200, 120, 0.4) 15%,
+            transparent 30%, rgba(255, 80, 100, 0.3) 45%,
+            transparent 60%, rgba(100, 100, 255, 0.3) 75%,
+            transparent 90%, rgba(255, 200, 50, 0.3) 100%
         );
     animation: rt-spin 6s linear infinite;
 }
 
 /* Active — supernova flash */
 .rt-light.rt-active {
-    background: radial-gradient(circle, #FFF 20%, #FFE55C 60%, #FFB800 100%);
     box-shadow:
-        0 0 16px rgba(255, 255, 255, 0.6),
-        0 0 32px rgba(255, 215, 0, 0.5),
-        0 0 64px rgba(255, 180, 0, 0.25);
-    animation: star-active 0.3s ease-in-out infinite alternate;
+        0 0 20px rgba(255, 120, 60, 0.7),
+        0 0 35px rgba(255, 200, 100, 0.5),
+        0 0 8px rgba(255, 255, 255, 0.9);
+    animation: cas-active 0.3s ease-in-out infinite alternate;
     transform: scale(1.1);
 }
 
@@ -214,45 +237,26 @@
 
 /* Denied — 3 flickers */
 .rt-light.rt-denied {
-    animation: star-denied 0.25s ease-in-out 3 !important;
+    animation: cas-denied 0.25s ease-in-out 3 !important;
 }
 
-@keyframes star-idle-dim {
-    0%, 100% { box-shadow: 0 0 6px rgba(255, 200, 0, 0.2); transform: scale(1); }
-    50% { box-shadow: 0 0 10px rgba(255, 200, 0, 0.3); transform: scale(1.03); }
+@keyframes cas-idle-dim {
+    0%, 100% { filter: brightness(0.9); }
+    50% { filter: brightness(1.05); }
 }
 
-@keyframes star-idle {
-    0%, 100% {
-        box-shadow:
-            0 0 8px rgba(255, 215, 0, 0.4),
-            0 0 20px rgba(255, 180, 0, 0.2),
-            0 0 40px rgba(255, 165, 0, 0.08);
-        transform: scale(1);
-    }
-    50% {
-        box-shadow:
-            0 0 12px rgba(255, 215, 0, 0.5),
-            0 0 28px rgba(255, 180, 0, 0.3),
-            0 0 48px rgba(255, 165, 0, 0.12);
-        transform: scale(1.05);
-    }
+@keyframes cas-idle {
+    0%, 100% { filter: brightness(1); transform: scale(1); }
+    33% { filter: brightness(1.1) hue-rotate(5deg); }
+    66% { filter: brightness(1.05) hue-rotate(-5deg); transform: scale(1.03); }
 }
 
-@keyframes star-active {
-    0% {
-        box-shadow:
-            0 0 16px rgba(255, 255, 255, 0.6),
-            0 0 32px rgba(255, 215, 0, 0.5);
-    }
-    100% {
-        box-shadow:
-            0 0 24px rgba(255, 255, 255, 0.8),
-            0 0 48px rgba(255, 215, 0, 0.6);
-    }
+@keyframes cas-active {
+    0% { filter: brightness(1.1); }
+    100% { filter: brightness(1.3); }
 }
 
-@keyframes star-denied {
+@keyframes cas-denied {
     0%, 100% { transform: scale(1); opacity: 1; }
     50% { transform: scale(1.12); opacity: 0.7; }
 }
@@ -273,6 +277,7 @@
     flex-direction: column;
     gap: 12px;
     width: 100%;
+    padding-top: 70px;
     will-change: transform, opacity;
 }
 
@@ -290,8 +295,8 @@
 
 .rt-void-dark {
     background: radial-gradient(
-        circle at 36px 36px,
-        rgba(100, 60, 255, 0.15) 0%,
+        circle at 42px 36px,
+        rgba(255, 140, 0, 0.15) 0%,
         rgba(0, 0, 0, 0.4) 40%,
         transparent 80%
     );
@@ -312,7 +317,7 @@
 
 .rt-toast {
     position: absolute;
-    top: 62px;
+    top: 72px;
     left: 18px;
     right: 18px;
     padding: 10px 14px;
@@ -326,9 +331,9 @@
 }
 
 .dark-theme .rt-toast {
-    background: rgba(30, 20, 60, 0.9);
+    background: rgba(30, 20, 10, 0.9);
     color: rgba(255, 255, 255, 0.7);
-    border: 1px solid rgba(120, 80, 255, 0.2);
+    border: 1px solid rgba(255, 140, 0, 0.2);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
 }

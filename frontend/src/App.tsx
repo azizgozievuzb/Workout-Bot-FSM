@@ -9,6 +9,8 @@ import MarketCube from './components/cubes/MarketCube';
 import BondCube from './components/cubes/BondCube';
 import { ThemeContext } from './contexts/ThemeContext';
 import './App.css';
+import DashboardSection from './components/shared/DashboardSection';
+import './styles/dashboard.css';
 
 // --- Типы ---
 type LayoutMode = 'chaos' | 'fullscreen' | 'dashboard';
@@ -102,20 +104,9 @@ const App: React.FC = () => {
                     setLayout('fullscreen');
                     setActiveModule(hit.label as ModuleName);
                 }
-            } else if (cur === 'fullscreen') {
-                // Тап в fullscreen → назад в chaos
-                setLayout('chaos');
-                setActiveModule(null);
-            }
-            // dashboard: тап НЕ выходит — только long press 3с
+            // fullscreen & dashboard: тап НЕ выходит — только long press 3с
         }
     }, [clearTimers, setLayout]);
-
-    // --- Кнопка «Назад» ---
-    const handleClose = useCallback(() => {
-        setLayout('chaos');
-        setActiveModule(null);
-    }, [setLayout]);
 
     return (
         <ThemeContext.Provider value={theme}>
@@ -130,7 +121,7 @@ const App: React.FC = () => {
                         className="gesture-layer"
                         onPointerDown={handleGestureDown}
                         onPointerUp={handleGestureUp}
-                        style={{ pointerEvents: gestureEnabled ? 'auto' : 'none' }}
+                        style={{ pointerEvents: gestureEnabled && layoutMode === 'chaos' ? 'auto' : 'none' }}
                     />
 
                     {/* PHOTO GATE — обязательное селфи для ВСЕХ пользователей */}
@@ -160,7 +151,7 @@ const App: React.FC = () => {
 
                         {/* === FULLSCREEN MODULE === */}
                         {layoutMode === 'fullscreen' && activeModule && (
-                            <div className="overlay-fullscreen">
+                            <div className="overlay-fullscreen" onPointerDown={handleGestureDown} onPointerUp={handleGestureUp}>
                                 <div className="overlay-title">{activeModule}</div>
                                 <div className="overlay-body">
                                     {activeModule === 'Action' && <ActionCube />}
@@ -171,25 +162,23 @@ const App: React.FC = () => {
                         )}
 
                         {/* === DASHBOARD === */}
+                        {/* === DASHBOARD === */}
                         {layoutMode === 'dashboard' && (
-                            <div className="overlay-dashboard">
-                                <button className="overlay-close" onClick={handleClose}>✕</button>
-                                {(['Action', 'Market', 'Bond'] as ModuleName[]).map(mod => (
-                                    <div
-                                        key={mod}
-                                        className="dashboard-card"
-                                        onPointerDown={handleGestureDown}
-                                        onPointerUp={handleGestureUp}
-                                        onClick={() => {
-                                            // Не открывать модуль если сработало удержание (переход в chaos)
-                                            if (holdFired.current) return;
-                                            setLayout('fullscreen');
-                                            setActiveModule(mod);
-                                        }}
-                                    >
-                                        <span className="dashboard-card-label">{mod}</span>
-                                    </div>
-                                ))}
+                            <div className="overlay-dashboard"
+                                onPointerDown={handleGestureDown}
+                                onPointerUp={handleGestureUp}
+                            >
+                                <div className="dashboard-panel">
+                                    {(['Action', 'Market', 'Bond'] as ModuleName[]).map((mod, i, arr) => (
+                                        <React.Fragment key={mod}>
+                                            <DashboardSection module={mod} onOpen={() => {
+                                                setLayout('fullscreen');
+                                                setActiveModule(mod);
+                                            }} />
+                                            {i < arr.length - 1 && <div className="dashboard-divider" />}
+                                        </React.Fragment>
+                                    ))}
+                                </div>
                             </div>
                         )}
                     </div>

@@ -1,0 +1,101 @@
+/* ==========================================================================
+   DASHBOARD — Single panel with dropdown sections
+   ========================================================================== */
+
+.dashboard-panel {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-radius: 24px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: 400px;
+    margin: auto;
+}
+
+.light-theme .dashboard-panel {
+    background: rgba(255, 255, 255, 0.4);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+/* --- Divider --- */
+
+.dashboard-divider {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.1);
+    margin: 0 16px;
+}
+
+.light-theme .dashboard-divider {
+    background: rgba(0, 0, 0, 0.08);
+}
+
+/* --- Section --- */
+
+.dashboard-section {
+    padding: 16px 20px;
+}
+
+.dashboard-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+}
+
+.dashboard-section-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.light-theme .dashboard-section-title {
+    color: rgba(0, 0, 0, 0.8);
+}
+
+.dashboard-section-arrow {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.4);
+    transition: transform 0.2s ease;
+}
+
+.dashboard-section-arrow.open {
+    transform: rotate(180deg);
+}
+
+.light-theme .dashboard-section-arrow {
+    color: rgba(0, 0, 0, 0.4);
+}
+
+/* --- Dropdown --- */
+
+.dashboard-dropdown {
+    margin-top: 8px;
+}
+
+.dashboard-dropdown-item {
+    padding: 12px 16px;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: background 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 15px;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.dashboard-dropdown-item:active {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.light-theme .dashboard-dropdown-item {
+    color: rgba(0, 0, 0, 0.7);
+}
+
+.light-theme .dashboard-dropdown-item:active {
+    background: rgba(0, 0, 0, 0.05);
+}
