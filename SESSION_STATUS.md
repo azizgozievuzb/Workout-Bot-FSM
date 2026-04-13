@@ -2,30 +2,120 @@
 
 > **AI-агент:** Прочитай этот файл ПОСЛЕ `CLAUDE.md`. Здесь написано, на чём остановился предыдущий агент.
 
-**Последнее обновление:** 2026-04-12
-**Последний агент:** Cowork (Claude Opus 4.6)
+**Последнее обновление:** 2026-04-13
+**Последний агент:** Claude Sonnet 4.6
 
 ---
 
-## СЛЕДУЮЩАЯ ЗАДАЧА — Admin Cube (4-й куб для Азиза)
+## Завершено за 2026-04-13 (сессия 16 — UI fixes v3)
 
-Админ-код работает, Азиз заходит как админ (`is_admin=true` + dual-role). Сейчас видит те же 3 куба. Нужен **4-й куб "Admin"** — видим только когда `is_admin=true`.
+### ФИКС 1: Голый крестик (naked cosmic cross)
+- App.css: .overlay-close — background: transparent, border: none, border-radius: 0
+- Dark: gradient #ff8c42 → #c77dff (оранжевый→фиолетовый, Carina Nebula), drop-shadow
+- Light: gradient #d4956b → #c47a8a (золотой→розовый), drop-shadow
+- Добавлен .light-theme .overlay-close:active { transform: scale(0.85) }
 
-### Admin Cube содержит:
-1. **Создание промокодов** — кнопка "Создать промокод для Ответственного" → вызывает `POST /admin/promo/create`
-2. **Список промокодов** — таблица всех кодов с фильтрами (тип, использован/нет, привязанный юзер) → `GET /admin/promo/list`
-3. **Позже:** управление пользователями, статистика, биллинг
+### ФИКС 2: Supernova — разлёт осколков + тряска кнопки
+- RoleTransition.tsx: lightVariants.exit scale 1→2.5, y 0→-200, brightness(3); initial y: 300→0, scale 0.1→1
+- role-transition.css: .rt-void-light усилена (0.9 белый центр), добавлены ::before/::after осколки
+- @keyframes shard-fly-tl/shard-fly-tr: translate ±120px вверх
+- .rt-light.rt-active: cas-active-shake (тряска), удалён старый cas-active
+- Commit: 2977443, push → main
 
-### Реализация:
-- Создать `frontend/src/components/cubes/AdminCube.tsx`
-- В `App.tsx` — если `is_admin`, показывать 4-й куб в chaos mode и carousel
-- В `Backdrop` — добавить 4-й объект (куб/овал) для админа
-- Backend API уже готов: `POST /admin/promo/create`, `GET /admin/promo/list`
+---
 
-### После Admin Cube:
-1. API-подключение — заменить мок-данные реальными запросами
-2. rootMachine — обновить для новой навигации
-3. Unit-тесты для cube-компонентов
+## Завершено за 2026-04-13 (сессия 15 — UI fixes v2)
+
+### ФИКС 1: Hold+swipe-up для смены темы (вместо double-tap)
+- App.tsx: восстановлены SWIPE_UP_THRESHOLD/HOLD_FOR_SWIPE, handleGestureUp переписан
+- Удалён lastTapTime ref, добавлена защита Math.abs(deltaY) > Math.abs(deltaX)
+
+### ФИКС 2: Стилизованный крестик закрытия
+- App.css: .overlay-close — cosmic themed с pseudo ::before/::after, hover glow
+- App.tsx: убран текст ✕, добавлен aria-label на обе кнопки
+
+### ФИКС 3: Вихрь чёрной дыры (vortex gravity collapse)
+- RoleTransition.tsx: darkVariants с rotate ±180°, spiral enter/exit
+- role-transition.css: void-dark-pulse с rotate, .rt-content perspective: 800px
+
+---
+
+## Завершено за 2026-04-13 (сессия 14 — Bugfix жестов + анимации)
+
+### БАГ 1: Свайп карусели на MacBook (трекпад)
+- App.tsx: добавлен `handleWheel` с debounce 400ms на overlay-fullscreen
+
+### БАГ 2: RoleTransition зацикливается
+- RoleTransition.tsx: добавлен `transitioning` ref-guard в handleTap/handleExitComplete/handleAnimComplete
+
+### БАГ 3: Свайп вверх конфликтует со scroll
+- App.tsx: hold+swipe-up заменён на двойной тап в верхних 80px экрана (все режимы)
+- Удалены SWIPE_UP_THRESHOLD и HOLD_FOR_SWIPE константы
+
+### БАГ 4: Fullscreen случайно закрывается
+- App.tsx: hold timer теперь только из chaos mode
+- Добавлены кнопки ✕ на overlay-fullscreen и overlay-dashboard
+
+### УЛУЧШЕНИЯ анимаций:
+- darkVariants: спагеттификация (scaleX 0.2, scaleY 2.8, y -80)
+- lightVariants: разлёт осколков (scale 1.4, blur 8px, brightness 1.8)
+- rt-void-dark/light: усиленные void-фазы с keyframe-анимациями
+
+---
+
+## Завершено за 2026-04-13 (сессия 15 — Backend: Stats + Shop + Boosts API)
+
+### Миграция 011
+- Таблицы: shop_items (каталог + seed 5 товаров), purchases, boosts
+- RLS + индексы
+
+### GET /stats/me
+- Возвращает PlayerStatsResponse (streak, balance, rest days, scores)
+- Автосоздание записи если нет
+
+### GET /stats/partner
+- Responsible получает список игроков с их статистикой
+
+### GET /shop/items
+- Каталог активных товаров
+
+### POST /shop/purchase
+- Покупка за звёзды (проверка баланса, списание, запись в purchases)
+
+### POST /boosts/buy
+- Responsible активирует X2 буст для игрока (1_day / 1_week)
+
+### GET /boosts/active
+- Проверка активного буста (active, expires_at, hours_left)
+
+---
+
+## Завершено за 2026-04-13 (сессия 16 — Фронтенд API-подключение)
+
+### Новые API-клиенты:
+- `api/stats.ts` — getMyStats(), getPartnerStats()
+- `api/shop.ts` — getShopItems(), purchaseItem()
+- `api/boosts.ts` — getActiveBoost(), buyBoost()
+
+### ActionCube:
+- PlayerView: стрик, буст, дни отдыха из /stats/me + /boosts/active
+- ResponsibleView: MOCK_PLAYERS → /stats/partner, кнопка ⚡X2 → /boosts/buy
+
+### MarketCube:
+- PlayerShop: SHOP_ITEMS → /shop/items, баланс из /stats/me, покупка через /shop/purchase
+- ResponsibleShop: MOCK_PLAYERS_MARKET → /stats/partner, товары из /shop/items
+- "Подарить" и "Пополнить" — пока без логики (нужны /shop/gift и Stars API)
+
+### BondCube:
+- PlayerBond + ResponsibleBond: моки → /feed API с маппингом event_type → иконка/текст
+- markAsRead автоматически при просмотре
+- Бейджи убраны (нет API /achievements)
+
+---
+
+## СЛЕДУЮЩАЯ ЗАДАЧА — rootMachine
+
+Обновить FSM для новой навигации (4 куба + API).
 
 ---
 

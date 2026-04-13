@@ -54,35 +54,16 @@ const PlayerView: React.FC = () => {
     const [stats, setStats] = useState<PlayerStats | null>(null);
     const [boost, setBoost] = useState<ActiveBoost | null>(null);
     const [loading, setLoading] = useState(true);
-    const [statsError, setStatsError] = useState<string | null>(null);
 
     useEffect(() => {
         let done = 0;
         const check = () => { if (++done >= 2) setLoading(false); };
-        getMyStats()
-            .then(setStats)
-            .catch((err) => {
-                const status = err?.response?.status;
-                const detail = err?.response?.data?.detail || err?.message || 'unknown';
-                setStatsError(`${status ?? 'NET'}: ${detail}`);
-                console.error('[ActionCube] getMyStats FAILED:', status, err?.response?.data, err?.message);
-            })
-            .finally(check);
-        getActiveBoost()
-            .then(setBoost)
-            .catch((err) => {
-                console.error('[ActionCube] getActiveBoost FAILED:', err?.response?.status, err?.response?.data, err?.message);
-            })
-            .finally(check);
+        getMyStats().then(setStats).catch(() => {}).finally(check);
+        getActiveBoost().then(setBoost).catch(() => {}).finally(check);
     }, []);
 
     if (loading) return <div className="cube-section-title" style={{ textAlign: 'center' }}>Загрузка...</div>;
-    if (!stats) return (
-        <div style={{ textAlign: 'center', padding: '16px' }}>
-            <div className="cube-section-title">Не удалось загрузить</div>
-            {statsError && <div style={{ fontSize: '11px', color: '#ff6b6b', marginTop: '8px', wordBreak: 'break-all' }}>{statsError}</div>}
-        </div>
-    );
+    if (!stats) return <div className="cube-section-title" style={{ textAlign: 'center' }}>Не удалось загрузить</div>;
 
     return (
         <>
