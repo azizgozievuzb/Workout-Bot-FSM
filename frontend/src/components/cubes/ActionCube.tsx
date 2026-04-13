@@ -24,7 +24,10 @@ const ActionCube: React.FC = () => {
     };
 
     const defaultView: ActiveView = canPlay(user) ? 'player' : 'responsible';
-    const view = (activeRoleView as ActiveView) || defaultView;
+    // Safety: if persisted activeRoleView points to a role the user no longer has access to → fall back to default
+    const persistedAllowed = activeRoleView
+        && (activeRoleView === 'player' ? canPlay(user) : canMonitor(user));
+    const view: ActiveView = persistedAllowed ? (activeRoleView as ActiveView) : defaultView;
     const dual = isDualRole(user);
 
     const toggleView = () => {

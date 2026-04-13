@@ -48,7 +48,8 @@
 
 ## 🤖 Workflow Protocol
 1. Read `SESSION_STATUS.md`.
-2. Execute the task concisely. 
-3. If writing code, verify against FSM logic.
-4. Update `SESSION_STATUS.md` upon task completion.
-5. Stop generating text immediately after the technical objective is met.
+2. **ЕСЛИ в SESSION_STATUS.md есть блок "ОТКРЫТЫЙ ВОПРОС" — ОБЯЗАТЕЛЬНО спроси пользователя про него в начале сессии.**
+3. Execute the task concisely.
+4. If writing code, verify against FSM logic.
+5. Update `SESSION_STATUS.md` upon task completion.
+6. Stop generating text immediately after the technical objective is met.

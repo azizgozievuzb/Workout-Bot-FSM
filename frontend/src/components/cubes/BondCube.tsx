@@ -44,7 +44,7 @@ function timeAgo(dateStr: string): string {
 }
 
 const BondCube: React.FC = () => {
-    const { primary_role, has_player_access, has_responsible_access, is_admin } = useAuthStore();
+    const { primary_role, has_player_access, has_responsible_access, is_admin, activeRoleView, setActiveRoleView } = useAuthStore();
     const user: DualRoleUser = {
         primary_role: primary_role || 'player',
         has_player_access,
@@ -52,10 +52,13 @@ const BondCube: React.FC = () => {
         is_admin,
     };
 
-    const [view, setView] = useState<ActiveView>(canPlay(user) ? 'player' : 'responsible');
+    const defaultView: ActiveView = canPlay(user) ? 'player' : 'responsible';
+    const persistedAllowed = activeRoleView
+        && (activeRoleView === 'player' ? canPlay(user) : canMonitor(user));
+    const view: ActiveView = persistedAllowed ? (activeRoleView as ActiveView) : defaultView;
     const dual = isDualRole(user);
 
-    const toggleView = () => setView(v => v === 'player' ? 'responsible' : 'player');
+    const toggleView = () => setActiveRoleView(view === 'player' ? 'responsible' : 'player');
 
     return (
         <div className="cube-module">
@@ -162,8 +165,8 @@ const ResponsibleBond: React.FC = () => {
                 ))
             )}
 
-            <button className="cube-btn-primary" onClick={(e) => e.stopPropagation()}>
-                Инвайт-ссылка
+            <button className="cube-btn-secondary" onClick={(e) => e.stopPropagation()}>
+                Связь
             </button>
 
             <button className="cube-btn-secondary" onClick={(e) => e.stopPropagation()}>

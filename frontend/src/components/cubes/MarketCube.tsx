@@ -13,7 +13,7 @@ import '../../styles/cubes.css';
 type ActiveView = 'player' | 'responsible';
 
 const MarketCube: React.FC = () => {
-    const { primary_role, has_player_access, has_responsible_access, is_admin } = useAuthStore();
+    const { primary_role, has_player_access, has_responsible_access, is_admin, activeRoleView, setActiveRoleView } = useAuthStore();
     const user: DualRoleUser = {
         primary_role: primary_role || 'player',
         has_player_access,
@@ -21,10 +21,13 @@ const MarketCube: React.FC = () => {
         is_admin,
     };
 
-    const [view, setView] = useState<ActiveView>(canPlay(user) ? 'player' : 'responsible');
+    const defaultView: ActiveView = canPlay(user) ? 'player' : 'responsible';
+    const persistedAllowed = activeRoleView
+        && (activeRoleView === 'player' ? canPlay(user) : canMonitor(user));
+    const view: ActiveView = persistedAllowed ? (activeRoleView as ActiveView) : defaultView;
     const dual = isDualRole(user);
 
-    const toggleView = () => setView(v => v === 'player' ? 'responsible' : 'player');
+    const toggleView = () => setActiveRoleView(view === 'player' ? 'responsible' : 'player');
 
     return (
         <div className="cube-module">
@@ -92,7 +95,7 @@ const PlayerShop: React.FC = () => {
             {toast && <div className="admin-toast">{toast}</div>}
 
             <div className="cube-shop-grid">
-                {items.map(item => (
+                {items.slice(0, 5).map(item => (
                     <div className="cube-shop-item" key={item.id}>
                         <div className="cube-shop-icon">{item.emoji}</div>
                         <div className="cube-shop-name">{item.name}</div>
@@ -106,6 +109,13 @@ const PlayerShop: React.FC = () => {
                         </button>
                     </div>
                 ))}
+                {/* 6th empty lot — placeholder, non-clickable */}
+                <div className="cube-shop-item cube-shop-item-empty">
+                    <div className="cube-shop-icon">·</div>
+                    <div className="cube-shop-name">Пустой лот</div>
+                    <div className="cube-shop-price">—</div>
+                    <button className="cube-btn-sm" disabled>Скоро</button>
+                </div>
             </div>
         </>
     );
@@ -156,7 +166,7 @@ const ResponsibleShop: React.FC = () => {
             </button>
 
             <div className="cube-shop-grid">
-                {items.map(item => (
+                {items.slice(0, 5).map(item => (
                     <div className="cube-shop-item" key={item.id}>
                         <div className="cube-shop-icon">{item.emoji}</div>
                         <div className="cube-shop-name">{item.name}</div>
@@ -166,6 +176,12 @@ const ResponsibleShop: React.FC = () => {
                         </button>
                     </div>
                 ))}
+                <div className="cube-shop-item cube-shop-item-empty">
+                    <div className="cube-shop-icon">·</div>
+                    <div className="cube-shop-name">Пустой лот</div>
+                    <div className="cube-shop-price">—</div>
+                    <button className="cube-btn-sm" disabled>Скоро</button>
+                </div>
             </div>
         </>
     );

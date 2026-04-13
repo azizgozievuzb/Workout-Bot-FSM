@@ -306,6 +306,13 @@
     border: 1px solid rgba(210, 150, 100, 0.1);
 }
 
+/* Empty lot — placeholder, dimmed & non-interactive */
+.cube-shop-item-empty {
+    opacity: 0.35;
+    pointer-events: none;
+    border-style: dashed !important;
+}
+
 .cube-shop-icon {
     font-size: 28px;
     height: 36px;
