@@ -168,16 +168,15 @@ const ResponsibleView: React.FC = () => {
     return (
         <>
             {playerCodeData && playerCodeData.code && !playerCodeData.is_used && (
-                <div className="promo-invite-block">
-                    <div className="promo-invite-label">Пригласите игрока</div>
-                    <div className="promo-invite-code">{playerCodeData.code}</div>
-                    <div className="promo-invite-actions">
-                        <button className="cube-btn-sm" onClick={copyCode}>
-                            📋 Скопировать код
-                        </button>
-                        <button className="cube-btn-sm" onClick={copyLink}>
-                            🔗 Скопировать ссылку
-                        </button>
+                <div className="promo-invite-chip-row">
+                    <div
+                        className="promo-invite-chip"
+                        onClick={copyCode}
+                        title="Нажмите, чтобы скопировать код"
+                    >
+                        <span className="promo-invite-chip-label">Код</span>
+                        <span className="promo-invite-chip-code">{playerCodeData.code}</span>
+                        <span className="promo-invite-chip-copy">📋</span>
                     </div>
                 </div>
             )}

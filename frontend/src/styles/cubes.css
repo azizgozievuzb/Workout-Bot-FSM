@@ -543,7 +543,62 @@
     color: rgba(44, 32, 22, 0.4);
 }
 
-/* --- Promo invite block (ResponsibleView) --- */
+/* --- Promo invite CHIP (compact, side-positioned) --- */
+
+.promo-invite-chip-row {
+    display: flex;
+    justify-content: flex-end;
+    margin: 0 0 4px;
+}
+
+.promo-invite-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px 5px 12px;
+    border-radius: 999px;
+    font-size: 11px;
+    line-height: 1;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.15s;
+}
+
+.dark-theme .promo-invite-chip {
+    background: rgba(99, 102, 241, 0.12);
+    border: 1px solid rgba(99, 102, 241, 0.22);
+    color: rgba(250, 245, 239, 0.75);
+}
+
+.light-theme .promo-invite-chip {
+    background: rgba(99, 102, 241, 0.08);
+    border: 1px solid rgba(99, 102, 241, 0.18);
+    color: rgba(44, 32, 22, 0.75);
+}
+
+.promo-invite-chip:active {
+    transform: scale(0.96);
+}
+
+.promo-invite-chip-label {
+    font-size: 10px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    opacity: 0.55;
+}
+
+.promo-invite-chip-code {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    font-size: 12px;
+}
+
+.promo-invite-chip-copy {
+    font-size: 11px;
+    opacity: 0.7;
+}
+
+/* --- Promo invite block (ResponsibleView, legacy large variant) --- */
 
 .promo-invite-block {
     border-radius: 16px;

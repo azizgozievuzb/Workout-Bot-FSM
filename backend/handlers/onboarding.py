@@ -240,8 +240,7 @@ async def cmd_start(message: types.Message, state: FSMContext) -> None:
         .execute()
     )
     await message.answer(
-        "Добро пожаловать! Вы — Ответственный.\n"
-        "Чтобы стать Игроком, нужна пригласительная ссылка от вашего ответственного.\n\n"
+        "Добро пожаловать!\n\n"
         "Введите промокод для активации:"
     )
 
@@ -363,6 +362,12 @@ async def process_text_input(message: types.Message) -> None:
                 "onboarding_done": True,
             }).eq("telegram_id", message.from_user.id).execute()
 
+            # Ensure admin has a player_code for mini-app invite flow
+            try:
+                await svc.create_player_invite_code(message.from_user.id, tier="basic")
+            except Exception as e:
+                logger.error("create_player_invite_code (admin) failed: %s", e)
+
             await message.answer(
                 "🔑 Добро пожаловать, Админ!\n\nОткройте приложение:",
                 reply_markup=get_miniapp_keyboard(),
@@ -378,8 +383,16 @@ async def process_text_input(message: types.Message) -> None:
             await message.answer("Ошибка обработки промокода. Попробуйте снова.")
             return
 
+        # Create a player_code row so the mini-app ActionCube (Responsible)
+        # can display an invite code immediately.
+        try:
+            await svc.create_player_invite_code(message.from_user.id, tier=tier)
+        except Exception as e:
+            logger.error("create_player_invite_code failed: %s", e)
+
         await message.answer(
-            "Промокод принят!\n\nВыберите язык / Tilni tanlang / Choose language:",
+            "✅ Промокод принят. Вы теперь Ответственный.\n\n"
+            "Выберите язык / Tilni tanlang / Choose language:",
             reply_markup=get_language_keyboard(),
         )
         return

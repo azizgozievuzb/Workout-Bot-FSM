@@ -2,7 +2,7 @@
 
 > **AI-агент:** Прочитай этот файл ПОСЛЕ `CLAUDE.md`. Здесь написано, на чём остановился предыдущий агент.
 
-**Последнее обновление:** 2026-04-13
+**Последнее обновление:** 2026-04-14
 **Последний агент:** Claude Opus 4.6
 
 ---
@@ -23,21 +23,28 @@
 
 ---
 
-## ⏳ СЛЕДУЮЩИЙ ШАГ (первое что делать в новой сессии)
+## ✅ Выполнено в этой сессии (2026-04-14)
 
-**Промокоды:** 1 пригласительный код для игрока — достаточно для тестов. Доработка отложена.
+### Bot (aiogram)
+- **Приветствие** нейтральное: "Добро пожаловать! Введите промокод для активации:" (убрана преждевременная надпись "Вы — Ответственный").
+- **После ввода промокода:** "✅ Промокод принят. Вы теперь Ответственный."
+- **7-дневное предупреждение** на pair-link: добавлена фраза "если в течение 7 дней ссылка не активирована — возможность сгорает, и оплата за приглашение не возвращается."
+- **FIX player_code:** `OnboardingService.create_player_invite_code()` (новый метод в `onboarding_fsm.py`) — идемпотентно создаёт `promo_codes` row с `code_type='player'` для Ответственного, чтобы `/promo/my-player-code` возвращал валидный код для мини-аппа. Вызывается в `handlers/onboarding.py` сразу после успешной активации промокода (и для admin, и для regular responsible).
 
-**Архитектура Админа (решено):**
-- Админ при регистрации получает обе роли (Player + Responsible) **без промокодов**
-- Как Игрок: `partnership.responsible_id = NULL` — тренируется, звёзды, но без бустов
-- Как Ответственный: 0 игроков — пустой список
-- Опционально: может ввести чужой responsible-код → получает Ответственного
-- Опционально: может поделиться player-кодом → получает Игрока
-- Обычные юзеры — только через коды, как сейчас
+### Frontend: Dashboard
+- **`DashboardPanel.tsx`** (новый) — обёртка, один раз тянет данные (`getMyStats`, `getPartnerStats`, `getUnreadCount`) исходя из активной роли (`activeRoleView`).
+- **`DashboardSection.tsx`** (переписан) — принимает `module`, `view`, `data`, `loading`, `onOpen`. Контент зависит от роли:
+  - **Player:** Action (streak + "Начать тренировку"), Market (star_balance + "Магазин"), Bond (unread + "Профиль").
+  - **Responsible:** Action ("Мои игроки" + количество), Market ("Подарить"/"Пополнить"), Bond (unread + "Связь").
+  - **Admin:** Промокоды + Статистика (как было).
+- **`DashboardRoleSwitch.tsx`** (новый) — глобальная P/R кнопка в Dashboard-оверлее. Использует тот же `.rt-btn` стиль (top-left, `position: fixed`, напротив крестика). Управляет `activeRoleView` в zustand.
+- **App.tsx** — заменил inline map на `<DashboardPanel>`; добавил `<DashboardRoleSwitch>` в dashboard-оверлее.
 
-**Баг-фикс (сделано):** Свайп карусели больше не сбрасывает роль на Player. `activeRoleView` перенесён в zustand store.
+### Frontend: ActionCube
+- **Код приглашения** теперь компактный чип справа вверху (`.promo-invite-chip`), копирование по тапу. Большой блок удалён, CSS legacy-класс оставлен для совместимости.
 
-**Следующее:** Проверить видимость invite-кода в Responsible view (показывается ли блок). Если код `is_used` — блок скрыт, нужно решить UX.
+### Стили
+- `cubes.css`: добавлены `.promo-invite-chip-row`, `.promo-invite-chip`, `.promo-invite-chip-label`, `.promo-invite-chip-code`, `.promo-invite-chip-copy`.
 
 ---
 
@@ -47,69 +54,50 @@
 - **Vite + React + TS** — Mini App в Telegram
 - **4 куба** (Admin видит 4й): Action, Market, Bond, Admin
 - **Gesture system:** hold+swipe-up → тема, tap → fullscreen, долгий hold → dashboard, swipe-left/right → карусель (+ trackpad wheel)
-- **Dual-role:** кнопка P/R, `RoleTransition` с анимацией смены роли
-- **Темы:** dark (космос) / light (туманность), hold+swipe-up переключение
-- **Крестик закрытия:** космическая сфера (чёрная дыра dark / Кассиопея light), симметричен кнопке роли
-- **Кнопка смены роли:** `position: fixed` через `createPortal(document.body)` — не дёргается при свайпе карусели
+- **Dual-role:** кнопка P/R, `RoleTransition` с анимацией смены роли. В Dashboard — отдельный `DashboardRoleSwitch` (тот же стиль).
+- **`activeRoleView`** в zustand (`authStore`) — роль не сбрасывается при свайпе карусели; guard `persistedAllowed` предотвращает показ чужой роли при смене пользователя.
+- **Темы:** dark (космос) / light (туманность)
+- **Крестик закрытия:** космическая сфера (чёрная дыра dark / Кассиопея light)
 - **Backdrop:** ghost face + GlassCubes (canvas 3D) + Starfield/CloudField
-- **ActionCube:** Player view (streak, boost, rest days, "Приступим") + Responsible view (игроки, код приглашения, кнопка ⚡X2)
-- **MarketCube:** Магазин (shop items + баланс звёзд)
-- **BondCube:** Activity feed
+- **ActionCube:** Player (streak, boost, rest days, "Приступим") + Responsible (игроки, компактный чип с кодом, кнопка ⚡X2)
+- **MarketCube:** 5 лотов + "Пустой лот" (некликабельный)
+- **BondCube:** Activity feed, кнопка переименована в "Связь"
 - **AdminCube:** Управление промокодами
-- **PromoCodeModal:** Модалка ввода промо при попытке переключить недоступную роль
-- **Премиум палитра:** "Раскалённый углерод" (dark: #0C0A08, карточки #1A1714) / "Горячая дымка" (light: #FAF6F1, текст #2C2016). Тёплые amber-бордеры вместо холодных белых.
+- **Dashboard:** real-data виджеты, role-aware контент, глобальная P/R кнопка
 
 ### Backend (Railway, Python 3.11 + FastAPI + Aiogram 3)
 - **Auth:** JWT, validate initData, `get_current_user` dependency
 - **Routers:** auth, users, partnerships, activity_feed, promo, admin, stats, shop, boosts
-- **stats.py:** GET /stats/me (авто-создаёт player_stats если нет), GET /stats/partner
-- **shop.py:** GET /shop/items, POST /shop/purchase
-- **boosts.py:** GET /boosts/active, POST /boosts/buy
-- **КРИТИЧЕСКИЙ ФИКС:** `.maybe_single()` в supabase-py возвращает `None` (не объект с `.data=None`) когда строки нет → везде используем `res.data if res is not None else None`
-- **Telegram bot:** онбординг, обработчик промокода
+- **Promo:** `_create_player_code` (api) + `OnboardingService.create_player_invite_code` (bot) — оба пишут в `promo_codes` с `code_type='player'`
+- **Telegram bot:** онбординг, обработчик промокода, нейтральные сообщения, 7-day warning
 
 ### Database (Supabase PostgreSQL)
 - Миграции 001–011 применены
 - Таблицы: users, partnerships, subscriptions, player_stats, shop_items, purchases, boosts, activity_feed, promo_codes
 - RLS включён, service_role key используется на бэкенде
+- **Reset:** SQL-скрипт для удаления всех данных кроме админа — отработал, проверено
 
 ---
 
 ## 🔜 Что дальше (приоритет)
 
-### 1. Доработка системы промокодов (ждём ТЗ от пользователя)
-Админ/Ответственный хочет приглашать игроков напрямую. Текущий player_code одноразовый.
+### 1. Тестовый прогон после фиксов
+- Запустить бот с нуля: /start → промокод Responsible → проверить, что в мини-аппе в ActionCube показывается код (чип справа вверху).
+- Проверить Dashboard: реальные цифры (streak, balance, unread), смена роли через P/R кнопку.
 
 ### 2. Тренировочный интерфейс (ГЛАВНАЯ ЦЕЛЬ)
-Экран тренировки — самая важная часть проекта:
-- Кнопка "Приступим" → открывает `200_workoutSessionMachine`
-- Камера (getUserMedia, landscape lock)
-- WakeLock (экран не гаснет)
-- Таймер 35 мин (16 упражнений × 40 сек + переходы), устойчив к блокировке экрана
-- Запись видео кусками (16 × ~40 сек)
-- Отправка кусков на бэкенд → Gemini Vision → оценка техники → звёзды
-- FSM: `200_workoutSessionMachine.ts` в `/fsm_blueprints/`
+- Кнопка "Приступим" / "Начать тренировку" → открывает `200_workoutSessionMachine`
+- Камера (getUserMedia, landscape lock), WakeLock, таймер 35 мин
+- Запись кусками → Gemini Vision → звёзды
+- FSM: `200_workoutSessionMachine.ts`
 
-### 3. rootMachine обновление
-После реализации тренировки — обновить `000_rootMachine.ts` согласно текущему состоянию.
+### 3. Архитектура Админа (ОТЛОЖЕНО)
+Обе роли без промокодов, NULL partnership как Игрок. См. блок "ОТКРЫТЫЕ ВОПРОСЫ".
 
-### 4. Unit tests
-После стабилизации основного флоу.
+### 4. Глобальная переработка Маркета (ОТЛОЖЕНО)
+Нативные лоты + лоты Ответственного, разные валюты. См. блок выше.
 
----
-
-## 🎨 Последние UI-изменения (эта сессия)
-
-1. **Крестик закрытия** → космическая сфера (тот же стиль что кнопка роли)
-2. **Кнопка роли** → `position: fixed` + `createPortal(document.body)` — на уровне крестика, не прыгает при свайпе
-3. **Премиум палитра** применена ко ВСЕМ компонентам:
-   - `globals.css` — CSS-переменные
-   - `App.css` — оверлеи, footer, заголовки
-   - `cubes.css` — карточки, кнопки, текст, feed, shop, badges
-   - `dashboard.css` — панель, разделители
-   - `promo-modal.css` — модалка промокода
-   - `OnboardingFlow.css` — онбординг
-   - `role-transition.css` — кнопка смены роли
+### 5. rootMachine обновление + Unit tests
 
 ---
 
@@ -119,3 +107,4 @@
 - Railway деплой: green = успешно, но может занять 1-2 мин после push
 - Vercel деплой: автоматически при push в main
 - `npm run build` в песочнице падает из-за rolldown native binding — на реальной машине работает
+- Git push из песочницы не работает (нет auth) — пуш локально

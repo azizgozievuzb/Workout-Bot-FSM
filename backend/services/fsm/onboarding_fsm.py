@@ -6,6 +6,7 @@ Player flow:      player_language → player_gender → player_survey → onboar
 """
 import random
 import string
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Literal
@@ -338,6 +339,56 @@ class OnboardingService:
             .eq("telegram_id", telegram_id)
             .execute()
         )
+
+    # ------------------------------------------------------------------
+    # Player invite code (promo_codes with code_type='player') — mini-app
+    # ------------------------------------------------------------------
+
+    async def create_player_invite_code(
+        self, responsible_telegram_id: int, tier: str = "basic"
+    ) -> str | None:
+        """Create a player_code row in promo_codes so /promo/my-player-code
+        returns a valid code for the mini-app. Idempotent: if an unused code
+        already exists for this responsible, returns it instead of creating."""
+        resp_res = (
+            await self.db.table("users")
+            .select("id")
+            .eq("telegram_id", responsible_telegram_id)
+            .single()
+            .execute()
+        )
+        responsible_id = resp_res.data["id"]
+
+        # Return existing unused code if present
+        existing = (
+            await self.db.table("promo_codes")
+            .select("code")
+            .eq("responsible_id", responsible_id)
+            .eq("code_type", "player")
+            .eq("is_used", False)
+            .limit(1)
+            .execute()
+        )
+        if existing.data:
+            return existing.data[0]["code"]
+
+        chars = string.ascii_uppercase + string.digits
+        code_str = "".join(random.choices(chars, k=8))
+        token = str(uuid.uuid4())
+
+        await (
+            self.db.table("promo_codes")
+            .insert({
+                "code": code_str,
+                "code_type": "player",
+                "tier": tier,
+                "responsible_id": responsible_id,
+                "deep_link_token": token,
+                "is_used": False,
+            })
+            .execute()
+        )
+        return code_str
 
     # ------------------------------------------------------------------
     # Pair code (invite link)

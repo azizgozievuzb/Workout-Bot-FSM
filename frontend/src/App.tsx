@@ -12,7 +12,8 @@ import AdminCube from './components/cubes/AdminCube';
 import { ThemeContext } from './contexts/ThemeContext';
 import { useAuthStore } from './stores/authStore';
 import './App.css';
-import DashboardSection from './components/shared/DashboardSection';
+import DashboardPanel from './components/shared/DashboardPanel';
+import DashboardRoleSwitch from './components/shared/DashboardRoleSwitch';
 import './styles/dashboard.css';
 
 // --- Типы ---
@@ -228,17 +229,12 @@ const App: React.FC = () => {
                                 onPointerUp={handleGestureUp}
                             >
                                 <button className="overlay-close" onClick={(e) => { e.stopPropagation(); setLayout('chaos'); setActiveModule(null); }} aria-label="Закрыть" />
-                                <div className="dashboard-panel">
-                                    {(is_admin ? ['Action', 'Market', 'Bond', 'Admin'] as ModuleName[] : ['Action', 'Market', 'Bond'] as ModuleName[]).map((mod, i, arr) => (
-                                        <React.Fragment key={mod}>
-                                            <DashboardSection module={mod} onOpen={() => {
-                                                setLayout('fullscreen');
-                                                setActiveModule(mod);
-                                            }} />
-                                            {i < arr.length - 1 && <div className="dashboard-divider" />}
-                                        </React.Fragment>
-                                    ))}
-                                </div>
+                                <DashboardRoleSwitch />
+                                <DashboardPanel onOpen={(mod) => {
+                                    setSwipeDir(0);
+                                    setLayout('fullscreen');
+                                    setActiveModule(mod as ModuleName);
+                                }} />
                             </div>
                         )}
                     </div>
