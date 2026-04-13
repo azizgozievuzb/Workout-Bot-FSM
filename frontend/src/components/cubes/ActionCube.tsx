@@ -15,7 +15,7 @@ import '../../styles/cubes.css';
 type ActiveView = 'player' | 'responsible';
 
 const ActionCube: React.FC = () => {
-    const { primary_role, has_player_access, has_responsible_access, is_admin } = useAuthStore();
+    const { primary_role, has_player_access, has_responsible_access, is_admin, activeRoleView, setActiveRoleView } = useAuthStore();
     const user: DualRoleUser = {
         primary_role: primary_role || 'player',
         has_player_access,
@@ -23,10 +23,14 @@ const ActionCube: React.FC = () => {
         is_admin,
     };
 
-    const [view, setView] = useState<ActiveView>(canPlay(user) ? 'player' : 'responsible');
+    const defaultView: ActiveView = canPlay(user) ? 'player' : 'responsible';
+    const view = (activeRoleView as ActiveView) || defaultView;
     const dual = isDualRole(user);
 
-    const toggleView = () => setView(v => v === 'player' ? 'responsible' : 'player');
+    const toggleView = () => {
+        const next: ActiveView = view === 'player' ? 'responsible' : 'player';
+        setActiveRoleView(next);
+    };
 
     return (
         <div className="cube-module">

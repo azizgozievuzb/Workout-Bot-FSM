@@ -10,6 +10,8 @@ export interface DualRoleUser {
   is_admin: boolean;
 }
 
+type ActiveRoleView = 'player' | 'responsible';
+
 interface AuthState {
   token: string | null;
   role: LegacyRole | null;
@@ -23,6 +25,8 @@ interface AuthState {
   photoLightUrl: string | null;
   isAuthenticated: boolean;
   player_code: string | null;
+  activeRoleView: ActiveRoleView | null;
+  setActiveRoleView: (view: ActiveRoleView) => void;
   setAuth: (data: {
     token: string;
     role: string;
@@ -54,7 +58,9 @@ export const useAuthStore = create<AuthState>((set) => ({
   photoDarkUrl: null,
   photoLightUrl: null,
   player_code: null,
+  activeRoleView: null,
   isAuthenticated: false,
+  setActiveRoleView: (view) => set({ activeRoleView: view }),
   setAuth: (data) =>
     set({
       token: data.token,
@@ -92,6 +98,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       photoDarkUrl: null,
       photoLightUrl: null,
       player_code: null,
+      activeRoleView: null,
       isAuthenticated: false,
     }),
 }));
