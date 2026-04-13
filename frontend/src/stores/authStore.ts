@@ -26,7 +26,9 @@ interface AuthState {
   isAuthenticated: boolean;
   player_code: string | null;
   activeRoleView: ActiveRoleView | null;
+  accessRevoked: boolean;
   setActiveRoleView: (view: ActiveRoleView) => void;
+  setAccessRevoked: (revoked: boolean) => void;
   setAuth: (data: {
     token: string;
     role: string;
@@ -60,7 +62,9 @@ export const useAuthStore = create<AuthState>((set) => ({
   player_code: null,
   activeRoleView: null,
   isAuthenticated: false,
+  accessRevoked: false,
   setActiveRoleView: (view) => set({ activeRoleView: view }),
+  setAccessRevoked: (revoked) => set({ accessRevoked: revoked }),
   setAuth: (data) =>
     set({
       token: data.token,
@@ -100,5 +104,6 @@ export const useAuthStore = create<AuthState>((set) => ({
       player_code: null,
       activeRoleView: null,
       isAuthenticated: false,
+      accessRevoked: false,
     }),
 }));

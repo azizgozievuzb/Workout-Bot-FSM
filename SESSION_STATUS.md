@@ -3,7 +3,7 @@
 > **AI-агент:** Прочитай этот файл ПОСЛЕ `CLAUDE.md`. Здесь написано, на чём остановился предыдущий агент.
 
 **Последнее обновление:** 2026-04-14
-**Последний агент:** Claude Opus 4.6
+**Последний агент:** Claude Sonnet 4.6
 
 ---
 
@@ -23,7 +23,43 @@
 
 ---
 
-## ✅ Выполнено в этой сессии (2026-04-14)
+## ✅ Выполнено в этой сессии (2026-04-14) — Promo TTL Lifecycle
+
+### Migration 012 (`backend/db/migrations/012_promo_ttl.sql`)
+- `promo_codes`: добавлены `duration_days` (7/30/90, default 30), `activated_at`, `activated_by`, `warn_sent`
+- `promo_codes_archive`: новая таблица для архива истёкших кодов
+- `users`: добавлены `deactivated_at`, `scheduled_deletion_at`
+
+### Backend
+- **`backend/schedulers/promo_lifecycle.py`** — APScheduler Jobs A/B/C:
+  - Job A (10 мин): архивация истёкших кодов + деактивация юзеров
+  - Job B (1 час): предупреждение Игрокам за 24ч до истечения
+  - Job C (раз в сутки): cascade delete юзеров после 30 дней
+- **`backend/main.py`**: APScheduler стартует в lifespan; зарегистрирован `admin_bot_router`
+- **`backend/requirements.txt`**: добавлен `APScheduler==3.10.4`
+- **`backend/core/deps.py`**: `get_current_user` проверяет `deactivated_at` для роли player → 403 PROMO_EXPIRED
+- **`backend/api/routers/promo.py`**:
+  - `_activate_player_code`: устанавливает `activated_at`, `activated_by`, `expires_at`, сбрасывает `deactivated_at` (реактивация)
+  - Новый endpoint `GET /promo/player-status` — TTL статус для Игрока
+  - `GET /promo/my-player-code` теперь возвращает `duration_days`, `expires_at`, `days_left`
+- **`backend/api/routers/admin.py`**:
+  - `POST /admin/promo/create` принимает `duration_days` (7/30/90)
+  - Бот-команда `/new_promo` + inline-кнопки [7 дней][30 дней][90 дней] для создания промо
+- **`backend/api/routers/stats.py`**: `PartnerStatsResponse` добавлены `is_deactivated`, `deactivated_at`
+
+### Frontend
+- **`src/api/client.ts`**: interceptor на 403 PROMO_EXPIRED → `setAccessRevoked(true)`
+- **`src/stores/authStore.ts`**: добавлено `accessRevoked: boolean`, `setAccessRevoked()`
+- **`src/components/shared/AccessRevokedScreen.tsx`**: новый экран с кнопкой закрытия (`WebApp.close()`)
+- **`src/styles/cubes.css`**: стили для AccessRevokedScreen, player-expiry-banner, deactivated player row
+- **`src/components/cubes/ActionCube.tsx`**:
+  - PlayerView: чип с датой истечения + баннер если `days_left <= 1`
+  - ResponsibleView: деактивированные игроки отображаются серыми (opacity 0.4) с бейджем "Доступ истёк" и кнопкой "Продлить"; empty state если нет активных игроков
+- **`src/api/promo.ts`**: добавлены типы `MyPlayerCodeResponse`, `PlayerStatusResponse`, функция `getPlayerStatus()`
+- **`src/api/stats.ts`**: `PartnerStats` добавлены `is_deactivated`, `deactivated_at`
+- **`src/App.tsx`**: рендер `<AccessRevokedScreen>` при `accessRevoked=true`
+
+## ✅ Выполнено ранее (2026-04-14)
 
 ### Bot (aiogram)
 - **Приветствие** нейтральное: "Добро пожаловать! Введите промокод для активации:" (убрана преждевременная надпись "Вы — Ответственный").
@@ -80,6 +116,9 @@
 ---
 
 ## 🔜 Что дальше (приоритет)
+
+### 0. Применить migration 012 в Supabase
+- Открыть Supabase SQL Editor → вставить `backend/db/migrations/012_promo_ttl.sql` → Run
 
 ### 1. Тестовый прогон после фиксов
 - Запустить бот с нуля: /start → промокод Responsible → проверить, что в мини-аппе в ActionCube показывается код (чип справа вверху).

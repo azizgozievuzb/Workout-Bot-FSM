@@ -1,4 +1,5 @@
-"""Promo code endpoints: activate, my-player-code, activate-link."""
+"""Promo code endpoints: activate, my-player-code, activate-link, player-status."""
+import math
 import string
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -38,6 +39,16 @@ class MyPlayerCodeResponse(BaseModel):
     deep_link: str | None = None
     is_used: bool = False
     used_by_name: str | None = None
+    duration_days: int | None = None
+    expires_at: str | None = None
+    days_left: int | None = None
+
+
+class PlayerStatusResponse(BaseModel):
+    is_active: bool
+    expires_at: str | None = None
+    days_left: int | None = None
+    duration_days: int | None = None
 
 
 class ActivateLinkResponse(BaseModel):
@@ -52,13 +63,24 @@ class ActivateLinkResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 def _generate_code(length: int = 8) -> str:
-    """Random uppercase alpha + digits code."""
     alphabet = string.ascii_uppercase + string.digits
     return "".join(choices(alphabet, k=length))
 
 
+def _compute_days_left(expires_at_str: str | None) -> int | None:
+    if not expires_at_str:
+        return None
+    try:
+        exp = datetime.fromisoformat(expires_at_str)
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        delta = exp - datetime.now(timezone.utc)
+        return max(0, math.ceil(delta.total_seconds() / 86400))
+    except Exception:
+        return None
+
+
 async def _check_rate_limit(db, user_data: dict) -> dict | None:
-    """Returns error dict if rate-limited, else None."""
     locked_until = user_data.get("promo_locked_until")
     if locked_until:
         if isinstance(locked_until, str):
@@ -70,7 +92,6 @@ async def _check_rate_limit(db, user_data: dict) -> dict | None:
 
 
 async def _increment_attempts(db, telegram_id: int, current_attempts: int):
-    """Increment promo_attempts, lock if >= MAX_ATTEMPTS."""
     new_attempts = current_attempts + 1
     update = {"promo_attempts": new_attempts}
     if new_attempts >= MAX_ATTEMPTS:
@@ -90,7 +111,10 @@ async def _reset_attempts(db, telegram_id: int):
     )
 
 
-async def _create_player_code(db, responsible_id: str, tier: str = "basic", parent_code_id: str | None = None) -> str:
+async def _create_player_code(
+    db, responsible_id: str, tier: str = "basic",
+    parent_code_id: str | None = None, duration_days: int = 30,
+) -> str:
     """Generate a player_code for a responsible/admin. Returns the code string."""
     code_str = _generate_code(8)
     token = str(uuid.uuid4())
@@ -101,6 +125,7 @@ async def _create_player_code(db, responsible_id: str, tier: str = "basic", pare
         "responsible_id": responsible_id,
         "deep_link_token": token,
         "is_used": False,
+        "duration_days": duration_days,
     }
     if parent_code_id:
         insert_data["parent_code_id"] = parent_code_id
@@ -109,14 +134,12 @@ async def _create_player_code(db, responsible_id: str, tier: str = "basic", pare
 
 
 async def _activate_player_code(db, user_id: str, telegram_id: int, code_row: dict) -> ActivatePromoResponse:
-    """Activate a player_code: create partnership, mark used."""
+    """Activate a player_code: create partnership, mark used, set TTL fields."""
     responsible_id = code_row["responsible_id"]
 
-    # Can't pair with yourself
     if responsible_id == user_id:
         raise HTTPException(status_code=400, detail="Нельзя использовать свой собственный код")
 
-    # Get responsible name
     resp_res = await (
         db.table("users")
         .select("first_name")
@@ -126,12 +149,18 @@ async def _activate_player_code(db, user_id: str, telegram_id: int, code_row: di
     )
     responsible_name = resp_res.data.get("first_name", "Ответственный")
 
-    # Update user roles
+    now = datetime.now(timezone.utc)
+    duration_days = code_row.get("duration_days") or 30
+    expires_at = (now + timedelta(days=duration_days)).isoformat()
+
+    # Update user roles + clear deactivation if reactivating (Job D)
     await (
         db.table("users")
         .update({
             "primary_role": "player",
             "has_player_access": True,
+            "deactivated_at": None,
+            "scheduled_deletion_at": None,
         })
         .eq("telegram_id", telegram_id)
         .execute()
@@ -148,13 +177,16 @@ async def _activate_player_code(db, user_id: str, telegram_id: int, code_row: di
         .execute()
     )
 
-    # Mark code as used
+    # Mark code as used with TTL fields
     await (
         db.table("promo_codes")
         .update({
             "is_used": True,
             "used_by": user_id,
-            "used_at": datetime.now(timezone.utc).isoformat(),
+            "used_at": now.isoformat(),
+            "activated_at": now.isoformat(),
+            "activated_by": telegram_id,
+            "expires_at": expires_at,
         })
         .eq("id", code_row["id"])
         .execute()
@@ -182,7 +214,6 @@ async def activate_promo(
     db = await get_supabase()
     telegram_id = current_user["telegram_id"]
 
-    # Get user data
     user_res = await (
         db.table("users")
         .select("id, promo_attempts, promo_locked_until, is_admin")
@@ -193,7 +224,6 @@ async def activate_promo(
     user_data = user_res.data
     user_id = user_data["id"]
 
-    # Rate limit check
     rate_err = await _check_rate_limit(db, user_data)
     if rate_err:
         raise HTTPException(
@@ -203,12 +233,9 @@ async def activate_promo(
 
     code = body.code.strip()
 
-    # --- Admin code ---
     if settings.ADMIN_PROMO_CODE and code == settings.ADMIN_PROMO_CODE:
         if user_data.get("is_admin"):
-            return ActivatePromoResponse(
-                success=False, role_granted="", message="Вы уже Админ."
-            )
+            return ActivatePromoResponse(success=False, role_granted="", message="Вы уже Админ.")
         await (
             db.table("users")
             .update({
@@ -230,7 +257,6 @@ async def activate_promo(
             player_code=player_code_str,
         )
 
-    # --- DB code lookup ---
     code_res = await (
         db.table("promo_codes")
         .select("*")
@@ -250,23 +276,13 @@ async def activate_promo(
 
     code_row = code_res.data[0]
 
-    # Check if already used
     if code_row.get("is_used"):
         await _increment_attempts(db, telegram_id, user_data.get("promo_attempts", 0))
         raise HTTPException(status_code=400, detail="Этот промокод уже был использован.")
 
-    # Check expiry
-    expires_at = code_row.get("expires_at")
-    if expires_at:
-        exp = datetime.fromisoformat(expires_at) if isinstance(expires_at, str) else expires_at
-        if exp < datetime.now(timezone.utc):
-            raise HTTPException(status_code=400, detail="Срок действия промокода истёк.")
-
     code_type = code_row.get("code_type", "responsible")
 
-    # --- Responsible code ---
     if code_type == "responsible":
-        # Update user
         await (
             db.table("users")
             .update({
@@ -277,8 +293,6 @@ async def activate_promo(
             .eq("telegram_id", telegram_id)
             .execute()
         )
-
-        # Mark code as used
         await (
             db.table("promo_codes")
             .update({
@@ -289,14 +303,10 @@ async def activate_promo(
             .eq("id", code_row["id"])
             .execute()
         )
-
-        # Generate player_code
         player_code_str = await _create_player_code(
             db, user_id, tier=code_row.get("tier", "basic"), parent_code_id=code_row["id"]
         )
-
         await _reset_attempts(db, telegram_id)
-
         return ActivatePromoResponse(
             success=True,
             role_granted="responsible",
@@ -304,7 +314,6 @@ async def activate_promo(
             player_code=player_code_str,
         )
 
-    # --- Player code ---
     if code_type == "player":
         return await _activate_player_code(db, user_id, telegram_id, code_row)
 
@@ -312,7 +321,7 @@ async def activate_promo(
 
 
 # ---------------------------------------------------------------------------
-# GET /promo/my-player-code
+# GET /promo/my-player-code   (Responsible view of issued player code)
 # ---------------------------------------------------------------------------
 
 @router.get("/my-player-code", response_model=MyPlayerCodeResponse)
@@ -320,7 +329,6 @@ async def my_player_code(current_user: dict = Depends(get_current_user)):
     db = await get_supabase()
     telegram_id = current_user["telegram_id"]
 
-    # Get user UUID
     user_res = await (
         db.table("users")
         .select("id")
@@ -330,10 +338,9 @@ async def my_player_code(current_user: dict = Depends(get_current_user)):
     )
     user_id = user_res.data["id"]
 
-    # Find unused player_codes for this responsible
     codes_res = await (
         db.table("promo_codes")
-        .select("code, deep_link_token, is_used, used_by")
+        .select("code, deep_link_token, is_used, used_by, duration_days, expires_at")
         .eq("responsible_id", user_id)
         .eq("code_type", "player")
         .eq("is_used", False)
@@ -345,11 +352,69 @@ async def my_player_code(current_user: dict = Depends(get_current_user)):
 
     code_row = codes_res.data[0]
     deep_link = f"https://t.me/{settings.BOT_USERNAME}?startapp={code_row['deep_link_token']}"
+    expires_at = code_row.get("expires_at")
+    days_left = _compute_days_left(expires_at)
 
     return MyPlayerCodeResponse(
         code=code_row["code"],
         deep_link=deep_link,
         is_used=False,
+        duration_days=code_row.get("duration_days"),
+        expires_at=expires_at,
+        days_left=days_left,
+    )
+
+
+# ---------------------------------------------------------------------------
+# GET /promo/player-status   (Player view of own access TTL)
+# ---------------------------------------------------------------------------
+
+@router.get("/player-status", response_model=PlayerStatusResponse)
+async def player_status(current_user: dict = Depends(get_current_user)):
+    """Returns the player's own promo expiry info."""
+    db = await get_supabase()
+    telegram_id = current_user["telegram_id"]
+
+    user_res = await (
+        db.table("users")
+        .select("id, deactivated_at")
+        .eq("telegram_id", telegram_id)
+        .maybe_single()
+        .execute()
+    )
+    if not user_res or not user_res.data:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user_id = user_res.data["id"]
+
+    # If already deactivated, return immediately
+    if user_res.data.get("deactivated_at"):
+        return PlayerStatusResponse(is_active=False)
+
+    # Find the active player promo code for this user
+    code_res = await (
+        db.table("promo_codes")
+        .select("duration_days, expires_at")
+        .eq("activated_by", telegram_id)
+        .eq("code_type", "player")
+        .eq("is_used", True)
+        .order("activated_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+
+    if not code_res.data:
+        return PlayerStatusResponse(is_active=True)
+
+    row = code_res.data[0]
+    expires_at = row.get("expires_at")
+    days_left = _compute_days_left(expires_at)
+
+    return PlayerStatusResponse(
+        is_active=True,
+        expires_at=expires_at,
+        days_left=days_left,
+        duration_days=row.get("duration_days"),
     )
 
 
@@ -365,7 +430,6 @@ async def activate_link(
     db = await get_supabase()
     telegram_id = current_user["telegram_id"]
 
-    # Get user
     user_res = await (
         db.table("users")
         .select("id")
@@ -375,7 +439,6 @@ async def activate_link(
     )
     user_id = user_res.data["id"]
 
-    # Find code by deep_link_token
     code_res = await (
         db.table("promo_codes")
         .select("*")

@@ -11,6 +11,7 @@ import BondCube from './components/cubes/BondCube';
 import AdminCube from './components/cubes/AdminCube';
 import { ThemeContext } from './contexts/ThemeContext';
 import { useAuthStore } from './stores/authStore';
+import AccessRevokedScreen from './components/shared/AccessRevokedScreen';
 import './App.css';
 import DashboardPanel from './components/shared/DashboardPanel';
 import DashboardRoleSwitch from './components/shared/DashboardRoleSwitch';
@@ -34,7 +35,7 @@ const carouselVariants = {
 
 const App: React.FC = () => {
     const { isLoading, onboardingDone, photoUrl, error, role } = useAuth();
-    const { is_admin } = useAuthStore();
+    const { is_admin, accessRevoked } = useAuthStore();
     const [theme, setTheme] = useState<'dark' | 'light'>('dark');
     const [layoutMode, setLayoutMode] = useState<LayoutMode>('chaos');
     const [activeModule, setActiveModule] = useState<ModuleName | null>(null);
@@ -165,6 +166,13 @@ const App: React.FC = () => {
                         onPointerUp={handleGestureUp}
                         style={{ pointerEvents: gestureEnabled && layoutMode === 'chaos' ? 'auto' : 'none' }}
                     />
+
+                    {/* ACCESS REVOKED — прогресс истёк */}
+                    {accessRevoked && (
+                        <div className="ui-overlay" style={{ pointerEvents: 'auto' }}>
+                            <AccessRevokedScreen />
+                        </div>
+                    )}
 
                     {/* PHOTO GATE — обязательное селфи для ВСЕХ пользователей */}
                     {/* Показываем только после загрузки auth (isLoading=false), чтобы кубы не мелькали */}

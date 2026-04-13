@@ -20,6 +20,8 @@ export interface PartnerStats {
     star_balance: number;
     last_workout_date: string | null;
     global_score: number;
+    is_deactivated: boolean;
+    deactivated_at: string | null;
 }
 
 export async function getMyStats(): Promise<PlayerStats> {

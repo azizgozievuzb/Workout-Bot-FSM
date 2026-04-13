@@ -13,7 +13,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from .api.routers.activity_feed import router as activity_feed_router
-from .api.routers.admin import router as admin_router
+from .api.routers.admin import router as admin_router, admin_bot_router
 from .api.routers.auth import router as auth_router
 from .api.routers.partnerships import router as partnerships_router
 from .api.routers.promo import router as promo_router
@@ -23,6 +23,7 @@ from .api.routers.shop import router as shop_router
 from .api.routers.boosts import router as boosts_router
 from .core.config import settings
 from .handlers.onboarding import onboarding_router
+from .schedulers.promo_lifecycle import create_scheduler
 
 logging.basicConfig(level=settings.LOG_LEVEL)
 logger = logging.getLogger(__name__)
@@ -37,6 +38,7 @@ bot = Bot(
 )
 dp = Dispatcher()
 dp.include_router(onboarding_router)
+dp.include_router(admin_bot_router)
 
 # ---------------------------------------------------------------------------
 # Lifespan: set/delete webhook
@@ -44,6 +46,10 @@ dp.include_router(onboarding_router)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    scheduler = create_scheduler(bot)
+    scheduler.start()
+    logger.info("APScheduler started")
+
     if settings.WEBHOOK_URL:
         base_url = settings.WEBHOOK_URL.strip().rstrip("/")
         webhook_url = f"{base_url}/webhook"
@@ -60,6 +66,7 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning("WEBHOOK_URL is empty — skipping webhook setup")
     yield
+    scheduler.shutdown(wait=False)
     # Не удаляем вебхук при выключении, иначе старый контейнер при деплое удалит вебхук нового!
     await bot.session.close()
     logger.info("Bot shutdown")

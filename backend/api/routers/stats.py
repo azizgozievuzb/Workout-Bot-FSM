@@ -32,6 +32,8 @@ class PartnerStatsResponse(BaseModel):
     star_balance: int
     last_workout_date: str | None
     global_score: int
+    is_deactivated: bool = False
+    deactivated_at: str | None = None
 
 
 @router.get("/me", response_model=PlayerStatsResponse)
@@ -135,14 +137,15 @@ async def get_partner_stats(user: dict = Depends(get_current_user)):
 
     player_ids = [p["player_id"] for p in partnerships_res.data]
 
-    # Получить имена игроков
+    # Получить имена и статус деактивации игроков
     users_res = (
         await db.table("users")
-        .select("id, first_name")
+        .select("id, first_name, deactivated_at")
         .in_("id", player_ids)
         .execute()
     )
-    names = {u["id"]: u["first_name"] for u in (users_res.data or [])}
+    user_map = {u["id"]: u for u in (users_res.data or [])}
+    names = {uid: u["first_name"] for uid, u in user_map.items()}
 
     # Получить статистику
     stats_res = (
@@ -155,6 +158,8 @@ async def get_partner_stats(user: dict = Depends(get_current_user)):
     result = []
     for s in (stats_res.data or []):
         pid = s["player_id"]
+        user_info = user_map.get(pid, {})
+        deactivated_at = user_info.get("deactivated_at")
         result.append(PartnerStatsResponse(
             player_id=pid,
             first_name=names.get(pid, ""),
@@ -163,8 +168,12 @@ async def get_partner_stats(user: dict = Depends(get_current_user)):
             star_balance=s.get("star_balance", 0),
             last_workout_date=s.get("last_workout_date"),
             global_score=s.get("global_score", 0),
+            is_deactivated=bool(deactivated_at),
+            deactivated_at=deactivated_at,
         ))
 
+    # Sort: active first, then deactivated
+    result.sort(key=lambda p: p.is_deactivated)
     return result
 
 

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import type { DualRoleUser } from '../../stores/authStore';
 import { canPlay, canMonitor, isDualRole } from '../../utils/roles';
-import { getMyPlayerCode } from '../../api/promo';
+import { getMyPlayerCode, getPlayerStatus } from '../../api/promo';
 import { getMyStats } from '../../api/stats';
 import { getPartnerStats } from '../../api/stats';
 import type { PlayerStats, PartnerStats } from '../../api/stats';
@@ -24,7 +24,6 @@ const ActionCube: React.FC = () => {
     };
 
     const defaultView: ActiveView = canPlay(user) ? 'player' : 'responsible';
-    // Safety: if persisted activeRoleView points to a role the user no longer has access to → fall back to default
     const persistedAllowed = activeRoleView
         && (activeRoleView === 'player' ? canPlay(user) : canMonitor(user));
     const view: ActiveView = persistedAllowed ? (activeRoleView as ActiveView) : defaultView;
@@ -57,23 +56,52 @@ const ActionCube: React.FC = () => {
 
 /* ---------- PLAYER ---------- */
 
+interface PlayerStatus {
+    is_active: boolean;
+    expires_at: string | null;
+    days_left: number | null;
+    duration_days: number | null;
+}
+
 const PlayerView: React.FC = () => {
     const [stats, setStats] = useState<PlayerStats | null>(null);
     const [boost, setBoost] = useState<ActiveBoost | null>(null);
+    const [promoStatus, setPromoStatus] = useState<PlayerStatus | null>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         let done = 0;
-        const check = () => { if (++done >= 2) setLoading(false); };
+        const check = () => { if (++done >= 3) setLoading(false); };
         getMyStats().then(setStats).catch(() => {}).finally(check);
         getActiveBoost().then(setBoost).catch(() => {}).finally(check);
+        getPlayerStatus().then(setPromoStatus).catch(() => {}).finally(check);
     }, []);
 
     if (loading) return <div className="cube-section-title" style={{ textAlign: 'center' }}>Загрузка...</div>;
     if (!stats) return <div className="cube-section-title" style={{ textAlign: 'center' }}>Не удалось загрузить</div>;
 
+    const daysLeft = promoStatus?.days_left ?? null;
+    const showExpiryBanner = daysLeft !== null && daysLeft <= 1;
+
     return (
         <>
+            {showExpiryBanner && (
+                <div className="player-expiry-banner">
+                    ⚠️ Доступ истекает через {daysLeft === 0 ? 'менее суток' : `${daysLeft} д.`}
+                </div>
+            )}
+
+            {promoStatus?.expires_at && (
+                <div className="promo-invite-chip-row" style={{ justifyContent: 'flex-end' }}>
+                    <div className="promo-invite-chip" title="Срок действия доступа">
+                        <span className="promo-invite-chip-label">До</span>
+                        <span className="promo-invite-chip-code">
+                            {new Date(promoStatus.expires_at).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })}
+                        </span>
+                    </div>
+                </div>
+            )}
+
             <button className="cube-btn-primary" onClick={(e) => e.stopPropagation()}>
                 Приступим
             </button>
@@ -117,7 +145,12 @@ interface PlayerCodeData {
     code: string | null;
     deep_link: string | null;
     is_used: boolean;
+    duration_days?: number | null;
+    expires_at?: string | null;
+    days_left?: number | null;
 }
+
+const BOT_USERNAME = import.meta.env.VITE_BOT_USERNAME || 'conectionWorkout_bot';
 
 const ResponsibleView: React.FC = () => {
     const [playerCodeData, setPlayerCodeData] = useState<PlayerCodeData | null>(null);
@@ -146,14 +179,6 @@ const ResponsibleView: React.FC = () => {
         setTimeout(() => setToast(''), 2000);
     }, [playerCodeData]);
 
-    const copyLink = useCallback((e: React.MouseEvent) => {
-        e.stopPropagation();
-        if (!playerCodeData?.deep_link) return;
-        navigator.clipboard.writeText(playerCodeData.deep_link);
-        setToast('Скопировано!');
-        setTimeout(() => setToast(''), 2000);
-    }, [playerCodeData]);
-
     const handleBoost = useCallback(async (e: React.MouseEvent, playerId: string) => {
         e.stopPropagation();
         try {
@@ -164,6 +189,9 @@ const ResponsibleView: React.FC = () => {
         }
         setTimeout(() => setToast(''), 3000);
     }, []);
+
+    const activePlayers = players.filter(p => !p.is_deactivated);
+    const deactivatedPlayers = players.filter(p => p.is_deactivated);
 
     return (
         <>
@@ -187,32 +215,65 @@ const ResponsibleView: React.FC = () => {
 
             {loading ? (
                 <div className="cube-section-title" style={{ textAlign: 'center' }}>Загрузка...</div>
-            ) : players.length === 0 ? (
+            ) : activePlayers.length === 0 && deactivatedPlayers.length === 0 ? (
                 <div className="cube-locked">
-                    <div className="cube-locked-text">Нет привязанных игроков</div>
+                    <div className="cube-locked-text">Нет активных игроков. Выдайте промокод или пригласите нового.</div>
                 </div>
             ) : (
-                <div className="cube-card">
-                    {players.map(p => (
-                        <div className="cube-player-row" key={p.player_id}>
-                            <div className="cube-avatar">{p.first_name.charAt(0)}</div>
-                            <div className="cube-player-info">
-                                <div className="cube-player-name">{p.first_name}</div>
-                                <div className="cube-player-meta">
-                                    Стрик: {p.current_streak} · {p.last_workout_date || 'Нет тренировок'}
+                <>
+                    {activePlayers.length === 0 && (
+                        <div className="cube-locked" style={{ marginBottom: 4 }}>
+                            <div className="cube-locked-text">Нет активных игроков. Выдайте промокод или пригласите нового.</div>
+                        </div>
+                    )}
+                    <div className="cube-card">
+                        {activePlayers.map(p => (
+                            <div className="cube-player-row" key={p.player_id}>
+                                <div className="cube-avatar">{p.first_name.charAt(0)}</div>
+                                <div className="cube-player-info">
+                                    <div className="cube-player-name">{p.first_name}</div>
+                                    <div className="cube-player-meta">
+                                        Стрик: {p.current_streak} · {p.last_workout_date || 'Нет тренировок'}
+                                    </div>
+                                </div>
+                                <div className="cube-player-actions">
+                                    <button className="cube-btn-sm" onClick={(e) => e.stopPropagation()}>
+                                        Пинг
+                                    </button>
+                                    <button className="cube-btn-sm" onClick={(e) => handleBoost(e, p.player_id)}>
+                                        ⚡X2
+                                    </button>
                                 </div>
                             </div>
-                            <div className="cube-player-actions">
-                                <button className="cube-btn-sm" onClick={(e) => e.stopPropagation()}>
-                                    Пинг
-                                </button>
-                                <button className="cube-btn-sm" onClick={(e) => handleBoost(e, p.player_id)}>
-                                    ⚡X2
-                                </button>
+                        ))}
+
+                        {deactivatedPlayers.map(p => (
+                            <div className="cube-player-row cube-player-row--deactivated" key={p.player_id}>
+                                <div className="cube-avatar">{p.first_name.charAt(0)}</div>
+                                <div className="cube-player-info">
+                                    <div className="cube-player-name" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        {p.first_name}
+                                        <span className="cube-player-badge-expired">Доступ истёк</span>
+                                    </div>
+                                    <div className="cube-player-meta">
+                                        Стрик: {p.current_streak} · {p.last_workout_date || 'Нет тренировок'}
+                                    </div>
+                                </div>
+                                <div className="cube-player-actions">
+                                    <button
+                                        className="cube-btn-sm"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            window.open(`https://t.me/${BOT_USERNAME}`, '_blank');
+                                        }}
+                                    >
+                                        Продлить
+                                    </button>
+                                </div>
                             </div>
-                        </div>
-                    ))}
-                </div>
+                        ))}
+                    </div>
+                </>
             )}
         </>
     );

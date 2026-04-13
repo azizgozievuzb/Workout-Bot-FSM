@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { useAuthStore } from '../stores/authStore';
 
 let token: string | null = null;
 
@@ -21,7 +22,9 @@ api.interceptors.response.use(
   (err) => {
     if (err.response?.status === 401) {
       setToken(null);
-      // Will trigger re-auth on next render cycle
+    }
+    if (err.response?.status === 403 && err.response?.data?.detail === 'PROMO_EXPIRED') {
+      useAuthStore.getState().setAccessRevoked(true);
     }
     return Promise.reject(err);
   }

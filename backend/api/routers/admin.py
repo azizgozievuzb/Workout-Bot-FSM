@@ -2,6 +2,8 @@
 import string
 from random import choices
 
+from aiogram import Router as AiogramRouter, types, F
+from aiogram.filters import Command
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
@@ -10,14 +12,18 @@ from ...db.client import get_supabase
 
 router = APIRouter(prefix="/admin/promo", tags=["admin"])
 
+# Bot router for admin promo creation via Telegram
+admin_bot_router = AiogramRouter(name="admin_promo")
+
 
 # ---------------------------------------------------------------------------
 # Schemas
 # ---------------------------------------------------------------------------
 
 class CreatePromoRequest(BaseModel):
-    tier: str = "basic"  # basic | premium
+    tier: str = "basic"       # basic | premium
     count: int = 1
+    duration_days: int = 30   # 7 | 30 | 90
 
 
 class CreatePromoResponse(BaseModel):
@@ -33,6 +39,7 @@ class PromoCodeInfo(BaseModel):
     used_by: str | None = None
     responsible_id: str | None = None
     created_at: str | None = None
+    duration_days: int | None = None
 
 
 class ListPromoResponse(BaseModel):
@@ -44,7 +51,6 @@ class ListPromoResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 def _generate_responsible_code() -> str:
-    """Format: R-XXXXXX (6 uppercase chars)."""
     alphabet = string.ascii_uppercase + string.digits
     return "R-" + "".join(choices(alphabet, k=6))
 
@@ -77,6 +83,8 @@ async def create_promo(
         raise HTTPException(status_code=400, detail="tier must be 'basic' or 'premium'")
     if body.count < 1 or body.count > 50:
         raise HTTPException(status_code=400, detail="count must be 1-50")
+    if body.duration_days not in (7, 30, 90):
+        raise HTTPException(status_code=400, detail="duration_days must be 7, 30 or 90")
 
     db = await get_supabase()
     codes: list[str] = []
@@ -90,6 +98,7 @@ async def create_promo(
                 "code_type": "responsible",
                 "tier": body.tier,
                 "is_used": False,
+                "duration_days": body.duration_days,
             })
             .execute()
         )
@@ -113,7 +122,7 @@ async def list_promos(
 
     db = await get_supabase()
     query = db.table("promo_codes").select(
-        "id, code, code_type, tier, is_used, used_by, responsible_id, created_at"
+        "id, code, code_type, tier, is_used, used_by, responsible_id, created_at, duration_days"
     )
 
     if code_type:
@@ -129,3 +138,76 @@ async def list_promos(
     return ListPromoResponse(
         codes=[PromoCodeInfo(**row) for row in res.data]
     )
+
+
+# ---------------------------------------------------------------------------
+# Bot handler: /new_promo — admin creates promo code via Telegram
+# ---------------------------------------------------------------------------
+
+def _duration_keyboard() -> types.InlineKeyboardMarkup:
+    return types.InlineKeyboardMarkup(inline_keyboard=[
+        [
+            types.InlineKeyboardButton(text="7 дней", callback_data="admin_promo_dur_7"),
+            types.InlineKeyboardButton(text="30 дней", callback_data="admin_promo_dur_30"),
+            types.InlineKeyboardButton(text="90 дней", callback_data="admin_promo_dur_90"),
+        ]
+    ])
+
+
+@admin_bot_router.message(Command("new_promo"))
+async def cmd_new_promo(message: types.Message) -> None:
+    db = await get_supabase()
+    user_res = await (
+        db.table("users")
+        .select("is_admin")
+        .eq("telegram_id", message.from_user.id)
+        .maybe_single()
+        .execute()
+    )
+    if not user_res or not user_res.data or not user_res.data.get("is_admin"):
+        await message.answer("⛔ Только для администраторов.")
+        return
+
+    await message.answer(
+        "Выберите срок действия промокода для Ответственного:",
+        reply_markup=_duration_keyboard(),
+    )
+
+
+@admin_bot_router.callback_query(F.data.startswith("admin_promo_dur_"))
+async def cb_admin_promo_duration(callback: types.CallbackQuery) -> None:
+    db = await get_supabase()
+    user_res = await (
+        db.table("users")
+        .select("is_admin")
+        .eq("telegram_id", callback.from_user.id)
+        .maybe_single()
+        .execute()
+    )
+    if not user_res or not user_res.data or not user_res.data.get("is_admin"):
+        await callback.answer("⛔ Нет прав.", show_alert=True)
+        return
+
+    duration_days = int(callback.data.split("_")[-1])
+
+    code = "R-" + "".join(choices(string.ascii_uppercase + string.digits, k=6))
+    await (
+        db.table("promo_codes")
+        .insert({
+            "code": code,
+            "code_type": "responsible",
+            "tier": "basic",
+            "is_used": False,
+            "duration_days": duration_days,
+        })
+        .execute()
+    )
+
+    await callback.message.edit_text(
+        f"✅ Промокод создан!\n\n"
+        f"<code>{code}</code>\n\n"
+        f"Срок действия для Игрока: <b>{duration_days} дней</b>\n"
+        f"Тип: Ответственный (basic)",
+        parse_mode="HTML",
+    )
+    await callback.answer()
