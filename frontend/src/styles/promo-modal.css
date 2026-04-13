@@ -26,14 +26,14 @@
 }
 
 .dark-theme .promo-modal-card {
-    background: rgba(30, 30, 40, 0.95);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(26, 23, 20, 0.95);
+    border: 1px solid rgba(255, 140, 0, 0.1);
 }
 
 .light-theme .promo-modal-card {
-    background: rgba(255, 255, 255, 0.95);
-    border: 1px solid rgba(0, 0, 0, 0.08);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+    background: rgba(255, 252, 248, 0.95);
+    border: 1px solid rgba(210, 150, 100, 0.12);
+    box-shadow: 0 8px 32px rgba(100, 60, 20, 0.1);
 }
 
 .promo-modal-title {
@@ -45,11 +45,11 @@
 }
 
 .dark-theme .promo-modal-title {
-    color: #fff;
+    color: #FAF5EF;
 }
 
 .light-theme .promo-modal-title {
-    color: #111;
+    color: #2C2016;
 }
 
 .promo-modal-input {
@@ -68,15 +68,15 @@
 }
 
 .dark-theme .promo-modal-input {
-    background: rgba(255, 255, 255, 0.06);
-    color: #fff;
-    border-color: rgba(255, 255, 255, 0.15);
+    background: rgba(255, 200, 140, 0.06);
+    color: #FAF5EF;
+    border-color: rgba(255, 140, 0, 0.12);
 }
 
 .light-theme .promo-modal-input {
-    background: rgba(0, 0, 0, 0.04);
-    color: #111;
-    border-color: rgba(0, 0, 0, 0.1);
+    background: rgba(44, 32, 22, 0.04);
+    color: #2C2016;
+    border-color: rgba(210, 150, 100, 0.15);
 }
 
 .promo-modal-input::placeholder {
@@ -84,11 +84,11 @@
 }
 
 .dark-theme .promo-modal-input::placeholder {
-    color: rgba(255, 255, 255, 0.25);
+    color: rgba(250, 245, 239, 0.25);
 }
 
 .light-theme .promo-modal-input::placeholder {
-    color: rgba(0, 0, 0, 0.25);
+    color: rgba(44, 32, 22, 0.25);
 }
 
 .promo-modal-input:focus {

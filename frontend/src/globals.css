@@ -1,23 +1,23 @@
 :root {
-  /* Основные цвета для Premium Aesthetic */
-  --bg-deep: #121212;
-  --bg-card: rgba(255, 255, 255, 0.05);
-  
+  /* Premium Palette — "Раскалённый углерод" (dark) / "Горячая дымка" (light) */
+  --bg-deep: #0C0A08;
+  --bg-card: rgba(255, 245, 235, 0.04);
+
   --primary: #CCFF00; /* Neon Lime */
   --primary-glow: rgba(204, 255, 0, 0.3);
-  
+
   --secondary: #007AFF; /* Azure Blue */
   --secondary-glow: rgba(0, 122, 255, 0.3);
-  
+
   --gold: #FFD700;
   --flame: #FF4500;
-  
-  --text-primary: #FFFFFF;
-  --text-secondary: rgba(255, 255, 255, 0.6);
-  
+
+  --text-primary: #FAF5EF;
+  --text-secondary: rgba(250, 245, 239, 0.55);
+
   --glass-blur: blur(12px);
-  --glass-border: 1px solid rgba(255, 255, 255, 0.1);
-  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  --glass-border: 1px solid rgba(255, 200, 140, 0.06);
+  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.45);
   
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   color-scheme: dark;

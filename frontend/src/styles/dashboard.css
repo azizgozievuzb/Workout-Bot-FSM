@@ -3,7 +3,7 @@
    ========================================================================== */
 
 .dashboard-panel {
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(26, 23, 20, 0.6);
     border: none;
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
@@ -16,7 +16,7 @@
 }
 
 .light-theme .dashboard-panel {
-    background: rgba(255, 255, 255, 0.4);
+    background: rgba(255, 252, 248, 0.45);
     border: none;
 }
 
@@ -24,12 +24,12 @@
 
 .dashboard-divider {
     height: 1px;
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 200, 140, 0.08);
     margin: 0 16px;
 }
 
 .light-theme .dashboard-divider {
-    background: rgba(0, 0, 0, 0.08);
+    background: rgba(44, 32, 22, 0.08);
 }
 
 /* --- Section --- */
