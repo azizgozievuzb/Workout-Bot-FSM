@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from '../../contexts/ThemeContext';
 import PromoCodeModal from './PromoCodeModal';
@@ -98,20 +99,23 @@ const RoleTransition: React.FC<RoleTransitionProps> = ({
 
     return (
         <>
-            {/* Toggle button: black hole (dark) / star (light) */}
-            <button
-                className={[
-                    'rt-btn',
-                    isDark ? 'rt-dark' : 'rt-light',
-                    dual ? 'rt-dual' : 'rt-single',
-                    isActive ? 'rt-active' : '',
-                    denied ? 'rt-denied' : '',
-                ].filter(Boolean).join(' ')}
-                onClick={handleTap}
-            >
-                <span className="rt-letter">{view === 'player' ? 'P' : 'R'}</span>
-                <span className="rt-ring" />
-            </button>
+            {/* Toggle button: portaled to body to escape carousel transform */}
+            {createPortal(
+                <button
+                    className={[
+                        'rt-btn',
+                        isDark ? 'rt-dark' : 'rt-light',
+                        dual ? 'rt-dual' : 'rt-single',
+                        isActive ? 'rt-active' : '',
+                        denied ? 'rt-denied' : '',
+                    ].filter(Boolean).join(' ')}
+                    onClick={handleTap}
+                >
+                    <span className="rt-letter">{view === 'player' ? 'P' : 'R'}</span>
+                    <span className="rt-ring" />
+                </button>,
+                document.body
+            )}
 
             {/* Void overlay — visible between exit and enter */}
             <AnimatePresence>
