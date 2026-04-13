@@ -14,80 +14,18 @@ interface RoleTransitionProps {
     children: React.ReactNode;
 }
 
-const VOID_MS = 500;
+const VOID_MS = 120;
 
-/* --- Gravity Collapse (dark) — спиральное затягивание в чёрную дыру --- */
-const darkVariants = {
-    initial: {
-        scale: 0,
-        opacity: 0,
-        rotate: -180,
-        scaleX: 0.3,
-        y: -40,
-        filter: 'blur(6px)',
-    },
+/* --- Minimal fade — premium, no effects --- */
+const fadeVariants = {
+    initial: { opacity: 0 },
     animate: {
-        scale: 1,
         opacity: 1,
-        rotate: 0,
-        scaleX: 1,
-        y: 0,
-        filter: 'blur(0px)',
-        transition: {
-            duration: 0.7,
-            ease: [0.16, 1, 0.3, 1],
-            rotate: { duration: 0.8, ease: [0.16, 1, 0.3, 1] },
-        },
+        transition: { duration: 0.25, ease: [0.25, 0, 0, 1] },
     },
     exit: {
-        scale: 0.1,
         opacity: 0,
-        rotate: 180,
-        scaleX: 0.15,
-        y: -60,
-        filter: 'blur(5px)',
-        transition: {
-            duration: 0.7,
-            ease: [0.55, 0, 1, 0.45],
-            rotate: { duration: 0.7, ease: [0.76, 0, 0.24, 1] },
-            opacity: { duration: 0.5, delay: 0.15 },
-        },
-    },
-};
-
-/* --- Supernova (light) — разлёт осколков за пределы экрана --- */
-const lightVariants = {
-    initial: {
-        scale: 0.1,
-        opacity: 0,
-        y: 300,
-        rotate: 8,
-        filter: 'blur(16px) brightness(2.5)',
-    },
-    animate: {
-        scale: 1,
-        opacity: 1,
-        y: 0,
-        rotate: 0,
-        filter: 'blur(0px) brightness(1)',
-        transition: {
-            duration: 0.65,
-            ease: [0.16, 1, 0.3, 1],
-            filter: { duration: 0.4 },
-        },
-    },
-    exit: {
-        scale: 2.5,
-        opacity: 0,
-        y: -200,
-        rotate: -6,
-        filter: 'blur(12px) brightness(3)',
-        transition: {
-            duration: 0.6,
-            ease: [0.55, 0, 1, 0.45],
-            opacity: { duration: 0.35, delay: 0.1 },
-            scale: { duration: 0.6, ease: [0.76, 0, 0.24, 1] },
-        },
+        transition: { duration: 0.18, ease: [0.4, 0, 1, 1] },
     },
 };
 
@@ -156,7 +94,7 @@ const RoleTransition: React.FC<RoleTransitionProps> = ({
 
     const isDark = theme === 'dark';
     const isActive = phase !== 'idle';
-    const variants = isDark ? darkVariants : lightVariants;
+    const variants = fadeVariants;
 
     return (
         <>
@@ -199,9 +137,6 @@ const RoleTransition: React.FC<RoleTransitionProps> = ({
                         animate="animate"
                         exit="exit"
                         onAnimationComplete={handleAnimComplete}
-                        style={{
-                            transformOrigin: isDark ? '42px 36px' : 'center center',
-                        }}
                     >
                         {children}
                     </motion.div>

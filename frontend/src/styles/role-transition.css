@@ -124,14 +124,12 @@
     animation: rt-spin 4s linear infinite;
 }
 
-/* Active — transitioning */
+/* Active — minimal glow */
 .rt-dark.rt-active {
     box-shadow:
-        0 -5px 20px rgba(255, 180, 0, 0.8),
-        0 5px 12px rgba(255, 120, 0, 0.4),
-        0 0 35px rgba(255, 140, 0, 0.5),
-        inset 0 0 8px rgba(0, 0, 0, 0.9);
-    animation: bh-active 0.4s ease-in-out infinite alternate;
+        0 0 12px rgba(255, 120, 40, 0.4),
+        0 0 4px rgba(200, 80, 255, 0.3);
+    transform: scale(0.96);
 }
 
 .rt-dark.rt-active .rt-ring {
@@ -220,13 +218,12 @@
     animation: rt-spin 6s linear infinite;
 }
 
-/* Active — supernova EXPLOSION: тряска + ослепительная вспышка */
+/* Active — minimal glow */
 .rt-light.rt-active {
     box-shadow:
-        0 0 30px rgba(255, 255, 255, 0.9),
-        0 0 60px rgba(255, 180, 50, 0.6),
-        0 0 10px rgba(255, 255, 255, 1);
-    animation: cas-active-shake 0.12s linear infinite;
+        0 0 12px rgba(255, 200, 50, 0.4),
+        0 0 4px rgba(255, 255, 255, 0.6);
+    transform: scale(0.96);
 }
 
 .rt-light.rt-active .rt-ring {
@@ -250,14 +247,6 @@
     66% { filter: brightness(1.05) hue-rotate(-5deg); transform: scale(1.03); }
 }
 
-/* Быстрая тряска при активации — как будто кнопка разрушается */
-@keyframes cas-active-shake {
-    0% { transform: translate(0, 0) scale(1.05); }
-    25% { transform: translate(-3px, 1px) scale(1.08); }
-    50% { transform: translate(2px, -2px) scale(1.05); }
-    75% { transform: translate(-1px, 2px) scale(1.1); }
-    100% { transform: translate(3px, -1px) scale(1.06); }
-}
 
 @keyframes cas-denied {
     0%, 100% { transform: scale(1); opacity: 1; }
@@ -297,76 +286,8 @@
     border-radius: inherit;
 }
 
-.rt-void-dark {
-    background: radial-gradient(
-        ellipse 80px 120px at 42px 36px,
-        rgba(255, 100, 0, 0.25) 0%,
-        rgba(255, 60, 0, 0.15) 30%,
-        rgba(0, 0, 0, 0.6) 60%,
-        transparent 100%
-    );
-    animation: void-dark-pulse 0.5s ease-in-out;
-}
-
-@keyframes void-dark-pulse {
-    0% { opacity: 0; transform: rotate(0deg) scale(0.8); }
-    40% { opacity: 1; transform: rotate(45deg) scale(1.1); }
-    100% { opacity: 0.8; transform: rotate(90deg) scale(1); }
-}
-
-.rt-void-light {
-    background: radial-gradient(
-        circle at center,
-        rgba(255, 255, 255, 0.9) 0%,
-        rgba(255, 230, 150, 0.6) 20%,
-        rgba(255, 180, 80, 0.3) 40%,
-        transparent 70%
-    );
-    animation: void-light-flash 0.5s ease-out;
-}
-
-/* "Осколки" — 4 pseudo-фрагмента разлетаются в углы */
-.rt-void-light::before,
-.rt-void-light::after {
-    content: '';
-    position: absolute;
-    width: 40px;
-    height: 40px;
-    border-radius: 4px;
-    background: linear-gradient(135deg, rgba(255, 200, 50, 0.6), rgba(255, 120, 80, 0.3));
-    animation: shard-fly 0.5s ease-out forwards;
-}
-
-.rt-void-light::before {
-    top: 30%;
-    left: 20%;
-    animation-name: shard-fly-tl;
-}
-
-.rt-void-light::after {
-    top: 30%;
-    right: 20%;
-    animation-name: shard-fly-tr;
-}
-
-@keyframes void-light-flash {
-    0% { opacity: 0; transform: scale(0.3); }
-    20% { opacity: 1; transform: scale(1.3); }
-    50% { opacity: 0.9; transform: scale(1); }
-    100% { opacity: 0.5; transform: scale(0.9); }
-}
-
-/* Осколок летит влево-вверх */
-@keyframes shard-fly-tl {
-    0% { opacity: 0.8; transform: translate(0, 0) rotate(0deg) scale(1); }
-    100% { opacity: 0; transform: translate(-120px, -100px) rotate(-45deg) scale(0.3); }
-}
-
-/* Осколок летит вправо-вверх */
-@keyframes shard-fly-tr {
-    0% { opacity: 0.8; transform: translate(0, 0) rotate(0deg) scale(1); }
-    100% { opacity: 0; transform: translate(120px, -100px) rotate(45deg) scale(0.3); }
-}
+.rt-void-dark { background: rgba(0, 0, 0, 0.6); }
+.rt-void-light { background: rgba(255, 255, 255, 0.4); }
 
 /* ==========================================================================
    TOAST — locked role message

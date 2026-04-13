@@ -11,6 +11,7 @@ import womanMeditating from '../../assets/test-faces/woman_meditating.png';
 
 interface BackdropProps {
     theme?: 'dark' | 'light';
+    paused?: boolean;
 }
 
 /**
@@ -22,7 +23,7 @@ interface BackdropProps {
  *   2. Canvas (Starfield / CloudField) — particles fly OVER the face
  *   3. Vignette
  */
-const Backdrop = forwardRef<GlassCubesHandle, BackdropProps>(({ theme = 'dark' }, ref) => {
+const Backdrop = forwardRef<GlassCubesHandle, BackdropProps>(({ theme = 'dark', paused = false }, ref) => {
     const { photoUrl, photoDarkUrl, photoLightUrl, is_admin } = useAuthStore();
     const mouseX = useMotionValue(0.5);
     const mouseY = useMotionValue(0.5);
@@ -68,14 +69,20 @@ const Backdrop = forwardRef<GlassCubesHandle, BackdropProps>(({ theme = 'dark' }
                 </AnimatePresence>
             </motion.div>
 
-            {/* LAYER 2: Particles fly OVER the face */}
-            {theme === 'dark'
-                ? <Starfield speed={1.15} starCount={1200} />
-                : <CloudField speed={1.0} />
-            }
-
-            {/* LAYER 2.5: Glass cubes with energy blobs */}
-            <GlassCubes ref={ref} theme={theme} count={is_admin ? 4 : 3} isAdmin={is_admin} />
+            {/* LAYER 2+2.5: Particles + Cubes — hidden when overlay is open */}
+            <div style={{
+                opacity: paused ? 0 : 1,
+                transition: 'opacity 0.4s ease',
+                position: 'absolute',
+                inset: 0,
+                pointerEvents: 'none',
+            }}>
+                {theme === 'dark'
+                    ? <Starfield speed={1.15} starCount={1200} />
+                    : <CloudField speed={1.0} />
+                }
+                <GlassCubes ref={ref} theme={theme} count={is_admin ? 4 : 3} isAdmin={is_admin} />
+            </div>
 
             {/* LAYER 3: Vignette */}
             <div className="ui-vignette" />

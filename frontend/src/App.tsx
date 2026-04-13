@@ -155,7 +155,7 @@ const App: React.FC = () => {
             <div className="app-root">
                 {/* ОСНОВНОЙ КОНТЕНТ */}
                 <main className="content" ref={contentRef}>
-                    <Backdrop ref={cubesRef} theme={theme} />
+                    <Backdrop ref={cubesRef} theme={theme} paused={layoutMode !== 'chaos'} />
 
                     {/* GESTURE LAYER — активен только когда нет оверлеев */}
                     <div
