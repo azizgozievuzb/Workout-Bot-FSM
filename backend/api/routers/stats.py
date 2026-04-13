@@ -63,9 +63,11 @@ async def get_my_stats(user: dict = Depends(get_current_user)):
             .maybe_single()
             .execute()
         )
-        logger.info("[/stats/me] player_stats query result: %s", stats_res.data)
+        # maybe_single() returns None (not response with .data=None) when row is absent
+        stats_data = stats_res.data if stats_res is not None else None
+        logger.info("[/stats/me] player_stats query result: %s", stats_data)
 
-        if not stats_res.data:
+        if not stats_data:
             logger.info("[/stats/me] No player_stats row, auto-creating...")
             try:
                 insert_res = (
@@ -73,13 +75,13 @@ async def get_my_stats(user: dict = Depends(get_current_user)):
                     .insert({"player_id": user_id})
                     .execute()
                 )
-                logger.info("[/stats/me] Insert result: %s", insert_res.data)
-                stats_res.data = insert_res.data[0] if insert_res.data else {}
+                logger.info("[/stats/me] Insert result: %s", insert_res.data if insert_res else None)
+                stats_data = insert_res.data[0] if (insert_res and insert_res.data) else {}
             except Exception as e:
                 logger.error("[/stats/me] Insert FAILED: %s", e)
-                stats_res.data = {}
+                stats_data = {}
 
-        d = stats_res.data or {}
+        d = stats_data or {}
         logger.info("[/stats/me] Building response from: %s", d)
 
         response = PlayerStatsResponse(
