@@ -51,9 +51,9 @@ async def get_my_stats(user: dict = Depends(get_current_user)):
             .maybe_single()
             .execute()
         )
-        logger.info("[/stats/me] users query result: %s", user_res.data)
+        logger.info("[/stats/me] users query result: %s", user_res.data if user_res else None)
 
-        if not user_res.data:
+        if not user_res or not user_res.data:
             raise HTTPException(status_code=404, detail="User not found")
         user_id = user_res.data["id"]
         logger.info("[/stats/me] user_id=%s", user_id)
@@ -119,7 +119,7 @@ async def get_partner_stats(user: dict = Depends(get_current_user)):
         .maybe_single()
         .execute()
     )
-    if not user_res.data:
+    if not user_res or not user_res.data:
         raise HTTPException(status_code=404, detail="User not found")
     user_id = user_res.data["id"]
 

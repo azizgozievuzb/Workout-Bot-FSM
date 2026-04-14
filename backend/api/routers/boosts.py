@@ -53,7 +53,7 @@ async def buy_boost(
         .maybe_single()
         .execute()
     )
-    if not user_res.data:
+    if not user_res or not user_res.data:
         raise HTTPException(status_code=404, detail="User not found")
     responsible_id = user_res.data["id"]
 
@@ -68,7 +68,7 @@ async def buy_boost(
         .execute()
     )
 
-    if not partnership_res.data:
+    if not partnership_res or not partnership_res.data:
         raise HTTPException(status_code=403, detail="Partnership not found")
 
     partnership_id = partnership_res.data["id"]
@@ -106,7 +106,7 @@ async def get_active_boost(user: dict = Depends(get_current_user)):
         .maybe_single()
         .execute()
     )
-    if not user_res.data:
+    if not user_res or not user_res.data:
         raise HTTPException(status_code=404, detail="User not found")
     user_id = user_res.data["id"]
 
@@ -120,7 +120,7 @@ async def get_active_boost(user: dict = Depends(get_current_user)):
         .execute()
     )
 
-    if not partnership_res.data:
+    if not partnership_res or not partnership_res.data:
         return ActiveBoostResponse(active=False)
 
     partnership_id = partnership_res.data["id"]
@@ -138,7 +138,7 @@ async def get_active_boost(user: dict = Depends(get_current_user)):
         .execute()
     )
 
-    if not boost_res.data:
+    if not boost_res or not boost_res.data:
         return ActiveBoostResponse(active=False)
 
     b = boost_res.data

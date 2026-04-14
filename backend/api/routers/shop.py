@@ -58,7 +58,7 @@ async def purchase_item(
         .maybe_single()
         .execute()
     )
-    if not user_res.data:
+    if not user_res or not user_res.data:
         raise HTTPException(status_code=404, detail="User not found")
     user_id = user_res.data["id"]
 
@@ -71,7 +71,7 @@ async def purchase_item(
         .maybe_single()
         .execute()
     )
-    if not item_res.data:
+    if not item_res or not item_res.data:
         raise HTTPException(status_code=404, detail="Item not found")
 
     item = item_res.data
@@ -85,7 +85,7 @@ async def purchase_item(
         .maybe_single()
         .execute()
     )
-    if not stats_res.data:
+    if not stats_res or not stats_res.data:
         raise HTTPException(status_code=404, detail="Player stats not found")
 
     balance = stats_res.data["star_balance"]

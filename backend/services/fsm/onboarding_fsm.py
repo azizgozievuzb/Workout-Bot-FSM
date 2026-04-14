@@ -115,16 +115,19 @@ class OnboardingService:
     # ------------------------------------------------------------------
 
     async def get_state(self, telegram_id: int) -> tuple[OnboardingState | None, dict]:
-        result = (
-            await self.db.table("users")
-            .select("onboarding_state, lang, role, gender, subscription_tier")
-            .eq("telegram_id", telegram_id)
-            .maybe_single()
-            .execute()
-        )
-        data = result.data
-        if data is None:
+        try:
+            result = (
+                await self.db.table("users")
+                .select("onboarding_state, lang, role, gender, subscription_tier")
+                .eq("telegram_id", telegram_id)
+                .maybe_single()
+                .execute()
+            )
+        except Exception:
             return None, {}
+        if result is None or getattr(result, "data", None) is None:
+            return None, {}
+        data = result.data
 
         state_raw = data.get("onboarding_state")
 
@@ -176,14 +179,17 @@ class OnboardingService:
     async def check_promo_rate_limit(self, telegram_id: int) -> dict:
         """Check if user is rate-limited for promo attempts.
         Returns {"allowed": True} or {"allowed": False, "minutes_left": int}."""
-        user_res = (
-            await self.db.table("users")
-            .select("promo_attempts, promo_locked_until")
-            .eq("telegram_id", telegram_id)
-            .maybe_single()
-            .execute()
-        )
-        data = user_res.data
+        try:
+            user_res = (
+                await self.db.table("users")
+                .select("promo_attempts, promo_locked_until")
+                .eq("telegram_id", telegram_id)
+                .maybe_single()
+                .execute()
+            )
+        except Exception:
+            return {"allowed": True}
+        data = user_res.data if user_res is not None else None
         # New user with no row — no history to check, allow
         if data is None:
             return {"allowed": True}
@@ -208,14 +214,17 @@ class OnboardingService:
 
     async def record_failed_promo_attempt(self, telegram_id: int) -> dict:
         """Increment failed attempts. Returns {"locked": bool, "attempts_left": int}."""
-        user_res = (
-            await self.db.table("users")
-            .select("promo_attempts")
-            .eq("telegram_id", telegram_id)
-            .maybe_single()
-            .execute()
-        )
-        data = user_res.data
+        try:
+            user_res = (
+                await self.db.table("users")
+                .select("promo_attempts")
+                .eq("telegram_id", telegram_id)
+                .maybe_single()
+                .execute()
+            )
+        except Exception:
+            return {"locked": False, "attempts_left": MAX_PROMO_ATTEMPTS - 1}
+        data = user_res.data if user_res is not None else None
         # New user with no row — can't track attempts, just count this as first failure
         if data is None:
             return {"locked": False, "attempts_left": MAX_PROMO_ATTEMPTS - 1}
@@ -292,7 +301,7 @@ class OnboardingService:
             .maybe_single()
             .execute()
         )
-        if user_res.data is not None:
+        if user_res is not None and user_res.data is not None:
             await (
                 self.db.table("users")
                 .update({

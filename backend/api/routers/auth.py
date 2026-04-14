@@ -52,7 +52,7 @@ async def telegram_auth(body: TelegramAuthRequest) -> TokenResponse:
         .maybe_single()
         .execute()
     )
-    user_data = user_res.data
+    user_data = user_res.data if user_res is not None else None
     if user_data is None:
         raise HTTPException(status_code=403, detail={"code": "NO_ACCESS"})
     user_uuid = user_data.get("id")
