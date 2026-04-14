@@ -151,6 +151,19 @@ const App: React.FC = () => {
         setTimeout(() => { wheelCooldown.current = false; }, 400);
     }, [activeModule, nextMod]);
 
+    if (accessRevoked) {
+        return (
+            <div style={{
+                position: 'fixed', inset: 0, background: '#000',
+                color: 'rgba(255,255,255,0.85)', display: 'flex',
+                alignItems: 'center', justifyContent: 'center',
+                textAlign: 'center', padding: '0 32px', fontSize: 18, zIndex: 99999,
+            }}>
+                К сожалению, вы не зарегистрированы.
+            </div>
+        );
+    }
+
     return (
         <ThemeContext.Provider value={theme}>
         <div className={`app-container ${theme}-theme`}>
@@ -166,13 +179,6 @@ const App: React.FC = () => {
                         onPointerUp={handleGestureUp}
                         style={{ pointerEvents: gestureEnabled && layoutMode === 'chaos' ? 'auto' : 'none' }}
                     />
-
-                    {/* ACCESS REVOKED — прогресс истёк */}
-                    {accessRevoked && (
-                        <div className="ui-overlay" style={{ pointerEvents: 'auto' }}>
-                            <AccessRevokedScreen />
-                        </div>
-                    )}
 
                     {/* PHOTO GATE — обязательное селфи для ВСЕХ пользователей */}
                     {/* Показываем только после загрузки auth (isLoading=false), чтобы кубы не мелькали */}

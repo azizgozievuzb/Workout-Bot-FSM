@@ -28,6 +28,9 @@ api.interceptors.response.use(
     if (err.response?.status === 403 && (code === 'NO_ACCESS' || code === 'PROMO_EXPIRED')) {
       setToken(null);
       useAuthStore.getState().setAccessRevoked(true);
+      const sentinel = new Error('ACCESS_REVOKED');
+      (sentinel as any).__accessRevoked = true;
+      return Promise.reject(sentinel);
     }
     return Promise.reject(err);
   }

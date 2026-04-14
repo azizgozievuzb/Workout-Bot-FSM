@@ -101,6 +101,7 @@ export function useAuth() {
         }
       } catch (err: any) {
         if (!cancelled) {
+          if ((err as any).__accessRevoked) return; // handled by interceptor; black screen shown
           setError(err.message || 'Authentication failed');
         }
       } finally {

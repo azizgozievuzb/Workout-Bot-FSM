@@ -62,15 +62,20 @@ export const useAuthStore = create<AuthState>((set) => ({
   player_code: null,
   activeRoleView: null,
   isAuthenticated: false,
-  accessRevoked: false,
+  accessRevoked: localStorage.getItem('access_revoked') === '1',
   setActiveRoleView: (view) => set({ activeRoleView: view }),
-  setAccessRevoked: (revoked) => set(
-    revoked
-      ? { accessRevoked: true, token: null, isAuthenticated: false }
-      : { accessRevoked: false }
-  ),
-  setAuth: (data) =>
-    set({
+  setAccessRevoked: (revoked) => {
+    if (revoked) {
+      localStorage.setItem('access_revoked', '1');
+      set({ accessRevoked: true, token: null, isAuthenticated: false });
+    } else {
+      localStorage.removeItem('access_revoked');
+      set({ accessRevoked: false });
+    }
+  },
+  setAuth: (data) => {
+    localStorage.removeItem('access_revoked');
+    return set({
       token: data.token,
       role: data.role as LegacyRole,
       primary_role: (data.primary_role as PrimaryRole) || (data.role as PrimaryRole) || null,
@@ -82,7 +87,8 @@ export const useAuthStore = create<AuthState>((set) => ({
       photoDarkUrl: data.photoDarkUrl || null,
       photoLightUrl: data.photoLightUrl || null,
       isAuthenticated: true,
-    }),
+    });
+  },
   setPhotoUrl: (url) => set({ photoUrl: url }),
   setStyledPhotos: (darkUrl, lightUrl) => set({ photoDarkUrl: darkUrl, photoLightUrl: lightUrl }),
   setPlayerCode: (code) => set({ player_code: code }),
