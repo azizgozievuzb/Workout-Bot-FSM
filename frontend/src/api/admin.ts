@@ -20,3 +20,26 @@ export async function listPromoCodes(params?: { code_type?: string; is_used?: bo
     const res = await api.get('/admin/promo/list', { params });
     return res.data as { codes: PromoCodeInfo[] };
 }
+
+export interface PlayerInPair {
+    telegram_id: number;
+    display_name: string | null;
+    username: string | null;
+    is_deactivated: boolean;
+}
+
+export interface ResponsibleGroup {
+    telegram_id: number;
+    display_name: string | null;
+    username: string | null;
+    players: PlayerInPair[];
+}
+
+export interface ConnectionsResponse {
+    groups: ResponsibleGroup[];
+}
+
+export async function getConnections(): Promise<ConnectionsResponse> {
+    const res = await api.get('/admin/connections');
+    return res.data;
+}

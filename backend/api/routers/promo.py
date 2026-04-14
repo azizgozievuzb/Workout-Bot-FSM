@@ -372,6 +372,10 @@ async def my_player_code(current_user: dict = Depends(get_current_user)):
 @router.get("/player-status", response_model=PlayerStatusResponse)
 async def player_status(current_user: dict = Depends(get_current_user)):
     """Returns the player's own promo expiry info. Mirrors get_current_user live-promo check."""
+    # Admin and Responsible have no TTL — they never expire
+    if current_user.get("role") in ("admin", "responsible"):
+        return PlayerStatusResponse(is_active=True, expires_at=None, days_left=None, duration_days=None)
+
     db = await get_supabase()
     telegram_id = current_user["telegram_id"]
 

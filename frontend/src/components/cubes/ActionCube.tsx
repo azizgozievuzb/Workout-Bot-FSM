@@ -81,7 +81,7 @@ const PlayerView: React.FC = () => {
     if (!stats) return <div className="cube-section-title" style={{ textAlign: 'center' }}>Не удалось загрузить</div>;
 
     const daysLeft = promoStatus?.days_left ?? null;
-    const showExpiryBanner = daysLeft !== null && daysLeft <= 1;
+    const showExpiryBanner = promoStatus?.is_active === true && daysLeft !== null && daysLeft <= 1;
 
     return (
         <>

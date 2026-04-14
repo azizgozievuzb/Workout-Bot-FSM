@@ -11,6 +11,7 @@ from ...core.deps import get_current_user
 from ...db.client import get_supabase
 
 router = APIRouter(prefix="/admin/promo", tags=["admin"])
+general_router = APIRouter(prefix="/admin", tags=["admin"])
 
 # Bot router for admin promo creation via Telegram
 admin_bot_router = AiogramRouter(name="admin_promo")
@@ -44,6 +45,22 @@ class PromoCodeInfo(BaseModel):
 
 class ListPromoResponse(BaseModel):
     codes: list[PromoCodeInfo]
+
+
+class PlayerInPair(BaseModel):
+    telegram_id: int
+    display_name: str | None
+    username: str | None
+    is_deactivated: bool
+
+class ResponsibleGroup(BaseModel):
+    telegram_id: int
+    display_name: str | None
+    username: str | None
+    players: list[PlayerInPair]
+
+class ConnectionsResponse(BaseModel):
+    groups: list[ResponsibleGroup]
 
 
 # ---------------------------------------------------------------------------
@@ -140,6 +157,59 @@ async def list_promos(
     return ListPromoResponse(
         codes=[PromoCodeInfo(**row) for row in res.data]
     )
+
+
+# ---------------------------------------------------------------------------
+# GET /admin/connections
+# ---------------------------------------------------------------------------
+
+@general_router.get("/connections", response_model=ConnectionsResponse, tags=["admin"])
+async def get_connections(current_user: dict = Depends(get_current_user)):
+    await _require_admin(current_user)
+    db = await get_supabase()
+
+    resp_res = await (
+        db.table("users")
+        .select("id, telegram_id, display_name, username")
+        .eq("role", "responsible")
+        .execute()
+    )
+    responsibles = resp_res.data or []
+
+    groups = []
+    for r in responsibles:
+        pair_res = await (
+            db.table("partnerships")
+            .select("player_id")
+            .eq("responsible_id", r["id"])
+            .execute()
+        )
+        player_ids = [p["player_id"] for p in (pair_res.data or [])]
+
+        players = []
+        if player_ids:
+            pl_res = await (
+                db.table("users")
+                .select("telegram_id, display_name, username, deactivated_at")
+                .in_("id", player_ids)
+                .execute()
+            )
+            for pl in (pl_res.data or []):
+                players.append(PlayerInPair(
+                    telegram_id=pl["telegram_id"],
+                    display_name=pl.get("display_name"),
+                    username=pl.get("username"),
+                    is_deactivated=bool(pl.get("deactivated_at")),
+                ))
+
+        groups.append(ResponsibleGroup(
+            telegram_id=r["telegram_id"],
+            display_name=r.get("display_name"),
+            username=r.get("username"),
+            players=players,
+        ))
+
+    return ConnectionsResponse(groups=groups)
 
 
 # ---------------------------------------------------------------------------

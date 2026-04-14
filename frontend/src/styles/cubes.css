@@ -694,6 +694,33 @@
     color: #007AFF;
 }
 
+/* --- Connections panel --- */
+
+.connections-group {
+    margin-bottom: 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    padding-bottom: 8px;
+}
+.connections-group:last-child { border-bottom: none; margin-bottom: 0; }
+.connections-responsible {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0 4px;
+}
+.connections-player {
+    padding-left: 28px;
+}
+.connections-player.deactivated {
+    opacity: 0.45;
+}
+.connections-empty {
+    padding-left: 28px;
+    font-size: 12px;
+    color: rgba(255,255,255,0.3);
+    padding-bottom: 4px;
+}
+
 /* --- AccessRevokedScreen --- */
 
 .access-revoked-screen {

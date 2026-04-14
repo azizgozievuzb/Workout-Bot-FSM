@@ -2,7 +2,7 @@
 
 > **AI-агент:** Прочитай этот файл ПОСЛЕ `CLAUDE.md`. Здесь написано, на чём остановился предыдущий агент.
 
-**Последнее обновление:** 2026-04-15
+**Последнее обновление:** 2026-04-15 (сессия 2)
 **Последний агент:** Claude Opus 4.6
 
 ---
@@ -23,6 +23,21 @@
 - Ответственный покупает за **очки Ответственного** (за что-то начисляются — TBD) ИЛИ за **реальные Telegram Stars**
 - В магазине будут **нативные лоты от приложения** + **лоты от Ответственного** (он их закидывает для своих игроков)
 - Сейчас только заглушка: 5 готовых лотов + 6-й "Пустой лот" (некликабельный)
+
+---
+
+## ✅ Выполнено в этой сессии (2026-04-15, сессия 2)
+
+### Backend
+- **`backend/api/routers/promo.py`**: `GET /promo/player-status` — добавлен early return для admin/responsible (`is_active=True, days_left=None`). Устраняет баг: Admin/Responsible в P-view видели баннер "Доступ истекает" при переключении на P-вид.
+- **`backend/api/routers/admin.py`**: добавлен `general_router` (`prefix="/admin"`) + endpoint `GET /admin/connections` — возвращает все пары Responsible→Players с флагом `is_deactivated`.
+- **`backend/main.py`**: добавлен `admin_general_router` рядом с `admin_router`.
+
+### Frontend
+- **`frontend/src/components/cubes/ActionCube.tsx`**: `showExpiryBanner` теперь требует `promoStatus?.is_active === true`. Второй guard против ложного баннера.
+- **`frontend/src/api/admin.ts`**: добавлены типы `PlayerInPair`, `ResponsibleGroup`, `ConnectionsResponse` + функция `getConnections()`.
+- **`frontend/src/components/cubes/AdminCube.tsx`**: добавлен `ConnectionsPanel` + кнопка-переключатель "Соединения/Промокоды".
+- **`frontend/src/styles/cubes.css`**: добавлены стили `.connections-group`, `.connections-responsible`, `.connections-player`, `.connections-empty`.
 
 ---
 
