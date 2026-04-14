@@ -119,10 +119,13 @@ class OnboardingService:
             await self.db.table("users")
             .select("onboarding_state, lang, role, gender, subscription_tier")
             .eq("telegram_id", telegram_id)
-            .single()
+            .maybe_single()
             .execute()
         )
         data = result.data
+        if data is None:
+            return None, {}
+
         state_raw = data.get("onboarding_state")
 
         if not state_raw or state_raw in _OLD_STATES:
@@ -177,10 +180,13 @@ class OnboardingService:
             await self.db.table("users")
             .select("promo_attempts, promo_locked_until")
             .eq("telegram_id", telegram_id)
-            .single()
+            .maybe_single()
             .execute()
         )
         data = user_res.data
+        # New user with no row — no history to check, allow
+        if data is None:
+            return {"allowed": True}
         locked_until_str = data.get("promo_locked_until")
 
         if locked_until_str:
@@ -206,10 +212,14 @@ class OnboardingService:
             await self.db.table("users")
             .select("promo_attempts")
             .eq("telegram_id", telegram_id)
-            .single()
+            .maybe_single()
             .execute()
         )
-        attempts = (user_res.data.get("promo_attempts") or 0) + 1
+        data = user_res.data
+        # New user with no row — can't track attempts, just count this as first failure
+        if data is None:
+            return {"locked": False, "attempts_left": MAX_PROMO_ATTEMPTS - 1}
+        attempts = (data.get("promo_attempts") or 0) + 1
 
         update_data: dict = {"promo_attempts": attempts}
         if attempts >= MAX_PROMO_ATTEMPTS:
@@ -243,21 +253,7 @@ class OnboardingService:
         # 1.5. Check admin promo code from env
         from ...core.config import settings
         if settings.ADMIN_PROMO_CODE and code.strip() == settings.ADMIN_PROMO_CODE:
-            # Grant admin + all roles
-            await (
-                self.db.table("users")
-                .update({
-                    "is_admin": True,
-                    "has_player_access": True,
-                    "has_responsible_access": True,
-                    "primary_role": "responsible",
-                    "role": "responsible",
-                    "promo_attempts": 0,
-                    "promo_locked_until": None,
-                })
-                .eq("telegram_id", telegram_id)
-                .execute()
-            )
+            # Fields will be applied in handler via upsert (handles both new and existing users)
             return {"ok": True, "tier": "admin", "promo_id": None}
 
         # 2. Look up code in DB
@@ -288,24 +284,25 @@ class OnboardingService:
                 "attempts_left": fail["attempts_left"],
             }
 
-        # 3. Valid! Save pending_promo_id on user (burn later on link generation)
+        # 3. Valid! Save pending_promo_id on user if row exists (new users get this after INSERT)
         user_res = (
             await self.db.table("users")
             .select("id")
             .eq("telegram_id", telegram_id)
-            .single()
+            .maybe_single()
             .execute()
         )
-        await (
-            self.db.table("users")
-            .update({
-                "pending_promo_id": promo["id"],
-                "promo_attempts": 0,
-                "promo_locked_until": None,
-            })
-            .eq("telegram_id", telegram_id)
-            .execute()
-        )
+        if user_res.data is not None:
+            await (
+                self.db.table("users")
+                .update({
+                    "pending_promo_id": promo["id"],
+                    "promo_attempts": 0,
+                    "promo_locked_until": None,
+                })
+                .eq("telegram_id", telegram_id)
+                .execute()
+            )
 
         return {"ok": True, "tier": promo["tier"], "promo_id": promo["id"]}
 

@@ -33,7 +33,7 @@ class TokenResponse(BaseModel):
 async def telegram_auth(body: TelegramAuthRequest) -> TokenResponse:
     """
     1. Валидируем initData (HMAC-SHA256)
-    2. Upsert пользователя в БД
+    2. SELECT пользователя — 403 NO_ACCESS если не найден
     3. Возвращаем JWT
     """
     parsed = validate_init_data(body.init_data)
@@ -44,30 +44,17 @@ async def telegram_auth(body: TelegramAuthRequest) -> TokenResponse:
     telegram_id: int = tg_user["id"]
     db = await get_supabase()
 
-    # Upsert — создаём если нет, не трогаем если есть
-    await (
-        db.table("users")
-        .upsert(
-            {
-                "telegram_id": telegram_id,
-                "telegram_username": tg_user.get("username"),
-                "first_name": tg_user.get("first_name"),
-            },
-            on_conflict="telegram_id",
-            ignore_duplicates=True,
-        )
-        .execute()
-    )
-
-    # Получаем актуальные данные
+    # SELECT only — no upsert. User must exist (created by bot after promo activation).
     user_res = (
         await db.table("users")
         .select("id, role, onboarding_done, profile_photo_url, photo_dark_url, photo_light_url, primary_role, has_player_access, has_responsible_access, is_admin")
         .eq("telegram_id", telegram_id)
-        .single()
+        .maybe_single()
         .execute()
     )
     user_data = user_res.data
+    if user_data is None:
+        raise HTTPException(status_code=403, detail={"code": "NO_ACCESS"})
     user_uuid = user_data.get("id")
 
     # Backward-compat: compute `role` from dual-role fields

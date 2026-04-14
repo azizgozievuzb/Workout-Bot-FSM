@@ -64,7 +64,11 @@ export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: false,
   accessRevoked: false,
   setActiveRoleView: (view) => set({ activeRoleView: view }),
-  setAccessRevoked: (revoked) => set({ accessRevoked: revoked }),
+  setAccessRevoked: (revoked) => set(
+    revoked
+      ? { accessRevoked: true, token: null, isAuthenticated: false }
+      : { accessRevoked: false }
+  ),
   setAuth: (data) =>
     set({
       token: data.token,

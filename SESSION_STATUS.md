@@ -3,7 +3,7 @@
 > **AI-агент:** Прочитай этот файл ПОСЛЕ `CLAUDE.md`. Здесь написано, на чём остановился предыдущий агент.
 
 **Последнее обновление:** 2026-04-14
-**Последний агент:** Claude Sonnet 4.6
+**Последний агент:** Claude Opus 4.6
 
 ---
 
@@ -22,6 +22,29 @@
 - Сейчас только заглушка: 5 готовых лотов + 6-й "Пустой лот" (некликабельный)
 
 ---
+
+## ✅ Выполнено в этой сессии (2026-04-14) — Auth Gate: Block Unknown Users
+
+### Backend
+- **`backend/api/routers/auth.py`**: Removed upsert. POST /auth/telegram now does SELECT only via `.maybe_single()`. Returns 403 `{"code": "NO_ACCESS"}` if user not in DB.
+- **`backend/services/fsm/onboarding_fsm.py`**:
+  - `get_state`: `.maybe_single()` + returns `(None, {})` for missing user
+  - `check_promo_rate_limit`: `.maybe_single()` + returns `{"allowed": True}` for new users
+  - `record_failed_promo_attempt`: `.maybe_single()` + skips for new users
+  - `validate_promo_code` step 3: `.maybe_single()` + skips `pending_promo_id` save for new users
+  - Admin env code path: removed premature `.update()`, handler does upsert instead
+- **`backend/handlers/onboarding.py`**:
+  - Removed `upsert_user` function and its call in `cmd_start`
+  - `cmd_start` shows promo prompt without creating user row
+  - `process_text_input`: condition expanded to `db_state in ("resp_promo", None)` for new users
+  - After promo success: upsert user row (admin: full fields; responsible: basic + role fields)
+  - PAIR_ flow: upsert (not update) for new players
+  - Removed "Сбрасываем в resp_promo" update block from bottom of `cmd_start`
+
+### Frontend
+- **`frontend/src/api/client.ts`**: 403 interceptor now handles `code === "NO_ACCESS"` OR `"PROMO_EXPIRED"` (detail can be object or string). Calls `setToken(null)` + `setAccessRevoked(true)`.
+- **`frontend/src/stores/authStore.ts`**: `setAccessRevoked(true)` clears `token` and `isAuthenticated`.
+- **`frontend/src/components/shared/AccessRevokedScreen.tsx`**: Updated text to "Нет доступа / Доступ не найден или истёк" (covers both NO_ACCESS and PROMO_EXPIRED).
 
 ## ✅ Выполнено в этой сессии (2026-04-14) — Promo TTL Lifecycle
 
@@ -117,12 +140,13 @@
 
 ## 🔜 Что дальше (приоритет)
 
-### 0. Применить migration 012 в Supabase
-- Открыть Supabase SQL Editor → вставить `backend/db/migrations/012_promo_ttl.sql` → Run
+### 0. ✅ Migration 012 применена в Supabase (проверено: `duration_days` присутствует)
 
-### 1. Тестовый прогон после фиксов
+### 1. Тестовый прогон после фиксов + TTL
 - Запустить бот с нуля: /start → промокод Responsible → проверить, что в мини-аппе в ActionCube показывается код (чип справа вверху).
 - Проверить Dashboard: реальные цифры (streak, balance, unread), смена роли через P/R кнопку.
+- Проверить TTL: `/new_promo` → выбрать 7 дней → передать Игроку → активация → чип с датой истечения в ActionCube.
+- Проверить деактивацию: вручную `UPDATE promo_codes SET expires_at = now() - INTERVAL '1 minute'` → Job A (10 мин) → Игрок получает 403 PROMO_EXPIRED → `AccessRevokedScreen` → у Ответственного серый игрок с "Продлить".
 
 ### 2. Тренировочный интерфейс (ГЛАВНАЯ ЦЕЛЬ)
 - Кнопка "Приступим" / "Начать тренировку" → открывает `200_workoutSessionMachine`

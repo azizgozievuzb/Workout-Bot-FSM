@@ -23,7 +23,10 @@ api.interceptors.response.use(
     if (err.response?.status === 401) {
       setToken(null);
     }
-    if (err.response?.status === 403 && err.response?.data?.detail === 'PROMO_EXPIRED') {
+    const detail = err.response?.data?.detail;
+    const code = typeof detail === 'object' ? detail?.code : detail;
+    if (err.response?.status === 403 && (code === 'NO_ACCESS' || code === 'PROMO_EXPIRED')) {
+      setToken(null);
       useAuthStore.getState().setAccessRevoked(true);
     }
     return Promise.reject(err);

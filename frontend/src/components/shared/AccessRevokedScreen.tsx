@@ -15,9 +15,10 @@ const AccessRevokedScreen: React.FC = () => {
     return (
         <div className="access-revoked-screen">
             <div className="access-revoked-icon">🔒</div>
-            <div className="access-revoked-title">Доступ истёк</div>
+            <div className="access-revoked-title">Нет доступа</div>
             <div className="access-revoked-text">
-                Обратитесь к Ответственному за новым промокодом.
+                Доступ к приложению не найден или истёк.<br />
+                Обратитесь к Ответственному для активации.
             </div>
             <button className="access-revoked-btn" onClick={handleClose}>
                 Закрыть

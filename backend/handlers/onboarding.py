@@ -50,23 +50,6 @@ LINK_WARNING = (
 # Утилиты
 # ---------------------------------------------------------------------------
 
-async def upsert_user(telegram_user: types.User) -> None:
-    db = await get_supabase()
-    await (
-        db.table("users")
-        .upsert(
-            {
-                "telegram_id": telegram_user.id,
-                "telegram_username": telegram_user.username,
-                "first_name": telegram_user.first_name,
-            },
-            on_conflict="telegram_id",
-            ignore_duplicates=True,
-        )
-        .execute()
-    )
-
-
 async def get_svc() -> OnboardingService:
     db = await get_supabase()
     return OnboardingService(db)
@@ -79,13 +62,13 @@ async def get_svc() -> OnboardingService:
 @onboarding_router.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext) -> None:
     await state.clear()
-    await upsert_user(message.from_user)
     svc = await get_svc()
 
     args = message.text.split(maxsplit=1)
     deeplink = args[1].strip() if len(args) > 1 else ""
 
     db_state, _ = await svc.get_state(message.from_user.id)
+    # db_state is None either for new users (no row) or users with cleared state
 
     # ------------------------------------------------------------------
     # Уже завершил онбординг → smart menu
@@ -198,15 +181,21 @@ async def cmd_start(message: types.Message, state: FSMContext) -> None:
             return
 
         db = await get_supabase()
+        # Create or update user row — this is a legitimate entry point (invited player)
         await (
             db.table("users")
-            .update({
-                "onboarding_state": "player_language",
-                "role": "player",
-                "primary_role": "player",
-                "has_player_access": True,
-            })
-            .eq("telegram_id", message.from_user.id)
+            .upsert(
+                {
+                    "telegram_id": message.from_user.id,
+                    "telegram_username": message.from_user.username,
+                    "first_name": message.from_user.first_name,
+                    "onboarding_state": "player_language",
+                    "role": "player",
+                    "primary_role": "player",
+                    "has_player_access": True,
+                },
+                on_conflict="telegram_id",
+            )
             .execute()
         )
         await message.answer(
@@ -226,19 +215,8 @@ async def cmd_start(message: types.Message, state: FSMContext) -> None:
         )
         return
 
-    # Сбрасываем в resp_promo
-    db = await get_supabase()
-    await (
-        db.table("users")
-        .update({
-            "onboarding_state": "resp_promo",
-            "role": "responsible",
-            "primary_role": "responsible",
-            "has_responsible_access": True,
-        })
-        .eq("telegram_id", message.from_user.id)
-        .execute()
-    )
+    # New or returning user without valid state — prompt for promo code.
+    # Do NOT create a user row here; it will be created after promo activation.
     await message.answer(
         "Добро пожаловать!\n\n"
         "Введите промокод для активации:"
@@ -328,7 +306,8 @@ async def process_text_input(message: types.Message) -> None:
     db_state, _ = await svc.get_state(message.from_user.id)
 
     # --- PROMO CODE (DB validation) ---
-    if db_state == "resp_promo":
+    # db_state is None for new users (no row yet) or users with cleared/old state
+    if db_state in ("resp_promo", None):
         # Block commands (/start caught by cmd_start above)
         if message.text.startswith('/'):
             await message.answer("Пожалуйста, введите только промокод.")
@@ -352,15 +331,32 @@ async def process_text_input(message: types.Message) -> None:
                 await message.answer("Неверный промокод.")
             return
 
-        # Promo valid
+        # Promo valid — create user row if it doesn't exist yet.
+        # This is the ONLY place new user rows are created for the responsible flow.
         tier = promo_result["tier"]
+        tg = message.from_user
+        db = await get_supabase()
 
-        # Admin — skip full onboarding, go straight to complete
         if tier == "admin":
-            await svc.db.table("users").update({
-                "onboarding_state": "onboardingComplete",
-                "onboarding_done": True,
-            }).eq("telegram_id", message.from_user.id).execute()
+            await (
+                db.table("users")
+                .upsert(
+                    {
+                        "telegram_id": tg.id,
+                        "telegram_username": tg.username,
+                        "first_name": tg.first_name,
+                        "is_admin": True,
+                        "has_player_access": True,
+                        "has_responsible_access": True,
+                        "primary_role": "responsible",
+                        "role": "responsible",
+                        "onboarding_state": "onboardingComplete",
+                        "onboarding_done": True,
+                    },
+                    on_conflict="telegram_id",
+                )
+                .execute()
+            )
 
             # Ensure admin has a player_code for mini-app invite flow
             try:
@@ -374,7 +370,26 @@ async def process_text_input(message: types.Message) -> None:
             )
             return
 
-        # Regular promo — send FSM event with tier from DB
+        # Regular responsible promo — ensure user row exists before FSM transition
+        await (
+            db.table("users")
+            .upsert(
+                {
+                    "telegram_id": tg.id,
+                    "telegram_username": tg.username,
+                    "first_name": tg.first_name,
+                    "role": "responsible",
+                    "primary_role": "responsible",
+                    "has_responsible_access": True,
+                    "onboarding_state": "resp_promo",
+                },
+                on_conflict="telegram_id",
+                ignore_duplicates=True,
+            )
+            .execute()
+        )
+
+        # Send FSM event with tier from DB
         result = await svc.send_event(
             message.from_user.id,
             {"type": "SET_PROMO", "tier": tier},
