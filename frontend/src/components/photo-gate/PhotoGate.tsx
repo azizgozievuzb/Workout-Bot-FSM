@@ -17,6 +17,7 @@ const PhotoGate: React.FC = () => {
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [faceDetected, setFaceDetected] = useState(false);
+  const [consentChecked, setConsentChecked] = useState(false);
 
   const videoElRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -231,7 +232,19 @@ const PhotoGate: React.FC = () => {
               <p className="pg-warning-item pg-warning-item--accent">Фото делается один раз. Повторная замена будет платной</p>
             </div>
             {error && <p className="pg-error">{error}</p>}
-            <button className="pg-btn pg-btn--primary" onClick={openCamera}>
+            <label className="pg-consent">
+              <input
+                type="checkbox"
+                checked={consentChecked}
+                onChange={(e) => setConsentChecked(e.target.checked)}
+              />
+              <span>Я понимаю, что я не смогу в дальнейшем поменять фотографию</span>
+            </label>
+            <button
+              className="pg-btn pg-btn--primary"
+              onClick={openCamera}
+              disabled={!consentChecked}
+            >
               Открыть камеру
             </button>
           </motion.div>

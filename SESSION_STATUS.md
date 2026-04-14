@@ -2,17 +2,20 @@
 
 > **AI-агент:** Прочитай этот файл ПОСЛЕ `CLAUDE.md`. Здесь написано, на чём остановился предыдущий агент.
 
-**Последнее обновление:** 2026-04-14
+**Последнее обновление:** 2026-04-15
 **Последний агент:** Claude Opus 4.6
 
 ---
 
 ## ⚠️ ОТКРЫТЫЕ ВОПРОСЫ (НАПОМНИТЬ ПОЛЬЗОВАТЕЛЮ В НАЧАЛЕ СЕССИИ)
 
-1. **Архитектура Админа** — ОТЛОЖЕНА. Спросить:
+0. ✅ **Баг get_state ИСПРАВЛЕН** (коммит `89e43e0`).
+1. ✅ **Hard black lock на фронте ПРИМЕНЁН** (коммит `cdc6c1b`). Проверено в рабочей сессии — работает.
+
+2. **Архитектура Админа** — ОТЛОЖЕНА. Спросить:
 > "Решаем вопрос архитектуры Админа сейчас или попозже?"
 
-2. **Глобальная переработка Маркета** — ОТЛОЖЕНА. Спросить:
+3. **Глобальная переработка Маркета** — ОТЛОЖЕНА. Спросить:
 > "Прорабатываем глобальную логику Маркета сейчас или попозже?"
 
 Контекст Маркета (для будущей сессии):
@@ -20,6 +23,67 @@
 - Ответственный покупает за **очки Ответственного** (за что-то начисляются — TBD) ИЛИ за **реальные Telegram Stars**
 - В магазине будут **нативные лоты от приложения** + **лоты от Ответственного** (он их закидывает для своих игроков)
 - Сейчас только заглушка: 5 готовых лотов + 6-й "Пустой лот" (некликабельный)
+
+---
+
+## ✅ Выполнено в этой сессии (2026-04-15)
+
+### Backend
+- **`backend/api/routers/admin.py`**: `GET /admin/promo/list` теперь по умолчанию фильтрует `code_type='responsible'`. Раньше в админку попадали авто-сгенерированные `player`-коды приглашения (баг: у Ответственного его player-invite код отображался в панели Админа среди responsible-промокодов).
+
+### Frontend — Photo consent gate
+- **`frontend/src/components/photo-gate/PhotoGate.tsx`**:
+  - Добавлен state `consentChecked`.
+  - В INTRO фазу добавлен чекбокс "Я понимаю, что я не смогу в дальнейшем поменять фотографию".
+  - Кнопка "Открыть камеру" `disabled` пока чекбокс не проставлен.
+- **`frontend/src/components/photo-gate/PhotoGate.css`**: стили `.pg-consent` + `.pg-btn--primary:disabled`.
+
+### SQL (разовая операция пользователем)
+Полный вайп всех данных включая админа:
+```sql
+TRUNCATE TABLE activity_feed, purchases, boosts, shop_items, player_stats,
+  subscriptions, partnerships, promo_codes_archive, promo_codes, users
+RESTART IDENTITY CASCADE;
+```
+
+### ⚠️ НАПОМИНАНИЕ: Нужен `git push` локально
+Из песочницы push не работает (Missing permissions). Коммит(ы) этой сессии с фиксом админ-листа промокодов и photo-consent чекбоксом нужно запушить самому:
+```
+git add -A
+git commit -m "fix(admin): filter promo list by responsible + photo consent checkbox"
+git push
+```
+
+---
+
+## 🔜 Первое действие следующей сессии
+
+1. Применить фикс из промпта (см. ОТКРЫТЫЙ ВОПРОС №0): обернуть все `.maybe_single()` в защиту от `None`. Commit + push. Проверить что бот отвечает на /start.
+2. Проверить `App.tsx` hard-lock: открыть MiniApp без промокода → должен быть чёрный экран с текстом "К сожалению, вы не зарегистрированы." и ничего кликабельного.
+3. После этого — тестовый прогон TTL (см. ниже раздел "🔜 Что дальше").
+
+---
+
+## ✅ Выполнено в этой сессии (2026-04-14, продолжение) — Access Hardening
+
+### Backend
+- Добавил в `backend/core/deps.py` (коммит `5cae2f7`): `get_current_user` для роли player проверяет живую запись в `promo_codes` с `expires_at > now()`, self-heal `deactivated_at`, 403 `PROMO_EXPIRED`.
+- `backend/api/routers/promo.py` — `GET /promo/player-status` использует ту же live-promo логику.
+- **`backend/api/routers/auth.py`**: убран upsert. Теперь `.maybe_single()` + 403 `{"code": "NO_ACCESS"}` если юзера нет.
+- **`backend/services/fsm/onboarding_fsm.py`**: частично защищены `.maybe_single()`, НО `get_state` всё ещё падает на `result.data` когда `result=None` — см. ОТКРЫТЫЙ ВОПРОС №0.
+- **`backend/handlers/onboarding.py`**: убран `upsert_user`, `cmd_start` не создаёт row. Upsert юзера — только после успешной валидации промокода (admin/responsible) и в PAIR_ flow (player).
+
+### Frontend
+- **`src/api/client.ts`**: 403 interceptor обрабатывает `detail.code === "NO_ACCESS" | "PROMO_EXPIRED"`, вызывает `setToken(null)` + `setAccessRevoked(true)`.
+- **`src/stores/authStore.ts`**: `setAccessRevoked(true)` чистит token и `isAuthenticated`.
+- **`src/components/shared/AccessRevokedScreen.tsx`**: текст обновлён.
+- ⚠️ Hard black lock (early return в `App.tsx`) — НЕ применён на проде, см. ОТКРЫТЫЙ ВОПРОС №1.
+
+### Коммиты
+- `5cae2f7` — auth(player): gate access on live promo_codes row + block miniapp entry for unknown users
+
+### SQL-вайп (отработал)
+Пользователь прогнал вайп всех данных кроме админа несколько раз (см. SQL в истории). После вайпа юзеров нет → бот падает на `/start` из-за бага `get_state`.
 
 ---
 

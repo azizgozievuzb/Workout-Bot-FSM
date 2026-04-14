@@ -125,8 +125,10 @@ async def list_promos(
         "id, code, code_type, tier, is_used, used_by, responsible_id, created_at, duration_days"
     )
 
-    if code_type:
-        query = query.eq("code_type", code_type)
+    # Admin panel shows only responsible-type codes by default.
+    # Player invite codes (auto-generated for Responsibles) are excluded
+    # unless explicitly requested via ?code_type=player.
+    query = query.eq("code_type", code_type if code_type else "responsible")
     if is_used is not None:
         query = query.eq("is_used", is_used)
     if tier:
