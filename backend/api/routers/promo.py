@@ -371,13 +371,13 @@ async def my_player_code(current_user: dict = Depends(get_current_user)):
 
 @router.get("/player-status", response_model=PlayerStatusResponse)
 async def player_status(current_user: dict = Depends(get_current_user)):
-    """Returns the player's own promo expiry info."""
+    """Returns the player's own promo expiry info. Mirrors get_current_user live-promo check."""
     db = await get_supabase()
     telegram_id = current_user["telegram_id"]
 
     user_res = await (
         db.table("users")
-        .select("id, deactivated_at")
+        .select("deactivated_at")
         .eq("telegram_id", telegram_id)
         .maybe_single()
         .execute()
@@ -385,28 +385,26 @@ async def player_status(current_user: dict = Depends(get_current_user)):
     if not user_res or not user_res.data:
         raise HTTPException(status_code=404, detail="User not found")
 
-    user_id = user_res.data["id"]
-
-    # If already deactivated, return immediately
+    # Fast path: already deactivated
     if user_res.data.get("deactivated_at"):
-        return PlayerStatusResponse(is_active=False)
+        return PlayerStatusResponse(is_active=False, days_left=0)
 
-    # Find the active player promo code for this user
+    # Authoritative check: live promo row
+    now_iso = datetime.now(timezone.utc).isoformat()
     code_res = await (
         db.table("promo_codes")
         .select("duration_days, expires_at")
-        .eq("activated_by", telegram_id)
         .eq("code_type", "player")
-        .eq("is_used", True)
-        .order("activated_at", desc=True)
-        .limit(1)
+        .eq("activated_by", telegram_id)
+        .gt("expires_at", now_iso)
+        .maybe_single()
         .execute()
     )
 
-    if not code_res.data:
-        return PlayerStatusResponse(is_active=True)
+    if not code_res or not code_res.data:
+        return PlayerStatusResponse(is_active=False, days_left=0)
 
-    row = code_res.data[0]
+    row = code_res.data
     expires_at = row.get("expires_at")
     days_left = _compute_days_left(expires_at)
 
