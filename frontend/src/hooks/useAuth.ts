@@ -109,8 +109,15 @@ export function useAuth() {
       }
     };
 
-    // Small delay to ensure Telegram WebApp is fully initialized
-    setTimeout(authenticate, 100);
+    const waitForTelegram = (retries = 5, delay = 50) => {
+      const initData = getInitData();
+      if (initData || retries <= 0) {
+        authenticate();
+        return;
+      }
+      setTimeout(() => waitForTelegram(retries - 1, delay), delay);
+    };
+    waitForTelegram();
 
     return () => { cancelled = true; };
   }, [isAuthenticated, setAuth]);

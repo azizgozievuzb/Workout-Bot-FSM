@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 
 export type PrimaryRole = 'player' | 'responsible';
+
+const CACHE_KEYS = { photo: 'wb_photo', dark: 'wb_photo_dark', light: 'wb_photo_light' } as const;
 export type LegacyRole = 'player' | 'responsible' | 'admin';
 
 export interface DualRoleUser {
@@ -56,9 +58,9 @@ export const useAuthStore = create<AuthState>((set) => ({
   has_responsible_access: false,
   is_admin: false,
   onboardingDone: false,
-  photoUrl: null,
-  photoDarkUrl: null,
-  photoLightUrl: null,
+  photoUrl: localStorage.getItem(CACHE_KEYS.photo),
+  photoDarkUrl: localStorage.getItem(CACHE_KEYS.dark),
+  photoLightUrl: localStorage.getItem(CACHE_KEYS.light),
   player_code: null,
   activeRoleView: null,
   isAuthenticated: false,
@@ -75,6 +77,12 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
   setAuth: (data) => {
     localStorage.removeItem('access_revoked');
+    if (data.photoUrl) localStorage.setItem(CACHE_KEYS.photo, data.photoUrl);
+    else if (data.photoUrl === null) localStorage.removeItem(CACHE_KEYS.photo);
+    if (data.photoDarkUrl) localStorage.setItem(CACHE_KEYS.dark, data.photoDarkUrl);
+    else if (data.photoDarkUrl === null) localStorage.removeItem(CACHE_KEYS.dark);
+    if (data.photoLightUrl) localStorage.setItem(CACHE_KEYS.light, data.photoLightUrl);
+    else if (data.photoLightUrl === null) localStorage.removeItem(CACHE_KEYS.light);
     return set({
       token: data.token,
       role: data.role as LegacyRole,
@@ -89,8 +97,12 @@ export const useAuthStore = create<AuthState>((set) => ({
       isAuthenticated: true,
     });
   },
-  setPhotoUrl: (url) => set({ photoUrl: url }),
-  setStyledPhotos: (darkUrl, lightUrl) => set({ photoDarkUrl: darkUrl, photoLightUrl: lightUrl }),
+  setPhotoUrl: (url) => { localStorage.setItem(CACHE_KEYS.photo, url); set({ photoUrl: url }); },
+  setStyledPhotos: (darkUrl, lightUrl) => {
+    if (darkUrl) localStorage.setItem(CACHE_KEYS.dark, darkUrl); else localStorage.removeItem(CACHE_KEYS.dark);
+    if (lightUrl) localStorage.setItem(CACHE_KEYS.light, lightUrl); else localStorage.removeItem(CACHE_KEYS.light);
+    set({ photoDarkUrl: darkUrl, photoLightUrl: lightUrl });
+  },
   setPlayerCode: (code) => set({ player_code: code }),
   addRole: (role) =>
     set((state) => ({
@@ -99,7 +111,10 @@ export const useAuthStore = create<AuthState>((set) => ({
         : { has_responsible_access: true }),
       role: state.is_admin ? 'admin' : state.primary_role,
     })),
-  clearAuth: () =>
+  clearAuth: () => {
+    localStorage.removeItem(CACHE_KEYS.photo);
+    localStorage.removeItem(CACHE_KEYS.dark);
+    localStorage.removeItem(CACHE_KEYS.light);
     set({
       token: null,
       role: null,
@@ -115,5 +130,6 @@ export const useAuthStore = create<AuthState>((set) => ({
       activeRoleView: null,
       isAuthenticated: false,
       accessRevoked: false,
-    }),
+    });
+  },
 }));

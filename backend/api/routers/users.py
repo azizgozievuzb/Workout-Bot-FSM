@@ -3,7 +3,9 @@ import asyncio
 import base64
 import uuid
 import logging
+from io import BytesIO
 from fastapi import APIRouter, Depends, HTTPException, status
+from PIL import Image
 from pydantic import BaseModel
 
 from ...core.deps import get_current_user
@@ -98,16 +100,33 @@ async def upload_photo(
             detail=f"Storage upload failed: {str(e)[:200]}",
         )
 
-    # Build public URL directly (get_public_url may be sync or async depending on client)
     from ...core.config import settings
     base = settings.SUPABASE_URL.strip().strip("'").strip('"').rstrip("/")
     public_url = f"{base}/storage/v1/object/public/avatars/{file_name}"
 
-    # Update user record
+    # Create and upload thumbnail (~150KB)
+    try:
+        img = Image.open(BytesIO(photo_bytes))
+        img.thumbnail((900, 1600), Image.LANCZOS)
+        buf = BytesIO()
+        img.save(buf, "JPEG", quality=80)
+        thumb_bytes = buf.getvalue()
+        thumb_path = f"{tid}/thumb.jpg"
+        await db.storage.from_("avatars").upload(
+            path=thumb_path,
+            file=thumb_bytes,
+            file_options={"content-type": "image/jpeg", "x-upsert": "true"},
+        )
+        thumb_url = f"{base}/storage/v1/object/public/avatars/{thumb_path}"
+    except Exception as e:
+        logger.warning(f"Thumbnail generation failed for user {tid}: {e}; using original")
+        thumb_url = public_url
+
+    # Update user record with thumb URL
     try:
         await (
             db.table("users")
-            .update({"profile_photo_url": public_url})
+            .update({"profile_photo_url": thumb_url})
             .eq("telegram_id", tid)
             .execute()
         )
@@ -115,7 +134,7 @@ async def upload_photo(
         logger.error(f"DB update failed for user {tid}: {e}")
         raise HTTPException(status_code=500, detail=f"DB update failed: {e}")
 
-    # Start AI photo styling in background
+    # Start AI photo styling in background (full-res original)
     await (
         db.table("users")
         .update({"photo_processing": True})
@@ -124,7 +143,7 @@ async def upload_photo(
     )
     asyncio.create_task(process_photo_styles(photo_bytes, tid))
 
-    return PhotoResponse(profile_photo_url=public_url)
+    return PhotoResponse(profile_photo_url=thumb_url)
 
 
 @router.get("/me/photo-status")

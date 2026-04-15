@@ -64,7 +64,7 @@ const Backdrop = forwardRef<GlassCubesHandle, BackdropProps>(({ theme = 'dark', 
                         initial={{ opacity: 0, filter: 'blur(12px)' }}
                         animate={{ opacity: photoUrl ? 0.2 : 0.15, filter: 'blur(0px)' }}
                         exit={{ opacity: 0, filter: 'blur(12px)' }}
-                        transition={{ duration: 1.4, ease: 'easeInOut' }}
+                        transition={{ duration: 0.6, ease: 'easeInOut' }}
                     />
                 </AnimatePresence>
             </motion.div>
