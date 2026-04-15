@@ -47,24 +47,25 @@ const Backdrop = forwardRef<GlassCubesHandle, BackdropProps>(({ theme = 'dark', 
         };
     }, [mouseX, mouseY]);
 
+    const faceSrc = theme === 'dark'
+        ? (photoDarkUrl || photoUrl || womanCosmic)
+        : (photoLightUrl || photoUrl || womanMeditating);
+
     return (
         <div className={`backdrop-stage ${theme}-mode`}>
             {/* LAYER 1: Ghost face — BEHIND canvas, fullscreen */}
             <motion.div className="face-fullscreen" style={{ x: faceShiftX, y: faceShiftY }}>
-                <AnimatePresence mode="wait">
+                {/* mode="sync": старое лицо гаснет одновременно с появлением нового — плавный кроссфейд */}
+                <AnimatePresence mode="sync">
                     <motion.img
-                        key={photoDarkUrl || photoLightUrl || photoUrl ? 'personal' : theme}
-                        src={
-                            theme === 'dark'
-                                ? (photoDarkUrl || photoUrl || womanCosmic)
-                                : (photoLightUrl || photoUrl || womanMeditating)
-                        }
+                        key={String(faceSrc)}
+                        src={faceSrc}
                         alt="Flying Entity"
                         className="face-image"
-                        initial={{ opacity: 0, filter: 'blur(12px)' }}
+                        initial={{ opacity: 0, filter: 'blur(16px)' }}
                         animate={{ opacity: photoUrl ? 0.2 : 0.15, filter: 'blur(0px)' }}
-                        exit={{ opacity: 0, filter: 'blur(12px)' }}
-                        transition={{ duration: 0.6, ease: 'easeInOut' }}
+                        exit={{ opacity: 0, filter: 'blur(16px)' }}
+                        transition={{ duration: 1.5, ease: 'easeInOut' }}
                     />
                 </AnimatePresence>
             </motion.div>
