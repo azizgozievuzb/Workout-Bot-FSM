@@ -62,6 +62,12 @@ async def telegram_auth(body: TelegramAuthRequest) -> TokenResponse:
     is_admin = user_data.get("is_admin", False)
     compat_role = "admin" if is_admin else (primary or user_data.get("role"))
 
+    # Admin/Responsible skip promo onboarding — force onboarding_done=True
+    raw_onboarding_done = user_data.get("onboarding_done", False)
+    effective_onboarding_done = (
+        True if (is_admin or compat_role in ("responsible", "admin")) else raw_onboarding_done
+    )
+
     # Check for unused player_code (for responsibles)
     has_promo = False
     if user_uuid:
@@ -81,7 +87,7 @@ async def telegram_auth(body: TelegramAuthRequest) -> TokenResponse:
     return TokenResponse(
         access_token=token,
         role=compat_role,
-        onboarding_done=user_data.get("onboarding_done", False),
+        onboarding_done=effective_onboarding_done,
         profile_photo_url=user_data.get("profile_photo_url"),
         photo_dark_url=user_data.get("photo_dark_url"),
         photo_light_url=user_data.get("photo_light_url"),
