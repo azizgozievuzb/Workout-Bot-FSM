@@ -31,18 +31,24 @@ async def get_current_user(
 
     tg_id = int(telegram_id)
 
-    if role == "player":
+    if role in ("player", "new"):
         from ..db.client import get_supabase
         db = await get_supabase()
 
         # Fast path: already deactivated — no extra query needed
         user_res = await (
             db.table("users")
-            .select("deactivated_at")
+            .select("deactivated_at, onboarding_done")
             .eq("telegram_id", tg_id)
             .maybe_single()
             .execute()
         )
+
+        # Пользователь ещё в онбординге — пропускаем TTL-проверку
+        if role == "new" or (
+            user_res and user_res.data and not user_res.data.get("onboarding_done", True)
+        ):
+            return {"telegram_id": tg_id, "role": role}
         if user_res and user_res.data and user_res.data.get("deactivated_at"):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

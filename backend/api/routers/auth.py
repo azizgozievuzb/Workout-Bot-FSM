@@ -7,6 +7,8 @@ from ...db.client import get_supabase
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+SHELL_ROLE = "new"  # временная роль для незарегистрированных пользователей
+
 
 class TelegramAuthRequest(BaseModel):
     init_data: str
@@ -96,4 +98,75 @@ async def telegram_auth(body: TelegramAuthRequest) -> TokenResponse:
         has_responsible_access=user_data.get("has_responsible_access", False),
         is_admin=is_admin,
         has_promo_code=has_promo,
+    )
+
+
+@router.post("/register", response_model=TokenResponse)
+async def register_user(body: TelegramAuthRequest) -> TokenResponse:
+    """
+    Endpoint для первичной регистрации через мини-апп.
+    Если пользователь уже существует — возвращает его данные (как /telegram).
+    Если нет — создаёт минимальную запись с role='new', onboarding_done=False.
+    """
+    parsed = validate_init_data(body.init_data)
+    tg_user = parsed.get("user")
+    if not tg_user:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No user in initData")
+
+    telegram_id: int = tg_user["id"]
+    db = await get_supabase()
+
+    user_res = (
+        await db.table("users")
+        .select("id, role, onboarding_done, profile_photo_url, photo_dark_url, photo_light_url, primary_role, has_player_access, has_responsible_access, is_admin")
+        .eq("telegram_id", telegram_id)
+        .maybe_single()
+        .execute()
+    )
+    user_data = user_res.data if user_res is not None else None
+
+    # Уже зарегистрирован — возвращаем как /telegram
+    if user_data is not None:
+        primary = user_data.get("primary_role")
+        is_admin = user_data.get("is_admin", False)
+        compat_role = "admin" if is_admin else (primary or user_data.get("role") or SHELL_ROLE)
+        raw_done = user_data.get("onboarding_done", False)
+        effective_done = True if (is_admin or compat_role in ("responsible", "admin")) else raw_done
+        token = create_access_token(telegram_id, compat_role)
+        return TokenResponse(
+            access_token=token,
+            role=compat_role,
+            onboarding_done=effective_done,
+            profile_photo_url=user_data.get("profile_photo_url"),
+            photo_dark_url=user_data.get("photo_dark_url"),
+            photo_light_url=user_data.get("photo_light_url"),
+            primary_role=primary,
+            has_player_access=user_data.get("has_player_access", False),
+            has_responsible_access=user_data.get("has_responsible_access", False),
+            is_admin=is_admin,
+        )
+
+    # Новый пользователь — создаём минимальную запись
+    await (
+        db.table("users")
+        .insert({
+            "telegram_id": telegram_id,
+            "first_name": tg_user.get("first_name", ""),
+            "telegram_username": tg_user.get("username"),
+            "onboarding_done": False,
+            "has_player_access": False,
+            "has_responsible_access": False,
+            "is_admin": False,
+        })
+        .execute()
+    )
+
+    token = create_access_token(telegram_id, SHELL_ROLE)
+    return TokenResponse(
+        access_token=token,
+        role=SHELL_ROLE,
+        onboarding_done=False,
+        has_player_access=False,
+        has_responsible_access=False,
+        is_admin=False,
     )

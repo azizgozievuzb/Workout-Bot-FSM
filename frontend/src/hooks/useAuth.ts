@@ -102,6 +102,34 @@ export function useAuth() {
       } catch (err: any) {
         if (!cancelled) {
           if ((err as any).__accessRevoked) return; // handled by interceptor; black screen shown
+
+          // 403 NO_ACCESS — пользователь не в БД → авто-регистрация
+          const code = err.response?.data?.detail?.code ?? err.response?.data?.detail;
+          if (err.response?.status === 403 && code === 'NO_ACCESS') {
+            try {
+              const initData = getInitData();
+              const { data } = await api.post('/auth/register', { init_data: initData });
+              if (!cancelled) {
+                setToken(data.access_token);
+                setAuth({
+                  token: data.access_token,
+                  role: data.role,
+                  primary_role: data.primary_role,
+                  has_player_access: data.has_player_access ?? false,
+                  has_responsible_access: data.has_responsible_access ?? false,
+                  is_admin: data.is_admin ?? false,
+                  onboardingDone: data.onboarding_done,
+                  photoUrl: data.profile_photo_url,
+                  photoDarkUrl: data.photo_dark_url,
+                  photoLightUrl: data.photo_light_url,
+                });
+              }
+            } catch (regErr: any) {
+              if (!cancelled) setError(regErr.message || 'Registration failed');
+            }
+            return;
+          }
+
           setError(err.message || 'Authentication failed');
         }
       } finally {

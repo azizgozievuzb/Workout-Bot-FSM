@@ -2,8 +2,35 @@
 
 > **AI-агент:** Прочитай этот файл ПОСЛЕ `CLAUDE.md`. Здесь написано, на чём остановился предыдущий агент.
 
-**Последнее обновление:** 2026-04-15 (сессия 5)
+**Последнее обновление:** 2026-04-15 (сессия 6)
 **Последний агент:** Claude Sonnet 4.6 (Cowork)
+
+---
+
+## ✅ Выполнено в сессии 6 (2026-04-15) — Вариант Б: мини-апп самостоятельная регистрация
+
+### Проблема
+Незарегистрированный пользователь открывал мини-апп → 403 NO_ACCESS → `accessRevoked=true` → мёртвый экран. Регистрация требовала бота.
+
+### Решение
+- **`backend/api/routers/auth.py`**: `POST /auth/register` — если юзер не в БД → создаёт минимальную запись (role='player' в БД, JWT role='new'), если уже есть → возвращает как `/telegram`
+- **`backend/core/deps.py`**: role='new' и player с `onboarding_done=False` → пропускают TTL-check → могут вызвать `/promo/activate`
+- **`frontend/src/api/client.ts`**: 403 NO_ACCESS больше не ставит `accessRevoked`, пробрасывается в useAuth
+- **`frontend/src/hooks/useAuth.ts`**: при 403 NO_ACCESS → авто-вызов `/auth/register` → JWT role='new'
+- **`frontend/src/stores/authStore.ts`**: добавлен тип `'new'` в `LegacyRole`
+- **`frontend/src/App.tsx`**: `role='new'` → OnboardingFlow показывается без фото
+
+### Итоговый флоу (новый пользователь)
+1. Открывает мини-апп → `/auth/telegram` → 403 NO_ACCESS
+2. Авто-вызов `/auth/register` → создаёт запись → JWT role='new'
+3. `OnboardingFlow` показывается (promo step)
+4. Вводит промокод → становится admin/responsible/player
+5. Фото (PhotoGate) → готово
+
+### Попутные фиксы (сессия 6)
+- `promo.py` ADMIN_PROMO_CODE: `has_player_access=False` (не игрок до приглашения)
+- `onboarding.py` bot: `has_player_access=False` при создании admin
+- `auth.py` admin/responsible: `effective_onboarding_done=True` (пропуск OnboardingFlow для существующих)
 
 ---
 

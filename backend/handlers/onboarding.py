@@ -368,7 +368,7 @@ async def process_text_input(message: types.Message) -> None:
                         "telegram_username": tg.username,
                         "first_name": tg.first_name,
                         "is_admin": True,
-                        "has_player_access": True,
+                        "has_player_access": False,
                         "has_responsible_access": True,
                         "primary_role": "responsible",
                         "role": "responsible",

@@ -3,7 +3,7 @@ import { create } from 'zustand';
 export type PrimaryRole = 'player' | 'responsible';
 
 const CACHE_KEYS = { photo: 'wb_photo', dark: 'wb_photo_dark', light: 'wb_photo_light' } as const;
-export type LegacyRole = 'player' | 'responsible' | 'admin';
+export type LegacyRole = 'player' | 'responsible' | 'admin' | 'new';
 
 export interface DualRoleUser {
   primary_role: PrimaryRole;

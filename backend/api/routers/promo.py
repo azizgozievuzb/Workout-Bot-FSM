@@ -240,7 +240,7 @@ async def activate_promo(
             db.table("users")
             .update({
                 "is_admin": True,
-                "has_player_access": True,
+                "has_player_access": False,   # не игрок до приглашения
                 "has_responsible_access": True,
                 "primary_role": "responsible",
                 "onboarding_done": True,

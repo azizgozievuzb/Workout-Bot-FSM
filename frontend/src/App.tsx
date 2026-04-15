@@ -64,7 +64,8 @@ const App: React.FC = () => {
     };
 
     // Определяем, должен ли gesture-layer быть активен
-    const hasOverlay = !photoUrl || (!onboardingDone && role === 'player');
+    const isNewUser = role === 'new';
+    const hasOverlay = !photoUrl || (!onboardingDone && (role === 'player' || isNewUser));
     const gestureEnabled = !isLoading && (onboardingDone && !!photoUrl || !!error);
 
     const setLayout = useCallback((mode: LayoutMode) => {
@@ -191,7 +192,8 @@ const App: React.FC = () => {
                     <div className="ui-overlay" style={{ pointerEvents: layoutMode !== 'chaos' || hasOverlay ? 'auto' : 'none' }}>
 
                         {/* === ONBOARDING === */}
-                        {!isLoading && !onboardingDone && !!photoUrl && <OnboardingFlow />}
+                        {/* role='new' — новый юзер, показываем без фото (фото придёт после промокода) */}
+                        {!isLoading && !onboardingDone && (isNewUser || !!photoUrl) && <OnboardingFlow />}
 
                         {/* === AUTH ERROR === */}
                         {error && (

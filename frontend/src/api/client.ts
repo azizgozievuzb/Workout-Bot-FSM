@@ -25,7 +25,13 @@ api.interceptors.response.use(
     }
     const detail = err.response?.data?.detail;
     const code = typeof detail === 'object' ? detail?.code : detail;
-    if (err.response?.status === 403 && (code === 'NO_ACCESS' || code === 'PROMO_EXPIRED')) {
+    // NO_ACCESS — пользователь не в БД, нужна регистрация через /auth/register
+    // НЕ ставим accessRevoked, пробрасываем как есть для useAuth
+    if (err.response?.status === 403 && code === 'NO_ACCESS') {
+      return Promise.reject(err);
+    }
+    // PROMO_EXPIRED — доступ был, но истёк → чёрный экран
+    if (err.response?.status === 403 && code === 'PROMO_EXPIRED') {
       setToken(null);
       useAuthStore.getState().setAccessRevoked(true);
       const sentinel = new Error('ACCESS_REVOKED');
