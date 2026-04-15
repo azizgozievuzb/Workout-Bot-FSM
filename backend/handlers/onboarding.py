@@ -338,10 +338,32 @@ async def process_text_input(message: types.Message) -> None:
         db = await get_supabase()
 
         if tier == "admin":
-            await (
-                db.table("users")
-                .upsert(
-                    {
+            # Check if admin already exists (any telegram_id)
+            existing_admin = (
+                await db.table("users")
+                .select("id, telegram_id")
+                .eq("is_admin", True)
+                .maybe_single()
+                .execute()
+            )
+
+            if existing_admin is not None and existing_admin.data:
+                # Evict old device — update telegram_id on existing row
+                await (
+                    db.table("users")
+                    .update({
+                        "telegram_id": tg.id,
+                        "telegram_username": tg.username,
+                        "first_name": tg.first_name,
+                    })
+                    .eq("id", existing_admin.data["id"])
+                    .execute()
+                )
+            else:
+                # First-time admin registration
+                await (
+                    db.table("users")
+                    .insert({
                         "telegram_id": tg.id,
                         "telegram_username": tg.username,
                         "first_name": tg.first_name,
@@ -352,11 +374,9 @@ async def process_text_input(message: types.Message) -> None:
                         "role": "responsible",
                         "onboarding_state": "onboardingComplete",
                         "onboarding_done": True,
-                    },
-                    on_conflict="telegram_id",
+                    })
+                    .execute()
                 )
-                .execute()
-            )
 
             # Ensure admin has a player_code for mini-app invite flow
             try:
