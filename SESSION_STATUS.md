@@ -2,8 +2,73 @@
 
 > **AI-агент:** Прочитай этот файл ПОСЛЕ `CLAUDE.md`. Здесь написано, на чём остановился предыдущий агент.
 
-**Последнее обновление:** 2026-04-15 (сессия 6)
-**Последний агент:** Claude Sonnet 4.6 (Cowork)
+**Последнее обновление:** 2026-04-17 (сессия 8)
+**Последний агент:** Antigravity (Gemini → Claude Opus 4.6 Thinking)
+
+---
+
+## ✅ Выполнено в сессии 8 (2026-04-17) — Code Review: 3 Blockers + 7 Warnings Fixed
+
+### Контекст
+Code review (Claude Sonnet 4.6 Cowork, `/review-pr`) обнаружил **3 блокера** и **7 варнингов** за последние 25 коммитов / 46 файлов. Все исправлены и закоммичены (`006b0da`).
+
+### 🚫 Блокеры (исправлены)
+
+**1. Race condition — shop balance double-spend**
+- **Файл:** `backend/api/routers/shop.py` (line ~101-114)
+- **Проблема:** read balance → check → update без атомарности. Два параллельных запроса оба проходят проверку.
+- **Фикс:** Оптимистичная блокировка `.eq("star_balance", balance)` в UPDATE. Если баланс изменился → 409 Conflict.
+
+**2. Race condition — promo is_used double activation**
+- **Файл:** `backend/api/routers/promo.py` (2 места: `_activate_player_code` и `activate_promo` responsible block)
+- **Проблема:** SELECT is_used → check → UPDATE is_used=True — не атомарно.
+- **Фикс:** `.eq("is_used", False)` на UPDATE. Только одна из параллельных активаций побеждает, вторая получает 409.
+
+**3. `.single()` crash на отсутствующих записях**
+- **Файлы:** `backend/services/fsm/onboarding_fsm.py:363`, `backend/api/routers/promo.py:143`
+- **Проблема:** `.single()` бросает PostgRESTError если записи нет → 500.
+- **Фикс:** `.maybe_single()` + guard с `return None` / `raise HTTPException(404)`.
+
+### ⚠️ Варнинги (исправлены)
+
+| # | Файл | Что исправлено |
+|---|------|----------------|
+| 1 | `frontend/src/App.tsx` | Dead import `AccessRevokedScreen` → теперь используется как компонент вместо inline div |
+| 2 | `backend/api/routers/admin.py` | N+1 queries (50 resp → 101 queries) → 3 bulk queries + `.eq("has_responsible_access", True)` вместо `.eq("role", "responsible")` |
+| 3 | `backend/core/deps.py` | `_revoked_logged: set` (unbounded memory leak) → `@lru_cache(maxsize=1024)` |
+| 4 | `backend/api/routers/promo.py` | Восстановлена проверка `expires_at` для responsible-кодов (была удалена) |
+| 5 | `frontend/src/hooks/useAuth.ts` | `waitForTelegram` exhaustion → error state вместо слепого `authenticate()` с пустым initData |
+| 6 | `frontend/src/App.tsx` + `useAuth.ts` | `accessRevoked` в localStorage блокировал re-auth → guard `&& !isLoading`, clear flag перед auth |
+| 7 | `backend/schedulers/promo_lifecycle.py` | `warn_expiring(bot=None)` → early return с warning log |
+
+### Коммит
+- `006b0da` — fix: resolve 3 blockers + 7 warnings from code review
+
+---
+
+## ✅ Выполнено в сессии 7 (2026-04-16) — Automated Code Review Setup
+
+### Что сделано
+- Создан `.claude/commands/review-pr.md` — slash-команда `/review-pr` для Claude Code CLI
+- Промпт написан на основе реального кода репозитория (не шаблон)
+- Покрывает: security.py (HMAC), deps.py (TTL), shop.py (race condition), promo.py (race condition), schedulers (cascade order), FSM contract, Telegram SDK специфика
+- 8 блокеров (🚫 BLOCK) + 10 предупреждений (⚠️ WARN)
+- Настроен под workflow без PR: анализирует `git log/diff --since="72 hours ago"`
+- Claude Code CLI установлен: `npm install -g @anthropic-ai/claude-code`
+- GitHub подключён через `/web-setup` на `claude.ai/code`
+
+### Как использовать
+```bash
+cd ~/Projects/Workout-Bot-FSM
+claude --dangerously-skip-permissions
+/review-pr        # последние 72 часа
+/review-pr 24     # последние 24 часа
+```
+
+### Почему не Routine
+- Routine требует PR (ветки) для GitHub-триггера
+- Разработчик пушит напрямую в main без веток
+- `/review-pr` вручную — оптимальный вариант для solo workflow
 
 ---
 
@@ -52,7 +117,22 @@
 
 ## 🔜 Первое действие следующей сессии
 
-**Приоритет — тренировочный интерфейс.**
+**Приоритет — протестировать Вариант Б, затем тренировочный интерфейс.**
+
+### Тест-план (сессия 6, не проверено):
+1. TRUNCATE всех таблиц
+2. Открыть мини-апп без бота → должен появиться OnboardingFlow (promo screen)
+3. Ввести ADMIN_PROMO_CODE → стать Admin → PhotoGate → главное меню (4 куба)
+4. Убедиться: `has_player_access=false` в БД для admin
+5. Тест-аккаунт открывает мини-апп → OnboardingFlow → вводит player-код из ActionCube Admin → становится **игроком** (не Responsible!)
+6. Тест-аккаунт создаёт Responsible-код (если нужно) → Admin вводит → `has_player_access=true`
+
+### Если тест провалится:
+- Смотреть Railway logs: `/auth/register` endpoint
+- Проверить: нет ли CHECK constraint ошибок при INSERT в `users`
+- `role` колонка — дефолт 'player', НЕ вставляем 'new' в БД
+
+
 
 Перед стартом рекомендуется тестовый прогон (если ещё не делался):
 - `/start` → промокод Responsible → мини-апп → ActionCube (чип с кодом справа вверху)
