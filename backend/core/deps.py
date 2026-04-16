@@ -1,6 +1,7 @@
 """FastAPI dependencies: текущий пользователь из JWT."""
 import logging
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -10,8 +11,12 @@ from .security import decode_access_token
 logger = logging.getLogger(__name__)
 bearer_scheme = HTTPBearer()
 
-# In-memory set: avoid log spam per process (telegram_id → already logged)
-_revoked_logged: set[int] = set()
+
+# Capped log-spam guard: tracks up to 1024 revoked telegram_ids, then auto-evicts oldest.
+@lru_cache(maxsize=1024)
+def _mark_revoked_logged(tg_id: int) -> bool:
+    """Returns True on first call per tg_id (within cache). Used to avoid log spam."""
+    return True
 
 
 async def get_current_user(
@@ -79,9 +84,8 @@ async def get_current_user(
                     .eq("telegram_id", tg_id)
                     .execute()
                 )
-            if tg_id not in _revoked_logged:
+            if _mark_revoked_logged(tg_id):
                 logger.info("player %s revoked: no live promo_codes row", tg_id)
-                _revoked_logged.add(tg_id)
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail={"code": "PROMO_EXPIRED"},

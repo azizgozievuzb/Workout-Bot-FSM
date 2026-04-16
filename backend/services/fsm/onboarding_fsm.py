@@ -360,9 +360,11 @@ class OnboardingService:
             await self.db.table("users")
             .select("id")
             .eq("telegram_id", responsible_telegram_id)
-            .single()
+            .maybe_single()
             .execute()
         )
+        if not resp_res or not resp_res.data:
+            return None
         responsible_id = resp_res.data["id"]
 
         # Return existing unused code if present

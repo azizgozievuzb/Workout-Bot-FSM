@@ -171,30 +171,53 @@ async def get_connections(current_user: dict = Depends(get_current_user)):
     resp_res = await (
         db.table("users")
         .select("id, telegram_id, display_name, username")
-        .eq("role", "responsible")
+        .eq("has_responsible_access", True)
         .execute()
     )
     responsibles = resp_res.data or []
 
-    groups = []
-    for r in responsibles:
-        pair_res = await (
-            db.table("partnerships")
-            .select("player_id")
-            .eq("responsible_id", r["id"])
+    if not responsibles:
+        return ConnectionsResponse(groups=[])
+
+    resp_ids = [r["id"] for r in responsibles]
+
+    # Bulk fetch all partnerships for all responsibles
+    pair_res = await (
+        db.table("partnerships")
+        .select("player_id, responsible_id")
+        .in_("responsible_id", resp_ids)
+        .execute()
+    )
+    all_partnerships = pair_res.data or []
+
+    # Collect all unique player IDs
+    all_player_ids = list({p["player_id"] for p in all_partnerships if p.get("player_id")})
+
+    # Bulk fetch all players
+    players_by_id: dict = {}
+    if all_player_ids:
+        pl_res = await (
+            db.table("users")
+            .select("id, telegram_id, display_name, username, deactivated_at")
+            .in_("id", all_player_ids)
             .execute()
         )
-        player_ids = [p["player_id"] for p in (pair_res.data or [])]
+        for pl in (pl_res.data or []):
+            players_by_id[pl["id"]] = pl
 
+    # Group partnerships by responsible_id
+    partnerships_by_resp: dict[str, list[str]] = {}
+    for p in all_partnerships:
+        partnerships_by_resp.setdefault(p["responsible_id"], []).append(p["player_id"])
+
+    # Assemble response
+    groups = []
+    for r in responsibles:
+        player_ids = partnerships_by_resp.get(r["id"], [])
         players = []
-        if player_ids:
-            pl_res = await (
-                db.table("users")
-                .select("telegram_id, display_name, username, deactivated_at")
-                .in_("id", player_ids)
-                .execute()
-            )
-            for pl in (pl_res.data or []):
+        for pid in player_ids:
+            pl = players_by_id.get(pid)
+            if pl:
                 players.append(PlayerInPair(
                     telegram_id=pl["telegram_id"],
                     display_name=pl.get("display_name"),

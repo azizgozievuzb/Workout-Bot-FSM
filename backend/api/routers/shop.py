@@ -98,13 +98,19 @@ async def purchase_item(
 
     new_balance = balance - price
 
-    # Списать звёзды
-    await (
+    # Списать звёзды (optimistic lock — only succeeds if balance unchanged)
+    deduct_res = await (
         db.table("player_stats")
         .update({"star_balance": new_balance})
         .eq("player_id", user_id)
+        .eq("star_balance", balance)  # ← atomic guard: prevents double-spend
         .execute()
     )
+    if not deduct_res.data:
+        raise HTTPException(
+            status_code=409,
+            detail="Баланс изменился, попробуйте снова.",
+        )
 
     # Записать покупку
     await (

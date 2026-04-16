@@ -57,6 +57,8 @@ export function useAuth() {
     let cancelled = false;
 
     const authenticate = async () => {
+      // Clear stale revocation flag — if auth succeeds, user is reactivated
+      localStorage.removeItem('access_revoked');
       try {
         // Signal Telegram that app is ready
         if (window.Telegram?.WebApp) {
@@ -139,8 +141,19 @@ export function useAuth() {
 
     const waitForTelegram = (retries = 5, delay = 50) => {
       const initData = getInitData();
-      if (initData || retries <= 0) {
+      if (initData) {
         authenticate();
+        return;
+      }
+      if (retries <= 0) {
+        // In DEV mode, proceed anyway (dev token fallback exists in authenticate)
+        if (import.meta.env.DEV) {
+          authenticate();
+          return;
+        }
+        // Production: Telegram SDK never loaded — don't create a shell user
+        setError('Telegram WebApp не загружен. Откройте приложение через Telegram.');
+        setIsLoading(false);
         return;
       }
       setTimeout(() => waitForTelegram(retries - 1, delay), delay);

@@ -135,6 +135,9 @@ async def expire_codes() -> None:
 
 async def warn_expiring(bot) -> None:
     """Send 24h expiry warning to players. Requires bot instance."""
+    if bot is None:
+        logger.warning("[promo_lifecycle] warn_expiring skipped: bot is None")
+        return
     db = await get_supabase()
     now = datetime.now(timezone.utc)
     window_start = (now + timedelta(hours=23)).isoformat()

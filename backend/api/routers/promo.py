@@ -144,9 +144,11 @@ async def _activate_player_code(db, user_id: str, telegram_id: int, code_row: di
         db.table("users")
         .select("first_name")
         .eq("id", responsible_id)
-        .single()
+        .maybe_single()
         .execute()
     )
+    if not resp_res or not resp_res.data:
+        raise HTTPException(status_code=404, detail="Ответственный не найден")
     responsible_name = resp_res.data.get("first_name", "Ответственный")
 
     now = datetime.now(timezone.utc)
@@ -177,8 +179,8 @@ async def _activate_player_code(db, user_id: str, telegram_id: int, code_row: di
         .execute()
     )
 
-    # Mark code as used with TTL fields
-    await (
+    # Mark code as used with TTL fields (atomic guard — only one concurrent activation wins)
+    mark_res = await (
         db.table("promo_codes")
         .update({
             "is_used": True,
@@ -189,8 +191,11 @@ async def _activate_player_code(db, user_id: str, telegram_id: int, code_row: di
             "expires_at": expires_at,
         })
         .eq("id", code_row["id"])
+        .eq("is_used", False)  # ← atomic guard: prevents double activation
         .execute()
     )
+    if not mark_res.data:
+        raise HTTPException(status_code=409, detail="Промокод уже активирован.")
 
     await _reset_attempts(db, telegram_id)
 
@@ -283,6 +288,18 @@ async def activate_promo(
     code_type = code_row.get("code_type", "responsible")
 
     if code_type == "responsible":
+        # Defensive expiry check — responsible codes may have optional expires_at
+        resp_expires = code_row.get("expires_at")
+        if resp_expires:
+            try:
+                exp_dt = datetime.fromisoformat(resp_expires)
+                if exp_dt.tzinfo is None:
+                    exp_dt = exp_dt.replace(tzinfo=timezone.utc)
+                if datetime.now(timezone.utc) > exp_dt:
+                    raise HTTPException(status_code=400, detail="Срок действия промокода истёк.")
+            except (ValueError, TypeError):
+                pass  # malformed date — proceed, let admin handle
+
         await (
             db.table("users")
             .update({
@@ -293,7 +310,7 @@ async def activate_promo(
             .eq("telegram_id", telegram_id)
             .execute()
         )
-        await (
+        resp_mark_res = await (
             db.table("promo_codes")
             .update({
                 "is_used": True,
@@ -301,8 +318,11 @@ async def activate_promo(
                 "used_at": datetime.now(timezone.utc).isoformat(),
             })
             .eq("id", code_row["id"])
+            .eq("is_used", False)  # ← atomic guard
             .execute()
         )
+        if not resp_mark_res.data:
+            raise HTTPException(status_code=409, detail="Промокод уже активирован.")
         player_code_str = await _create_player_code(
             db, user_id, tier=code_row.get("tier", "basic"), parent_code_id=code_row["id"]
         )
