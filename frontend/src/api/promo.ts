@@ -36,3 +36,14 @@ export async function getPlayerStatus(): Promise<PlayerStatusResponse> {
     const res = await api.get('/promo/player-status');
     return res.data;
 }
+
+export interface NewPlayerCodeResponse {
+    code: string;
+    deep_link: string;
+    duration_days: number;
+}
+
+export async function createNewPlayerCode(duration_days: 7 | 30 | 90): Promise<NewPlayerCodeResponse> {
+    const res = await api.post('/promo/new-player-code', { duration_days });
+    return res.data;
+}

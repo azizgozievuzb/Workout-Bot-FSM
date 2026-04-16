@@ -51,6 +51,16 @@ class PlayerStatusResponse(BaseModel):
     duration_days: int | None = None
 
 
+class NewPlayerCodeRequest(BaseModel):
+    duration_days: int  # must be 7 | 30 | 90
+
+
+class NewPlayerCodeResponse(BaseModel):
+    code: str
+    deep_link: str
+    duration_days: int
+
+
 class ActivateLinkResponse(BaseModel):
     success: bool
     role_granted: str
@@ -199,6 +209,12 @@ async def _activate_player_code(db, user_id: str, telegram_id: int, code_row: di
 
     await _reset_attempts(db, telegram_id)
 
+    # Auto-regenerate: create a fresh player code for the responsible
+    await _create_player_code(
+        db, responsible_id,
+        duration_days=code_row.get("duration_days") or 30,
+    )
+
     return ActivatePromoResponse(
         success=True,
         role_granted="player",
@@ -285,7 +301,10 @@ async def activate_promo(
         await _increment_attempts(db, telegram_id, user_data.get("promo_attempts", 0))
         raise HTTPException(status_code=400, detail="Этот промокод уже был использован.")
 
-    code_type = code_row.get("code_type", "responsible")
+    # Safe lookup: if code_type missing (migration not applied) — infer from responsible_id
+    code_type = code_row.get("code_type")
+    if not code_type:
+        code_type = "player" if code_row.get("responsible_id") else "responsible"
 
     if code_type == "responsible":
         # Defensive expiry check — responsible codes may have optional expires_at
@@ -437,6 +456,64 @@ async def player_status(current_user: dict = Depends(get_current_user)):
         expires_at=expires_at,
         days_left=days_left,
         duration_days=row.get("duration_days"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# POST /promo/new-player-code   (Responsible regenerates code with chosen duration)
+# ---------------------------------------------------------------------------
+
+@router.post("/new-player-code", response_model=NewPlayerCodeResponse)
+async def new_player_code(
+    body: NewPlayerCodeRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    if body.duration_days not in (7, 30, 90):
+        raise HTTPException(status_code=400, detail="duration_days must be 7, 30 or 90")
+
+    role = current_user.get("role", "")
+    if role not in ("responsible", "admin"):
+        raise HTTPException(status_code=403, detail="Только для Ответственного или Админа")
+
+    db = await get_supabase()
+    telegram_id = current_user["telegram_id"]
+
+    user_res = await (
+        db.table("users")
+        .select("id")
+        .eq("telegram_id", telegram_id)
+        .single()
+        .execute()
+    )
+    user_id = user_res.data["id"]
+
+    # Expire all existing unused player codes for this responsible
+    await (
+        db.table("promo_codes")
+        .update({"is_used": True})
+        .eq("responsible_id", user_id)
+        .eq("code_type", "player")
+        .eq("is_used", False)
+        .execute()
+    )
+
+    code_str = await _create_player_code(db, user_id, duration_days=body.duration_days)
+
+    # Fetch token for deep link
+    code_res = await (
+        db.table("promo_codes")
+        .select("deep_link_token")
+        .eq("code", code_str)
+        .single()
+        .execute()
+    )
+    token = code_res.data["deep_link_token"]
+    deep_link = f"https://t.me/{settings.BOT_USERNAME}?startapp={token}"
+
+    return NewPlayerCodeResponse(
+        code=code_str,
+        deep_link=deep_link,
+        duration_days=body.duration_days,
     )
 
 
