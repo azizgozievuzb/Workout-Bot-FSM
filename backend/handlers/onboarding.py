@@ -360,21 +360,24 @@ async def process_text_input(message: types.Message) -> None:
                     .execute()
                 )
             else:
-                # First-time admin registration
+                # First-time admin registration (or pre-created by /auth/register)
                 await (
                     db.table("users")
-                    .insert({
-                        "telegram_id": tg.id,
-                        "telegram_username": tg.username,
-                        "first_name": tg.first_name,
-                        "is_admin": True,
-                        "has_player_access": False,
-                        "has_responsible_access": True,
-                        "primary_role": "responsible",
-                        "role": "responsible",
-                        "onboarding_state": "onboardingComplete",
-                        "onboarding_done": True,
-                    })
+                    .upsert(
+                        {
+                            "telegram_id": tg.id,
+                            "telegram_username": tg.username,
+                            "first_name": tg.first_name,
+                            "is_admin": True,
+                            "has_player_access": False,
+                            "has_responsible_access": True,
+                            "primary_role": "responsible",
+                            "role": "responsible",
+                            "onboarding_state": "onboardingComplete",
+                            "onboarding_done": True,
+                        },
+                        on_conflict="telegram_id",
+                    )
                     .execute()
                 )
 
