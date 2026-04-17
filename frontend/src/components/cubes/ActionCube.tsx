@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import type { DualRoleUser } from '../../stores/authStore';
 import { canPlay, canMonitor, isDualRole } from '../../utils/roles';
@@ -6,13 +6,23 @@ import { getMyPlayerCode, getPlayerStatus } from '../../api/promo';
 import type { AccessTier } from '../../api/promo';
 import TierBadge from '../common/TierBadge';
 import { getMyStats } from '../../api/stats';
-import { getPartnerStats } from '../../api/stats';
-import type { PlayerStats, PartnerStats } from '../../api/stats';
+import type { PlayerStats } from '../../api/stats';
 import { getActiveBoost } from '../../api/boosts';
 import { buyBoost } from '../../api/boosts';
 import type { ActiveBoost } from '../../api/boosts';
+import {
+    createRenewalRequest,
+    listMyRenewalRequests,
+    listMyPlayers,
+} from '../../api/renewal';
+import type { RenewalRequest, MyPlayer } from '../../api/renewal';
+import { hapticImpact, hapticNotification } from '../../utils/haptic';
 import RoleTransition from '../shared/RoleTransition';
+import RenewalModal from '../renewal/RenewalModal';
 import '../../styles/cubes.css';
+
+const RENEWAL_PENDING_KEY = 'wb_renewal_pending_until';
+const RENEWAL_PROMPT_THRESHOLD_DAYS = 7;
 
 type ActiveView = 'player' | 'responsible';
 
@@ -70,6 +80,11 @@ const PlayerView: React.FC = () => {
     const [boost, setBoost] = useState<ActiveBoost | null>(null);
     const [promoStatus, setPromoStatus] = useState<PlayerStatus | null>(null);
     const [loading, setLoading] = useState(true);
+    const [requestPending, setRequestPending] = useState<boolean>(() => {
+        const until = parseInt(localStorage.getItem(RENEWAL_PENDING_KEY) || '0', 10);
+        return Number.isFinite(until) && until > Date.now();
+    });
+    const [cooldownError, setCooldownError] = useState<string>('');
 
     useEffect(() => {
         let done = 0;
@@ -79,11 +94,46 @@ const PlayerView: React.FC = () => {
         getPlayerStatus().then(setPromoStatus).catch(() => {}).finally(check);
     }, []);
 
+    const handleAskRenewal = useCallback(async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (requestPending) return;
+        hapticImpact('medium');
+        try {
+            await createRenewalRequest();
+            const until = Date.now() + 24 * 60 * 60 * 1000;
+            localStorage.setItem(RENEWAL_PENDING_KEY, String(until));
+            setRequestPending(true);
+            setCooldownError('');
+            hapticNotification('success');
+        } catch (err: any) {
+            const detail = err?.response?.data?.detail;
+            if (err?.response?.status === 429) {
+                const createdAt = typeof detail === 'object' ? detail?.created_at : null;
+                if (createdAt) {
+                    const until = new Date(createdAt).getTime() + 24 * 60 * 60 * 1000;
+                    localStorage.setItem(RENEWAL_PENDING_KEY, String(until));
+                    setRequestPending(true);
+                }
+                const msg = (typeof detail === 'object' && detail?.message)
+                    || 'Вы уже отправили запрос. Попробуйте позже.';
+                setCooldownError(msg);
+                hapticNotification('warning');
+            } else {
+                setCooldownError('Не удалось отправить запрос.');
+                hapticNotification('error');
+            }
+        }
+    }, [requestPending]);
+
     if (loading) return <div className="cube-section-title" style={{ textAlign: 'center' }}>Загрузка...</div>;
     if (!stats) return <div className="cube-section-title" style={{ textAlign: 'center' }}>Не удалось загрузить</div>;
 
     const daysLeft = promoStatus?.days_left ?? null;
     const showExpiryBanner = promoStatus?.is_active === true && daysLeft !== null && daysLeft <= 1;
+    const showRenewalPrompt =
+        promoStatus?.is_active === true
+        && daysLeft !== null
+        && daysLeft <= RENEWAL_PROMPT_THRESHOLD_DAYS;
 
     return (
         <>
@@ -101,6 +151,24 @@ const PlayerView: React.FC = () => {
                             {new Date(promoStatus.expires_at).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })}
                         </span>
                     </div>
+                </div>
+            )}
+
+            {showRenewalPrompt && (
+                <div className="renewal-prompt">
+                    <p className="renewal-prompt__text">
+                        До окончания доступа: {daysLeft} дн.
+                    </p>
+                    <button
+                        className="renewal-prompt__btn"
+                        onClick={handleAskRenewal}
+                        disabled={requestPending}
+                    >
+                        {requestPending ? '✓ Запрос отправлен' : 'Попросить Ответственного продлить'}
+                    </button>
+                    {cooldownError && (
+                        <p className="renewal-prompt__error">{cooldownError}</p>
+                    )}
                 </div>
             )}
 
@@ -153,13 +221,25 @@ interface PlayerCodeData {
     access_tier?: AccessTier | null;
 }
 
-const BOT_USERNAME = import.meta.env.VITE_BOT_USERNAME || 'conectionWorkout_bot';
+function relativeTime(iso: string): string {
+    const diff = Date.now() - new Date(iso).getTime();
+    if (diff < 0) return 'только что';
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'только что';
+    if (mins < 60) return `${mins} мин назад`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs} ч назад`;
+    const days = Math.floor(hrs / 24);
+    return `${days} д назад`;
+}
 
 const ResponsibleView: React.FC = () => {
     const [playerCodeData, setPlayerCodeData] = useState<PlayerCodeData | null>(null);
-    const [players, setPlayers] = useState<PartnerStats[]>([]);
+    const [players, setPlayers] = useState<MyPlayer[]>([]);
+    const [requests, setRequests] = useState<RenewalRequest[]>([]);
     const [loading, setLoading] = useState(true);
     const [toast, setToast] = useState('');
+    const [renewalModalPlayerId, setRenewalModalPlayerId] = useState<string | null>(null);
 
     const fetchCode = useCallback(() => {
         getMyPlayerCode()
@@ -167,23 +247,57 @@ const ResponsibleView: React.FC = () => {
             .catch(() => {});
     }, []);
 
+    const fetchPlayers = useCallback(() => {
+        listMyPlayers()
+            .then(setPlayers)
+            .catch(() => {});
+    }, []);
+
+    const fetchRequests = useCallback(() => {
+        listMyRenewalRequests()
+            .then(setRequests)
+            .catch(() => {});
+    }, []);
+
     useEffect(() => {
         fetchCode();
     }, [fetchCode]);
 
-    // Refresh code when tab becomes visible (catches activation by another device)
+    useEffect(() => {
+        Promise.all([
+            listMyPlayers().then(setPlayers).catch(() => {}),
+            listMyRenewalRequests().then(setRequests).catch(() => {}),
+        ]).finally(() => setLoading(false));
+    }, []);
+
+    // Polling renewal-requests every 60s + on visibility
+    useEffect(() => {
+        const tick = () => {
+            if (document.visibilityState !== 'visible') return;
+            fetchRequests();
+        };
+        const id = window.setInterval(tick, 60_000);
+        document.addEventListener('visibilitychange', tick);
+        return () => {
+            window.clearInterval(id);
+            document.removeEventListener('visibilitychange', tick);
+        };
+    }, [fetchRequests]);
+
     useEffect(() => {
         const onVisible = () => { if (document.visibilityState === 'visible') fetchCode(); };
         document.addEventListener('visibilitychange', onVisible);
         return () => document.removeEventListener('visibilitychange', onVisible);
     }, [fetchCode]);
 
-    useEffect(() => {
-        getPartnerStats()
-            .then(setPlayers)
-            .catch(() => {})
-            .finally(() => setLoading(false));
-    }, []);
+    const requestsByPlayer = useMemo(() => {
+        const map: Record<string, RenewalRequest> = {};
+        for (const r of requests) {
+            const prev = map[r.player_id];
+            if (!prev || r.created_at > prev.created_at) map[r.player_id] = r;
+        }
+        return map;
+    }, [requests]);
 
     const copyCode = useCallback((e: React.MouseEvent) => {
         e.stopPropagation();
@@ -204,8 +318,21 @@ const ResponsibleView: React.FC = () => {
         setTimeout(() => setToast(''), 3000);
     }, []);
 
-    const activePlayers = players.filter(p => !p.is_deactivated);
-    const deactivatedPlayers = players.filter(p => p.is_deactivated);
+    const openRenewalModal = useCallback((e: React.MouseEvent, playerId: string) => {
+        e.stopPropagation();
+        hapticImpact('light');
+        setRenewalModalPlayerId(playerId);
+    }, []);
+
+    const handleRenewalSuccess = useCallback((addedDays: number) => {
+        setRenewalModalPlayerId(null);
+        setToast(`Продлено на ${addedDays} дн.`);
+        setTimeout(() => setToast(''), 3000);
+        fetchPlayers();
+        fetchRequests();
+    }, [fetchPlayers, fetchRequests]);
+
+    const selectedPlayer = players.find(p => p.id === renewalModalPlayerId) || null;
 
     return (
         <>
@@ -237,69 +364,74 @@ const ResponsibleView: React.FC = () => {
 
             {toast && <div className="admin-toast">{toast}</div>}
 
-            <div className="cube-section-title">Ваши игроки</div>
+            <div className="cube-section-title">Мои Игроки</div>
 
             {loading ? (
                 <div className="cube-section-title" style={{ textAlign: 'center' }}>Загрузка...</div>
-            ) : activePlayers.length === 0 && deactivatedPlayers.length === 0 ? (
+            ) : players.length === 0 ? (
                 <div className="cube-locked">
                     <div className="cube-locked-text">Нет активных игроков. Выдайте промокод или пригласите нового.</div>
                 </div>
             ) : (
-                <>
-                    {activePlayers.length === 0 && (
-                        <div className="cube-locked" style={{ marginBottom: 4 }}>
-                            <div className="cube-locked-text">Нет активных игроков. Выдайте промокод или пригласите нового.</div>
-                        </div>
-                    )}
-                    <div className="cube-card">
-                        {activePlayers.map(p => (
-                            <div className="cube-player-row" key={p.player_id}>
-                                <div className="cube-avatar">{p.first_name.charAt(0)}</div>
-                                <div className="cube-player-info">
-                                    <div className="cube-player-name">{p.first_name}</div>
-                                    <div className="cube-player-meta">
-                                        Стрик: {p.current_streak} · {p.last_workout_date || 'Нет тренировок'}
-                                    </div>
-                                </div>
-                                <div className="cube-player-actions">
-                                    <button className="cube-btn-sm" onClick={(e) => e.stopPropagation()}>
-                                        Пинг
-                                    </button>
-                                    <button className="cube-btn-sm" onClick={(e) => handleBoost(e, p.player_id)}>
-                                        ⚡X2
-                                    </button>
-                                </div>
-                            </div>
-                        ))}
-
-                        {deactivatedPlayers.map(p => (
-                            <div className="cube-player-row cube-player-row--deactivated" key={p.player_id}>
-                                <div className="cube-avatar">{p.first_name.charAt(0)}</div>
+                <div className="cube-card">
+                    {players.map(p => {
+                        const req = requestsByPlayer[p.id];
+                        const rowClass = [
+                            'player-row',
+                            req ? 'player-row--has-request' : '',
+                            p.is_deactivated ? 'player-row--deactivated' : '',
+                        ].filter(Boolean).join(' ');
+                        const name = p.first_name || '—';
+                        return (
+                            <div className={rowClass} key={p.id}>
+                                <div className="cube-avatar">{name.charAt(0)}</div>
                                 <div className="cube-player-info">
                                     <div className="cube-player-name" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                        {p.first_name}
-                                        <span className="cube-player-badge-expired">Доступ истёк</span>
+                                        {name}
+                                        <TierBadge tier={p.access_tier} />
+                                        {p.is_deactivated && (
+                                            <span className="cube-player-badge-expired">Истёк</span>
+                                        )}
                                     </div>
                                     <div className="cube-player-meta">
-                                        Стрик: {p.current_streak} · {p.last_workout_date || 'Нет тренировок'}
+                                        {p.is_deactivated
+                                            ? 'Доступ неактивен'
+                                            : p.days_left !== null
+                                                ? `${p.days_left} дн. осталось`
+                                                : 'Срок не задан'}
                                     </div>
+                                    {req && (
+                                        <div className="player-row__request">
+                                            🔔 Просит продлить ({relativeTime(req.created_at)})
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="cube-player-actions">
+                                    {!p.is_deactivated && (
+                                        <button className="cube-btn-sm" onClick={(e) => handleBoost(e, p.id)}>
+                                            ⚡X2
+                                        </button>
+                                    )}
                                     <button
-                                        className="cube-btn-sm"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            window.open(`https://t.me/${BOT_USERNAME}`, '_blank');
-                                        }}
+                                        className="cube-btn-sm accent"
+                                        onClick={(e) => openRenewalModal(e, p.id)}
                                     >
                                         Продлить
                                     </button>
                                 </div>
                             </div>
-                        ))}
-                    </div>
-                </>
+                        );
+                    })}
+                </div>
+            )}
+
+            {renewalModalPlayerId && (
+                <RenewalModal
+                    playerId={renewalModalPlayerId}
+                    playerName={selectedPlayer?.first_name ?? null}
+                    onClose={() => setRenewalModalPlayerId(null)}
+                    onSuccess={handleRenewalSuccess}
+                />
             )}
         </>
     );

@@ -2,8 +2,37 @@
 
 > **AI-агент:** Прочитай этот файл ПОСЛЕ `CLAUDE.md`. Здесь написано, на чём остановился предыдущий агент.
 
-**Последнее обновление:** 2026-04-18 (сессия 12)
-**Последний агент:** Claude Haiku 4.5
+**Последнее обновление:** 2026-04-18 (сессия 13)
+**Последний агент:** Claude Opus 4.7
+
+---
+
+## ✅ Выполнено в сессии 13 (2026-04-18) — Player Renewal Reversal
+
+### Архитектурный принцип
+Player больше НЕ вводит renewal-коды. Вместо этого — кнопка «Попросить Ответственного продлить», которая создаёт запись в `renewal_requests`. Ответственный в своём ActionCube видит badge-уведомление и применяет renewal-код (полученный от Админа) к конкретному Игроку.
+
+### Backend
+- **`backend/api/routers/renewal.py`** (новый): `POST /renewal/request` (Player→Responsible, cooldown 24h с 429 + created_at в detail), `GET /renewal/my-requests` (Responsible видит unresolved)
+- **`backend/api/routers/promo.py`**: новый endpoint `POST /promo/renew-player` (валидация partnership + tier match + атомарный mark code is_used + UPDATE активной promo_codes строки Player: expires_at = GREATEST(current, now) + duration_days; если активной нет — INSERT reactivation; resolve renewal_requests)
+- **`backend/api/routers/partnerships.py`**: новый endpoint `GET /partnerships/my-players` (возвращает для Responsible список игроков с id, first_name, profile_photo_url, access_tier, days_left, is_deactivated)
+- **`backend/main.py`**: зарегистрирован `renewal_router`
+
+### Frontend
+- **`frontend/src/api/renewal.ts`** (новый): `createRenewalRequest()`, `listMyRenewalRequests()`, `listMyPlayers()`, `renewPlayer(player_id, code)`
+- **`frontend/src/components/cubes/ActionCube.tsx`**:
+  - **PlayerView**: renewal-prompt блок при `days_left <= 7 && is_active`; кнопка «Попросить Ответственного продлить» → `createRenewalRequest()` + `hapticNotification('success')`; requestPending персистится в localStorage (`wb_renewal_pending_until`, 24h); 429 cooldown показывает message и включает pending state
+  - **ResponsibleView**: секция «Мои Игроки» (заменяет прежний `/stats/partner`); каждая строка с TierBadge + days_left + pulse-анимацией при `requestsByPlayer[p.id]` + текст «🔔 Просит продлить (N мин назад)»; кнопка «Продлить» открывает `RenewalModal`; polling `listMyRenewalRequests()` каждые 60с + на visibilitychange
+- **`frontend/src/components/renewal/RenewalModal.tsx`** (новый): input + submit, обработка `CODE_INVALID`/`TIER_MISMATCH`/`NOT_YOUR_PLAYER`/`RACE` с понятными сообщениями; haptic feedback; toast «Продлено на N дн.» через `onSuccess`
+- **`frontend/src/styles/cubes.css`**: добавлены `.renewal-prompt`, `.player-row`, `.player-row--has-request` (с `@keyframes renewal-pulse`), `.renewal-modal`, `.renewal-modal__backdrop`, все используют Telegram theme vars
+
+### Что НЕ сделано (scope control)
+- Telegram bot-уведомления Ответственному (только in-app badge)
+- Админ Screen II (Epic 5)
+- Stars/Crypto (Epic 6)
+
+### Коммит
+- [см. git log]
 
 ---
 
@@ -70,11 +99,6 @@
 ---
 
 ## ⚠️ ОТКРЫТЫЕ ВОПРОСЫ (НАПОМНИТЬ В НАЧАЛЕ СЛЕДУЮЩЕЙ СЕССИИ)
-
-### 1. 🕳️ Продление доступа Игрока (СЛЕДУЮЩИЙ ЭПИК)
-- Фундамент заложен: `renewal_requests` таблица, `is_renewal` флаг в `promo_codes`
-- Нужны: UI Ответственного (создать renewal-код), UI Игрока (ввести код за 3–4 дня до истечения)
-- Решение архитектуры: `code_type='player'` + `is_renewal=True` (флаг уже есть)
 
 ### 3. Архитектура Админа (ОТЛОЖЕНО)
 NULL partnership как Игрок — полная реализация отложена.

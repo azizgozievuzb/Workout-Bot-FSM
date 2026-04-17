@@ -911,3 +911,218 @@
     border: 1px solid rgba(255, 59, 48, 0.3);
     white-space: nowrap;
 }
+
+/* --- Renewal prompt (PlayerView) --- */
+
+.renewal-prompt {
+    padding: 14px 16px;
+    border-radius: 14px;
+    background: rgba(255, 149, 0, 0.1);
+    border: 1px solid rgba(255, 149, 0, 0.25);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.light-theme .renewal-prompt {
+    background: rgba(255, 149, 0, 0.08);
+    border-color: rgba(255, 149, 0, 0.2);
+}
+
+.renewal-prompt__text {
+    font-size: 13px;
+    font-weight: 600;
+    margin: 0;
+    color: var(--tg-theme-text-color, inherit);
+}
+
+.renewal-prompt__btn {
+    width: 100%;
+    padding: 12px 16px;
+    border-radius: 12px;
+    border: none;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    background: var(--tg-theme-button-color, #CCFF00);
+    color: var(--tg-theme-button-text-color, #111);
+    transition: transform 0.12s ease, opacity 0.15s;
+}
+
+.renewal-prompt__btn:active:not(:disabled) {
+    transform: scale(0.97);
+}
+
+.renewal-prompt__btn:disabled {
+    opacity: 0.55;
+    cursor: default;
+}
+
+.renewal-prompt__error {
+    font-size: 12px;
+    color: #FF3B30;
+    margin: 0;
+}
+
+/* --- My Players row (ResponsibleView) --- */
+
+.player-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-radius: 10px;
+    transition: background 0.2s;
+}
+
+.player-row + .player-row {
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.light-theme .player-row + .player-row {
+    border-top-color: rgba(0, 0, 0, 0.05);
+}
+
+.player-row--deactivated {
+    opacity: 0.5;
+}
+
+.player-row--has-request {
+    padding: 10px 12px;
+    background: rgba(255, 149, 0, 0.08);
+    border: 1px solid rgba(255, 149, 0, 0.3);
+    animation: renewal-pulse 2s ease-in-out infinite;
+}
+
+.light-theme .player-row--has-request {
+    background: rgba(255, 149, 0, 0.06);
+    border-color: rgba(255, 149, 0, 0.25);
+}
+
+@keyframes renewal-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 149, 0, 0.25); }
+    50%      { box-shadow: 0 0 0 6px rgba(255, 149, 0, 0); }
+}
+
+.player-row__request {
+    font-size: 11px;
+    font-weight: 600;
+    color: #FF9500;
+    margin-top: 2px;
+}
+
+/* --- RenewalModal --- */
+
+.renewal-modal__backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    padding: 20px;
+    animation: fadeIn 0.15s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+.renewal-modal {
+    width: 100%;
+    max-width: 360px;
+    padding: 20px;
+    border-radius: 18px;
+    background: var(--tg-theme-bg-color, #1a1714);
+    color: var(--tg-theme-text-color, #fff);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.light-theme .renewal-modal {
+    background: var(--tg-theme-bg-color, #ffffff);
+    color: var(--tg-theme-text-color, #111);
+}
+
+.renewal-modal__title {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: -0.2px;
+}
+
+.renewal-modal__input {
+    width: 100%;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--tg-theme-hint-color, rgba(255, 255, 255, 0.15));
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--tg-theme-text-color, inherit);
+    font-size: 15px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    letter-spacing: 2px;
+    text-align: center;
+    outline: none;
+}
+
+.light-theme .renewal-modal__input {
+    background: rgba(0, 0, 0, 0.04);
+    border-color: rgba(0, 0, 0, 0.1);
+}
+
+.renewal-modal__input:focus {
+    border-color: var(--tg-theme-button-color, #CCFF00);
+}
+
+.renewal-modal__error {
+    font-size: 12px;
+    color: #FF3B30;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: rgba(255, 59, 48, 0.12);
+    border: 1px solid rgba(255, 59, 48, 0.25);
+}
+
+.renewal-modal__actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.renewal-modal__btn {
+    flex: 1;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: none;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.12s ease, opacity 0.15s;
+}
+
+.renewal-modal__btn:active:not(:disabled) {
+    transform: scale(0.97);
+}
+
+.renewal-modal__btn:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+.renewal-modal__btn--ghost {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--tg-theme-hint-color, rgba(255, 255, 255, 0.7));
+}
+
+.light-theme .renewal-modal__btn--ghost {
+    background: rgba(0, 0, 0, 0.05);
+    color: var(--tg-theme-hint-color, rgba(0, 0, 0, 0.55));
+}
+
+.renewal-modal__btn--primary {
+    background: var(--tg-theme-button-color, #CCFF00);
+    color: var(--tg-theme-button-text-color, #111);
+}

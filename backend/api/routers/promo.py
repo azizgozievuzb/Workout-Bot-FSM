@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from random import choices
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ...core.config import settings
 from ...core.deps import get_current_user
@@ -66,6 +66,16 @@ class ActivateLinkResponse(BaseModel):
     role_granted: str
     message: str
     responsible_name: str | None = None
+
+
+class RenewPlayerReq(BaseModel):
+    player_id: uuid.UUID
+    code: str = Field(min_length=8, max_length=32)
+
+
+class RenewPlayerResp(BaseModel):
+    new_expires_at: str
+    added_days: int
 
 
 # ---------------------------------------------------------------------------
@@ -582,4 +592,183 @@ async def activate_link(
         role_granted=result.role_granted,
         message=result.message,
         responsible_name=result.responsible_name,
+    )
+
+
+# ---------------------------------------------------------------------------
+# POST /promo/renew-player  (Responsible extends a specific Player's access)
+# ---------------------------------------------------------------------------
+
+@router.post("/renew-player", response_model=RenewPlayerResp)
+async def renew_player(
+    req: RenewPlayerReq,
+    current_user: dict = Depends(get_current_user),
+):
+    """Responsible activates a renewal-code for a specific owned Player.
+    Convention: updates the Player's existing activated promo_codes row (is_used=TRUE,
+    activated_by=player.telegram_id) — matches extend_active_promos_by_seconds semantics.
+    """
+    role = current_user.get("role", "")
+    if role not in ("responsible", "admin"):
+        raise HTTPException(status_code=403, detail="Только для Ответственного или Админа")
+
+    db = await get_supabase()
+    telegram_id = current_user["telegram_id"]
+
+    user_res = await (
+        db.table("users")
+        .select("id")
+        .eq("telegram_id", telegram_id)
+        .single()
+        .execute()
+    )
+    responsible_id = user_res.data["id"]
+    player_id_str = str(req.player_id)
+
+    # 1. Validate partnership — the target must be this responsible's player
+    pair_res = await (
+        db.table("partnerships")
+        .select("id")
+        .eq("responsible_id", responsible_id)
+        .eq("player_id", player_id_str)
+        .eq("status", "active")
+        .maybe_single()
+        .execute()
+    )
+    if not pair_res or not pair_res.data:
+        raise HTTPException(status_code=403, detail={"code": "NOT_YOUR_PLAYER"})
+
+    # 2. Fetch renewal code
+    code = req.code.strip()
+    code_res = await (
+        db.table("promo_codes")
+        .select("id, access_tier, duration_days, is_used, code_type, is_renewal")
+        .eq("code", code)
+        .maybe_single()
+        .execute()
+    )
+    if not code_res or not code_res.data:
+        raise HTTPException(status_code=404, detail={"code": "CODE_INVALID"})
+    code_row = code_res.data
+    if (
+        code_row.get("code_type") != "player"
+        or not code_row.get("is_renewal")
+        or code_row.get("is_used")
+    ):
+        raise HTTPException(status_code=404, detail={"code": "CODE_INVALID"})
+
+    # 3. Fetch target player + tier check
+    player_res = await (
+        db.table("users")
+        .select("telegram_id, access_tier, deactivated_at")
+        .eq("id", player_id_str)
+        .maybe_single()
+        .execute()
+    )
+    if not player_res or not player_res.data:
+        raise HTTPException(status_code=404, detail="Player not found")
+    player = player_res.data
+    player_tg = player["telegram_id"]
+    if player.get("access_tier") != code_row.get("access_tier"):
+        raise HTTPException(status_code=409, detail={"code": "TIER_MISMATCH"})
+
+    # 4. Atomic mark renewal code as used (race guard)
+    duration_days = int(code_row.get("duration_days") or 30)
+    now = datetime.now(timezone.utc)
+    mark_res = await (
+        db.table("promo_codes")
+        .update({
+            "is_used": True,
+            "used_by": player_id_str,
+            "used_at": now.isoformat(),
+        })
+        .eq("id", code_row["id"])
+        .eq("is_used", False)
+        .execute()
+    )
+    if not mark_res.data:
+        raise HTTPException(status_code=409, detail={"code": "RACE"})
+
+    # 5. Find the Player's activated row — convention: one active row per player.
+    # Update its expires_at = GREATEST(current, now) + duration_days.
+    active_res = await (
+        db.table("promo_codes")
+        .select("id, expires_at, activated_at")
+        .eq("code_type", "player")
+        .eq("activated_by", player_tg)
+        .eq("is_used", True)
+        .order("activated_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    base = now
+    if active_res.data:
+        row = active_res.data[0]
+        exp_raw = row.get("expires_at")
+        if exp_raw:
+            try:
+                exp_dt = datetime.fromisoformat(exp_raw)
+                if exp_dt.tzinfo is None:
+                    exp_dt = exp_dt.replace(tzinfo=timezone.utc)
+                if exp_dt > now:
+                    base = exp_dt
+            except (ValueError, TypeError):
+                pass
+        new_expires_at = base + timedelta(days=duration_days)
+        update_payload = {"expires_at": new_expires_at.isoformat()}
+        if not row.get("activated_at"):
+            update_payload["activated_at"] = now.isoformat()
+        await (
+            db.table("promo_codes")
+            .update(update_payload)
+            .eq("id", row["id"])
+            .execute()
+        )
+    else:
+        # Reactivation: no existing active row. Create one for this player.
+        new_expires_at = now + timedelta(days=duration_days)
+        token = str(uuid.uuid4())
+        await (
+            db.table("promo_codes")
+            .insert({
+                "code": _generate_code(8),
+                "code_type": "player",
+                "tier": "basic",
+                "access_tier": code_row.get("access_tier", "standard"),
+                "responsible_id": responsible_id,
+                "deep_link_token": token,
+                "is_used": True,
+                "used_by": player_id_str,
+                "used_at": now.isoformat(),
+                "activated_at": now.isoformat(),
+                "activated_by": player_tg,
+                "duration_days": duration_days,
+                "expires_at": new_expires_at.isoformat(),
+                "is_renewal": True,
+            })
+            .execute()
+        )
+
+    # 6. Clear player deactivation if set (reactivation case)
+    if player.get("deactivated_at"):
+        await (
+            db.table("users")
+            .update({"deactivated_at": None, "scheduled_deletion_at": None})
+            .eq("id", player_id_str)
+            .execute()
+        )
+
+    # 7. Resolve all unresolved renewal_requests from this player to this responsible
+    await (
+        db.table("renewal_requests")
+        .update({"resolved_at": now.isoformat()})
+        .eq("player_id", player_id_str)
+        .eq("responsible_id", responsible_id)
+        .is_("resolved_at", "null")
+        .execute()
+    )
+
+    return RenewPlayerResp(
+        new_expires_at=new_expires_at.isoformat(),
+        added_days=duration_days,
     )
