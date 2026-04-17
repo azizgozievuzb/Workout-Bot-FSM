@@ -1,7 +1,13 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { createPromoCodes, listPromoCodes, getConnections } from '../../api/admin';
+import { useHapticFeedback } from '@telegram-apps/sdk-react';
+import { listPromoCodes, getConnections } from '../../api/admin';
+import { createResponsibleCode, createRenewalCode } from '../../api/promo';
+import type { AccessTier, DurationDays } from '../../api/promo';
 import type { PromoCodeInfo, ResponsibleGroup } from '../../api/admin';
+import TierBadge from '../common/TierBadge';
 import '../../styles/cubes.css';
+
+type GeneratorMode = 'responsible' | 'renewal';
 
 const ConnectionsPanel: React.FC = () => {
     const [groups, setGroups] = useState<ResponsibleGroup[]>([]);
@@ -46,13 +52,133 @@ const ConnectionsPanel: React.FC = () => {
     );
 };
 
+const TIER_OPTIONS: AccessTier[] = ['standard', 'premium', 'elite'];
+const TIER_LABELS: Record<AccessTier, string> = {
+    standard: 'Standard',
+    premium: 'Premium',
+    elite: 'Elite VIP',
+};
+const DURATION_OPTIONS: DurationDays[] = [7, 30, 90, 180];
+
+const CodeGeneratorPanel: React.FC = () => {
+    const haptic = useHapticFeedback();
+    const [mode, setMode] = useState<GeneratorMode>('responsible');
+    const [tier, setTier] = useState<AccessTier>('standard');
+    const [duration, setDuration] = useState<DurationDays>(30);
+    const [generating, setGenerating] = useState(false);
+    const [generatedCode, setGeneratedCode] = useState<string | null>(null);
+    const [toast, setToast] = useState('');
+
+    const handleModeChange = (m: GeneratorMode) => {
+        haptic.impactOccurred('light');
+        setMode(m);
+        setGeneratedCode(null);
+    };
+
+    const handleGenerate = useCallback(async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setGenerating(true);
+        try {
+            let code: string;
+            if (mode === 'responsible') {
+                const res = await createResponsibleCode(tier, duration);
+                code = res.code;
+            } else {
+                const res = await createRenewalCode(tier, duration);
+                code = res.code;
+            }
+            setGeneratedCode(code);
+            haptic.impactOccurred('medium');
+        } catch {
+            setToast('Ошибка создания кода');
+            setTimeout(() => setToast(''), 2500);
+        } finally {
+            setGenerating(false);
+        }
+    }, [mode, tier, duration, haptic]);
+
+    const copyToClipboard = useCallback((e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!generatedCode) return;
+        navigator.clipboard.writeText(generatedCode);
+        haptic.impactOccurred('light');
+        setToast('Скопировано!');
+        setTimeout(() => setToast(''), 2000);
+    }, [generatedCode, haptic]);
+
+    return (
+        <div className="admin-generator-form">
+            <div className="tab-selector">
+                <button
+                    className={`tab-selector-btn${mode === 'responsible' ? ' active' : ''}`}
+                    onClick={(e) => { e.stopPropagation(); handleModeChange('responsible'); }}
+                >
+                    R-код
+                </button>
+                <button
+                    className={`tab-selector-btn${mode === 'renewal' ? ' active' : ''}`}
+                    onClick={(e) => { e.stopPropagation(); handleModeChange('renewal'); }}
+                >
+                    Renewal-код
+                </button>
+            </div>
+
+            <div className="admin-generator-hint">
+                {mode === 'responsible'
+                    ? 'Новый Ответственный'
+                    : 'Продление для Игрока'}
+            </div>
+
+            <select
+                className="admin-generator-select"
+                value={tier}
+                onChange={(e) => { e.stopPropagation(); setTier(e.target.value as AccessTier); }}
+                onClick={(e) => e.stopPropagation()}
+            >
+                {TIER_OPTIONS.map(t => (
+                    <option key={t} value={t}>{TIER_LABELS[t]}</option>
+                ))}
+            </select>
+
+            <select
+                className="admin-generator-select"
+                value={duration}
+                onChange={(e) => { e.stopPropagation(); setDuration(Number(e.target.value) as DurationDays); }}
+                onClick={(e) => e.stopPropagation()}
+            >
+                {DURATION_OPTIONS.map(d => (
+                    <option key={d} value={d}>{d} дней</option>
+                ))}
+            </select>
+
+            <button
+                className="cube-btn-primary"
+                onClick={handleGenerate}
+                disabled={generating}
+            >
+                {generating ? 'Создаём...' : 'Создать код'}
+            </button>
+
+            {generatedCode && (
+                <div className="code-display">
+                    <code className="code-display-text">{generatedCode}</code>
+                    <button className="cube-btn-sm" onClick={copyToClipboard}>📋</button>
+                    <TierBadge tier={tier} />
+                    <span className="code-display-meta">{duration} дн.</span>
+                </div>
+            )}
+
+            {toast && <div className="admin-toast">{toast}</div>}
+        </div>
+    );
+};
+
 const AdminCube: React.FC = () => {
     const [codes, setCodes] = useState<PromoCodeInfo[]>([]);
     const [loading, setLoading] = useState(false);
-    const [creating, setCreating] = useState(false);
-    const [toast, setToast] = useState('');
     const [filterUsed, setFilterUsed] = useState<boolean | undefined>(undefined);
     const [showConnections, setShowConnections] = useState(false);
+    const [showGenerator, setShowGenerator] = useState(true);
 
     const fetchCodes = useCallback(async () => {
         setLoading(true);
@@ -67,26 +193,9 @@ const AdminCube: React.FC = () => {
 
     useEffect(() => { fetchCodes(); }, [fetchCodes]);
 
-    const handleCreate = useCallback(async (e: React.MouseEvent) => {
-        e.stopPropagation();
-        setCreating(true);
-        try {
-            const data = await createPromoCodes('basic', 1);
-            setToast(`Создан: ${data.codes[0]}`);
-            setTimeout(() => setToast(''), 3000);
-            fetchCodes();
-        } catch {
-            setToast('Ошибка создания');
-            setTimeout(() => setToast(''), 3000);
-        }
-        setCreating(false);
-    }, [fetchCodes]);
-
     const copyCode = useCallback((e: React.MouseEvent, code: string) => {
         e.stopPropagation();
         navigator.clipboard.writeText(code);
-        setToast('Скопировано!');
-        setTimeout(() => setToast(''), 2000);
     }, []);
 
     return (
@@ -105,70 +214,71 @@ const AdminCube: React.FC = () => {
             ) : (
                 <>
                     <button
-                        className="cube-btn-primary"
-                        onClick={handleCreate}
-                        disabled={creating}
+                        className={`cube-btn-secondary ${showGenerator ? 'active' : ''}`}
+                        onClick={(e) => { e.stopPropagation(); setShowGenerator(v => !v); }}
                     >
-                        {creating ? 'Создаём...' : 'Создать промокод'}
+                        {showGenerator ? 'Список кодов' : 'Создать код'}
                     </button>
 
-                    {toast && (
-                        <div className="admin-toast">{toast}</div>
-                    )}
-
-                    <div className="cube-tabs">
-                        <button
-                            className={`cube-tab ${filterUsed === undefined ? 'active' : ''}`}
-                            onClick={(e) => { e.stopPropagation(); setFilterUsed(undefined); }}
-                        >
-                            Все
-                        </button>
-                        <button
-                            className={`cube-tab ${filterUsed === false ? 'active' : ''}`}
-                            onClick={(e) => { e.stopPropagation(); setFilterUsed(false); }}
-                        >
-                            Свободные
-                        </button>
-                        <button
-                            className={`cube-tab ${filterUsed === true ? 'active' : ''}`}
-                            onClick={(e) => { e.stopPropagation(); setFilterUsed(true); }}
-                        >
-                            Использованные
-                        </button>
-                    </div>
-
-                    {loading ? (
-                        <div className="cube-section-title" style={{ textAlign: 'center' }}>Загрузка...</div>
-                    ) : codes.length === 0 ? (
-                        <div className="cube-locked">
-                            <div className="cube-locked-text">Промокодов пока нет</div>
-                        </div>
+                    {showGenerator ? (
+                        <CodeGeneratorPanel />
                     ) : (
-                        <div className="cube-card">
-                            {codes.map(c => (
-                                <div className="cube-player-row" key={c.id}>
-                                    <div className="cube-avatar" style={{ fontSize: 14, fontFamily: 'monospace' }}>
-                                        {c.code_type === 'responsible' ? 'R' : c.code_type === 'player' ? 'P' : 'A'}
-                                    </div>
-                                    <div className="cube-player-info">
-                                        <div className="cube-player-name" style={{ fontFamily: 'monospace', letterSpacing: 1 }}>
-                                            {c.code}
-                                        </div>
-                                        <div className="cube-player-meta">
-                                            {c.tier} · {c.is_used ? `Использован` : 'Свободен'}
-                                            {c.created_at && ` · ${new Date(c.created_at).toLocaleDateString()}`}
-                                        </div>
-                                    </div>
-                                    <div className="cube-player-actions">
-                                        {!c.is_used && (
-                                            <button className="cube-btn-sm" onClick={(e) => copyCode(e, c.code)}>
-                                                📋
-                                            </button>
-                                        )}
-                                    </div>
+                        <>
+                            <div className="cube-tabs">
+                                <button
+                                    className={`cube-tab ${filterUsed === undefined ? 'active' : ''}`}
+                                    onClick={(e) => { e.stopPropagation(); setFilterUsed(undefined); }}
+                                >
+                                    Все
+                                </button>
+                                <button
+                                    className={`cube-tab ${filterUsed === false ? 'active' : ''}`}
+                                    onClick={(e) => { e.stopPropagation(); setFilterUsed(false); }}
+                                >
+                                    Свободные
+                                </button>
+                                <button
+                                    className={`cube-tab ${filterUsed === true ? 'active' : ''}`}
+                                    onClick={(e) => { e.stopPropagation(); setFilterUsed(true); }}
+                                >
+                                    Использованные
+                                </button>
+                            </div>
+
+                            {loading ? (
+                                <div className="cube-section-title" style={{ textAlign: 'center' }}>Загрузка...</div>
+                            ) : codes.length === 0 ? (
+                                <div className="cube-locked">
+                                    <div className="cube-locked-text">Промокодов пока нет</div>
                                 </div>
-                            ))}
-                        </div>
+                            ) : (
+                                <div className="cube-card">
+                                    {codes.map(c => (
+                                        <div className="cube-player-row" key={c.id}>
+                                            <div className="cube-avatar" style={{ fontSize: 14, fontFamily: 'monospace' }}>
+                                                {c.code_type === 'responsible' ? 'R' : c.code_type === 'player' ? 'P' : 'A'}
+                                            </div>
+                                            <div className="cube-player-info">
+                                                <div className="cube-player-name" style={{ fontFamily: 'monospace', letterSpacing: 1 }}>
+                                                    {c.code}
+                                                </div>
+                                                <div className="cube-player-meta">
+                                                    {c.tier} · {c.is_used ? 'Использован' : 'Свободен'}
+                                                    {c.created_at && ` · ${new Date(c.created_at).toLocaleDateString()}`}
+                                                </div>
+                                            </div>
+                                            <div className="cube-player-actions">
+                                                {!c.is_used && (
+                                                    <button className="cube-btn-sm" onClick={(e) => copyCode(e, c.code)}>
+                                                        📋
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </>
                     )}
                 </>
             )}

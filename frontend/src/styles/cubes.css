@@ -598,31 +598,7 @@
     opacity: 0.7;
 }
 
-/* --- Duration selector + generate button --- */
-.promo-duration-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    justify-content: flex-end;
-}
-
-.promo-duration-btn {
-    padding: 4px 10px;
-    border-radius: 12px;
-    font-size: 11px;
-    font-weight: 600;
-    cursor: pointer;
-    border: 1px solid rgba(255,255,255,0.18);
-    background: rgba(255,255,255,0.06);
-    color: var(--tg-theme-text-color, #fff);
-    transition: background 0.15s, border-color 0.15s;
-}
-
-.promo-duration-btn.active {
-    background: rgba(99, 102, 241, 0.28);
-    border-color: rgba(99, 102, 241, 0.6);
-}
-
+/* --- Refresh / generate button (ActionCube) --- */
 .promo-generate-btn {
     padding: 4px 12px;
     border-radius: 12px;
@@ -638,6 +614,108 @@
 .promo-generate-btn:disabled {
     opacity: 0.4;
     cursor: not-allowed;
+}
+
+/* --- TierBadge --- */
+.tier-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 7px;
+    border-radius: 8px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    flex-shrink: 0;
+}
+
+/* --- AdminCube generator form --- */
+.admin-generator-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.admin-generator-hint {
+    font-size: 12px;
+    opacity: 0.55;
+    text-align: center;
+}
+
+.admin-generator-select {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 500;
+    border: 1px solid rgba(255,255,255,0.15);
+    background: rgba(255,255,255,0.07);
+    color: var(--tg-theme-text-color, #fff);
+    cursor: pointer;
+    appearance: none;
+}
+
+.light-theme .admin-generator-select {
+    background: rgba(0,0,0,0.05);
+    border-color: rgba(0,0,0,0.12);
+    color: var(--tg-theme-text-color, #222);
+}
+
+/* --- Tab selector (AdminCube mode switch) --- */
+.tab-selector {
+    display: flex;
+    gap: 6px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 12px;
+    padding: 4px;
+}
+
+.light-theme .tab-selector {
+    background: rgba(0,0,0,0.05);
+}
+
+.tab-selector-btn {
+    flex: 1;
+    padding: 7px 10px;
+    border-radius: 9px;
+    border: none;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    background: transparent;
+    color: var(--tg-theme-text-color, #fff);
+    opacity: 0.55;
+    transition: background 0.15s, opacity 0.15s;
+}
+
+.tab-selector-btn.active {
+    background: rgba(99, 102, 241, 0.35);
+    opacity: 1;
+}
+
+/* --- Generated code display --- */
+.code-display {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: rgba(99, 102, 241, 0.12);
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    flex-wrap: wrap;
+}
+
+.code-display-text {
+    font-family: monospace;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    flex: 1;
+    word-break: break-all;
+}
+
+.code-display-meta {
+    font-size: 11px;
+    opacity: 0.6;
 }
 
 /* --- Promo invite block (ResponsibleView, legacy large variant) --- */

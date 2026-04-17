@@ -2,7 +2,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import type { DualRoleUser } from '../../stores/authStore';
 import { canPlay, canMonitor, isDualRole } from '../../utils/roles';
-import { getMyPlayerCode, getPlayerStatus, createNewPlayerCode } from '../../api/promo';
+import { getMyPlayerCode, getPlayerStatus } from '../../api/promo';
+import type { AccessTier } from '../../api/promo';
+import TierBadge from '../common/TierBadge';
 import { getMyStats } from '../../api/stats';
 import { getPartnerStats } from '../../api/stats';
 import type { PlayerStats, PartnerStats } from '../../api/stats';
@@ -148,19 +150,16 @@ interface PlayerCodeData {
     duration_days?: number | null;
     expires_at?: string | null;
     days_left?: number | null;
+    access_tier?: AccessTier | null;
 }
 
 const BOT_USERNAME = import.meta.env.VITE_BOT_USERNAME || 'conectionWorkout_bot';
-
-const DURATION_OPTIONS: Array<7 | 30 | 90> = [7, 30, 90];
 
 const ResponsibleView: React.FC = () => {
     const [playerCodeData, setPlayerCodeData] = useState<PlayerCodeData | null>(null);
     const [players, setPlayers] = useState<PartnerStats[]>([]);
     const [loading, setLoading] = useState(true);
     const [toast, setToast] = useState('');
-    const [selectedDuration, setSelectedDuration] = useState<7 | 30 | 90>(30);
-    const [generatingCode, setGeneratingCode] = useState(false);
 
     const fetchCode = useCallback(() => {
         getMyPlayerCode()
@@ -178,21 +177,6 @@ const ResponsibleView: React.FC = () => {
         document.addEventListener('visibilitychange', onVisible);
         return () => document.removeEventListener('visibilitychange', onVisible);
     }, [fetchCode]);
-
-    const handleGenerateCode = useCallback(async (e: React.MouseEvent) => {
-        e.stopPropagation();
-        setGeneratingCode(true);
-        try {
-            const data = await createNewPlayerCode(selectedDuration);
-            setPlayerCodeData({ code: data.code, deep_link: data.deep_link, is_used: false, duration_days: data.duration_days });
-            setToast('Новый код создан!');
-        } catch {
-            setToast('Ошибка генерации кода');
-        } finally {
-            setGeneratingCode(false);
-            setTimeout(() => setToast(''), 2500);
-        }
-    }, [selectedDuration]);
 
     useEffect(() => {
         getPartnerStats()
@@ -227,34 +211,27 @@ const ResponsibleView: React.FC = () => {
         <>
             <div className="promo-invite-chip-row">
                 {playerCodeData && playerCodeData.code && !playerCodeData.is_used ? (
-                    <div
-                        className="promo-invite-chip"
-                        onClick={copyCode}
-                        title="Нажмите, чтобы скопировать код"
-                    >
-                        <span className="promo-invite-chip-label">Код</span>
-                        <span className="promo-invite-chip-code">{playerCodeData.code}</span>
-                        <span className="promo-invite-chip-copy">📋</span>
-                    </div>
-                ) : (
-                    <div className="promo-duration-row">
-                        {DURATION_OPTIONS.map((d) => (
-                            <button
-                                key={d}
-                                className={`promo-duration-btn${selectedDuration === d ? ' active' : ''}`}
-                                onClick={(e) => { e.stopPropagation(); setSelectedDuration(d); }}
-                            >
-                                {d}д
-                            </button>
-                        ))}
-                        <button
-                            className="promo-generate-btn"
-                            onClick={handleGenerateCode}
-                            disabled={generatingCode}
+                    <>
+                        <div
+                            className="promo-invite-chip"
+                            onClick={copyCode}
+                            title="Нажмите, чтобы скопировать код"
                         >
-                            {generatingCode ? '...' : 'Новый код'}
-                        </button>
-                    </div>
+                            <span className="promo-invite-chip-label">Код</span>
+                            <span className="promo-invite-chip-code">{playerCodeData.code}</span>
+                            <span className="promo-invite-chip-copy">📋</span>
+                        </div>
+                        {playerCodeData.access_tier && (
+                            <TierBadge tier={playerCodeData.access_tier} />
+                        )}
+                    </>
+                ) : (
+                    <button
+                        className="promo-generate-btn"
+                        onClick={(e) => { e.stopPropagation(); fetchCode(); }}
+                    >
+                        Обновить
+                    </button>
                 )}
             </div>
 

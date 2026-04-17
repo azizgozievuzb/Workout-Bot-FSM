@@ -7,7 +7,9 @@ from aiogram.filters import Command
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from ...core.deps import get_current_user
+from typing import Literal
+
+from ...core.deps import get_current_user, require_admin
 from ...db.client import get_supabase
 
 router = APIRouter(prefix="/admin/promo", tags=["admin"])
@@ -45,6 +47,25 @@ class PromoCodeInfo(BaseModel):
 
 class ListPromoResponse(BaseModel):
     codes: list[PromoCodeInfo]
+
+
+class CreateResponsibleCodeReq(BaseModel):
+    access_tier: Literal['standard', 'premium', 'elite'] = 'standard'
+    duration_days: Literal[7, 30, 90, 180]
+
+
+class CreateResponsibleCodeResp(BaseModel):
+    code: str
+    expires_at: str | None = None
+
+
+class CreateRenewalCodeReq(BaseModel):
+    access_tier: Literal['standard', 'premium', 'elite']
+    duration_days: Literal[7, 30, 90, 180]
+
+
+class CreateRenewalCodeResp(BaseModel):
+    code: str
 
 
 class PlayerInPair(BaseModel):
@@ -157,6 +178,69 @@ async def list_promos(
     return ListPromoResponse(
         codes=[PromoCodeInfo(**row) for row in res.data]
     )
+
+
+# ---------------------------------------------------------------------------
+# POST /admin/promo/responsible  — create R-code with tier + duration
+# ---------------------------------------------------------------------------
+
+def _generate_r_code() -> str:
+    alphabet = string.ascii_uppercase + string.digits
+    return "R_" + "".join(choices(alphabet, k=8))
+
+
+@router.post("/responsible", response_model=CreateResponsibleCodeResp)
+async def create_responsible_code(
+    body: CreateResponsibleCodeReq,
+    admin: dict = Depends(require_admin),
+):
+    db = await get_supabase()
+    code = _generate_r_code()
+    await (
+        db.table("promo_codes")
+        .insert({
+            "code": code,
+            "code_type": "responsible",
+            "tier": "basic",
+            "access_tier": body.access_tier,
+            "is_used": False,
+            "duration_days": body.duration_days,
+            "is_renewal": False,
+        })
+        .execute()
+    )
+    return CreateResponsibleCodeResp(code=code)
+
+
+# ---------------------------------------------------------------------------
+# POST /admin/promo/renewal  — create renewal P-code (for Responsible to give Player)
+# ---------------------------------------------------------------------------
+
+@router.post("/renewal", response_model=CreateRenewalCodeResp)
+async def create_renewal_code(
+    body: CreateRenewalCodeReq,
+    admin: dict = Depends(require_admin),
+):
+    db = await get_supabase()
+    import uuid as _uuid
+    alphabet = string.ascii_uppercase + string.digits
+    code = "".join(choices(alphabet, k=8))
+    await (
+        db.table("promo_codes")
+        .insert({
+            "code": code,
+            "code_type": "player",
+            "tier": "basic",
+            "access_tier": body.access_tier,
+            "is_used": False,
+            "duration_days": body.duration_days,
+            "is_renewal": True,
+            "responsible_id": None,
+            "deep_link_token": str(_uuid.uuid4()),
+        })
+        .execute()
+    )
+    return CreateRenewalCodeResp(code=code)
 
 
 # ---------------------------------------------------------------------------

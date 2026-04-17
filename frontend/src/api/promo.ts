@@ -1,6 +1,7 @@
 import api from './client';
 
 export type AccessTier = 'standard' | 'premium' | 'elite';
+export type DurationDays = 7 | 30 | 90 | 180;
 
 export interface MyPlayerCodeResponse {
     code: string | null;
@@ -49,5 +50,30 @@ export interface NewPlayerCodeResponse {
 
 export async function createNewPlayerCode(duration_days: 7 | 30 | 90): Promise<NewPlayerCodeResponse> {
     const res = await api.post('/promo/new-player-code', { duration_days });
+    return res.data;
+}
+
+export interface CreateResponsibleCodeResponse {
+    code: string;
+    expires_at: string | null;
+}
+
+export async function createResponsibleCode(
+    tier: AccessTier,
+    duration: DurationDays,
+): Promise<CreateResponsibleCodeResponse> {
+    const res = await api.post('/admin/promo/responsible', { access_tier: tier, duration_days: duration });
+    return res.data;
+}
+
+export interface CreateRenewalCodeResponse {
+    code: string;
+}
+
+export async function createRenewalCode(
+    tier: AccessTier,
+    duration: DurationDays,
+): Promise<CreateRenewalCodeResponse> {
+    const res = await api.post('/admin/promo/renewal', { access_tier: tier, duration_days: duration });
     return res.data;
 }
