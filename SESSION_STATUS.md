@@ -2,8 +2,19 @@
 
 > **AI-агент:** Прочитай этот файл ПОСЛЕ `CLAUDE.md`. Здесь написано, на чём остановился предыдущий агент.
 
-**Последнее обновление:** 2026-04-18 (сессия 11)
-**Последний агент:** Claude Sonnet 4.6 (Cowork)
+**Последнее обновление:** 2026-04-18 (сессия 12)
+**Последний агент:** Claude Haiku 4.5
+
+---
+
+## ✅ Выполнено в сессии 12 (2026-04-18) — Haptic Feedback Migration
+
+### Что сделано
+- **`frontend/src/utils/haptic.ts`** (новый): утилита-обёртка над singleton `hapticFeedback` из `@telegram-apps/sdk-react` с функциями `hapticImpact()`, `hapticNotification()`, `hapticSelection()` + `ensureMounted()` гвард
+- **`frontend/src/components/cubes/AdminCube.tsx`**: замена импорта `useHapticFeedback` на `hapticImpact`; удаление хука и его из dependency arrays; build успешен
+
+### Коммит
+- `71de5ce` — fix(haptic): replace useHapticFeedback hook with singleton API
 
 ---
 
