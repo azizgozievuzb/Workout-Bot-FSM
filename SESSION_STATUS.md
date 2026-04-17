@@ -2,8 +2,23 @@
 
 > **AI-агент:** Прочитай этот файл ПОСЛЕ `CLAUDE.md`. Здесь написано, на чём остановился предыдущий агент.
 
-**Последнее обновление:** 2026-04-18 (сессия 10)
+**Последнее обновление:** 2026-04-18 (сессия 11)
 **Последний агент:** Claude Sonnet 4.6 (Cowork)
+
+---
+
+## ✅ Выполнено в сессии 11 (2026-04-18) — Admin Code Generator + ActionCube cleanup
+
+### Что сделано
+- **`backend/api/routers/admin.py`**: два новых эндпоинта `POST /admin/promo/responsible` (R-код с tier+duration) и `POST /admin/promo/renewal` (renewal P-код); схемы `CreateResponsibleCodeReq/Resp`, `CreateRenewalCodeReq/Resp`; используют `Depends(require_admin)`
+- **`frontend/src/api/promo.ts`**: добавлены тип `DurationDays`, функции `createResponsibleCode()` и `createRenewalCode()`
+- **`frontend/src/components/common/TierBadge.tsx`**: новый компонент (STD/PRM/ELT чип с цветовой кодировкой)
+- **`frontend/src/components/cubes/AdminCube.tsx`**: полная замена кнопки-генератора на форму с TabSelector (R-код / Renewal-код), TierSelector, DurationSelector, haptic feedback, code-display с TierBadge
+- **`frontend/src/components/cubes/ActionCube.tsx`**: удалён duration selector, `selectedDuration` state, `DURATION_OPTIONS`, `handleGenerateCode`, импорт `createNewPlayerCode`; добавлен `TierBadge` рядом с кодом; вместо duration-row — кнопка «Обновить»
+- **`frontend/src/styles/cubes.css`**: удалены `.promo-duration-row`, `.promo-duration-btn`, `.promo-duration-btn.active`; добавлены `.tier-badge-*`, `.admin-generator-form`, `.tab-selector`, `.code-display`
+
+### Коммит
+- `6b6c752` — feat(admin): tier+duration generator, remove ActionCube duration selector
 
 ---
 
@@ -45,12 +60,7 @@
 
 ## ⚠️ ОТКРЫТЫЕ ВОПРОСЫ (НАПОМНИТЬ В НАЧАЛЕ СЛЕДУЮЩЕЙ СЕССИИ)
 
-### 1. Рефакторинг ActionCube — duration selector (СЛЕДУЮЩИЙ ЭПИК)
-- ActionCube: код для Игрока появляется автоматически, без выбора длительности
-- AdminCube: Админ задаёт длительность (7/30/90/180 дней) при создании R-кода
-- Длительность player-кода наследуется от R-кода (уже реализовано на бэке, нужен UI)
-
-### 2. 🕳️ Продление доступа Игрока (СЛЕДУЮЩИЙ ЭПИК)
+### 1. 🕳️ Продление доступа Игрока (СЛЕДУЮЩИЙ ЭПИК)
 - Фундамент заложен: `renewal_requests` таблица, `is_renewal` флаг в `promo_codes`
 - Нужны: UI Ответственного (создать renewal-код), UI Игрока (ввести код за 3–4 дня до истечения)
 - Решение архитектуры: `code_type='player'` + `is_renewal=True` (флаг уже есть)
