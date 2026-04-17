@@ -4,6 +4,13 @@ export type PrimaryRole = 'player' | 'responsible';
 
 const CACHE_KEYS = { photo: 'wb_photo', dark: 'wb_photo_dark', light: 'wb_photo_light' } as const;
 export type LegacyRole = 'player' | 'responsible' | 'admin' | 'new';
+export type AccessTier = 'standard' | 'premium' | 'elite';
+
+export interface BanInfo {
+    until: string;
+    reason: string;
+    missed: number;
+}
 
 export interface DualRoleUser {
   primary_role: PrimaryRole;
@@ -29,8 +36,14 @@ interface AuthState {
   player_code: string | null;
   activeRoleView: ActiveRoleView | null;
   accessRevoked: boolean;
+  maintenanceMode: boolean;
+  banInfo: BanInfo | null;
+  accessTier: AccessTier;
   setActiveRoleView: (view: ActiveRoleView) => void;
   setAccessRevoked: (revoked: boolean) => void;
+  setMaintenanceMode: (on: boolean) => void;
+  setBanInfo: (info: BanInfo | null) => void;
+  setAccessTier: (tier: AccessTier) => void;
   setAuth: (data: {
     token: string;
     role: string;
@@ -65,7 +78,13 @@ export const useAuthStore = create<AuthState>((set) => ({
   activeRoleView: null,
   isAuthenticated: false,
   accessRevoked: localStorage.getItem('access_revoked') === '1',
+  maintenanceMode: false,
+  banInfo: null,
+  accessTier: 'standard',
   setActiveRoleView: (view) => set({ activeRoleView: view }),
+  setMaintenanceMode: (on) => set({ maintenanceMode: on }),
+  setBanInfo: (info) => set({ banInfo: info }),
+  setAccessTier: (tier) => set({ accessTier: tier }),
   setAccessRevoked: (revoked) => {
     if (revoked) {
       localStorage.setItem('access_revoked', '1');
@@ -130,6 +149,9 @@ export const useAuthStore = create<AuthState>((set) => ({
       activeRoleView: null,
       isAuthenticated: false,
       accessRevoked: false,
+      maintenanceMode: false,
+      banInfo: null,
+      accessTier: 'standard',
     });
   },
 }));

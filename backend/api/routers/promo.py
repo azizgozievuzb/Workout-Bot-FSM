@@ -52,7 +52,7 @@ class PlayerStatusResponse(BaseModel):
 
 
 class NewPlayerCodeRequest(BaseModel):
-    duration_days: int  # must be 7 | 30 | 90
+    duration_days: int  # must be 7 | 30 | 90 | 180; None/lifetime only for admin first code
 
 
 class NewPlayerCodeResponse(BaseModel):
@@ -124,6 +124,7 @@ async def _reset_attempts(db, telegram_id: int):
 async def _create_player_code(
     db, responsible_id: str, tier: str = "basic",
     parent_code_id: str | None = None, duration_days: int = 30,
+    access_tier: str = "standard",
 ) -> str:
     """Generate a player_code for a responsible/admin. Returns the code string."""
     code_str = _generate_code(8)
@@ -132,6 +133,7 @@ async def _create_player_code(
         "code": code_str,
         "code_type": "player",
         "tier": tier,
+        "access_tier": access_tier,
         "responsible_id": responsible_id,
         "deep_link_token": token,
         "is_used": False,
@@ -165,12 +167,16 @@ async def _activate_player_code(db, user_id: str, telegram_id: int, code_row: di
     duration_days = code_row.get("duration_days") or 30
     expires_at = (now + timedelta(days=duration_days)).isoformat()
 
+    # Inherit access_tier from the promo code
+    code_tier = code_row.get("access_tier", "standard")
+
     # Update user roles + clear deactivation if reactivating (Job D)
     await (
         db.table("users")
         .update({
             "primary_role": "player",
             "has_player_access": True,
+            "access_tier": code_tier,
             "deactivated_at": None,
             "scheduled_deletion_at": None,
         })
@@ -468,8 +474,9 @@ async def new_player_code(
     body: NewPlayerCodeRequest,
     current_user: dict = Depends(get_current_user),
 ):
-    if body.duration_days not in (7, 30, 90):
-        raise HTTPException(status_code=400, detail="duration_days must be 7, 30 or 90")
+    ALLOWED_DURATIONS = (7, 30, 90, 180)
+    if body.duration_days not in ALLOWED_DURATIONS:
+        raise HTTPException(status_code=400, detail="duration_days must be 7, 30, 90 or 180")
 
     role = current_user.get("role", "")
     if role not in ("responsible", "admin"):
@@ -487,6 +494,18 @@ async def new_player_code(
     )
     user_id = user_res.data["id"]
 
+    # Resolve tier: inherit from Responsible's own activated R-code
+    tier_res = await (
+        db.table("promo_codes")
+        .select("access_tier")
+        .eq("responsible_id", user_id)
+        .eq("code_type", "responsible")
+        .eq("is_used", True)
+        .maybe_single()
+        .execute()
+    )
+    inherited_tier = (tier_res.data.get("access_tier") if tier_res and tier_res.data else None) or "standard"
+
     # Expire all existing unused player codes for this responsible
     await (
         db.table("promo_codes")
@@ -497,7 +516,7 @@ async def new_player_code(
         .execute()
     )
 
-    code_str = await _create_player_code(db, user_id, duration_days=body.duration_days)
+    code_str = await _create_player_code(db, user_id, duration_days=body.duration_days, access_tier=inherited_tier)
 
     # Fetch token for deep link
     code_res = await (

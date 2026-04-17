@@ -1,5 +1,7 @@
 import api from './client';
 
+export type AccessTier = 'standard' | 'premium' | 'elite';
+
 export interface MyPlayerCodeResponse {
     code: string | null;
     deep_link: string | null;
@@ -8,6 +10,8 @@ export interface MyPlayerCodeResponse {
     duration_days: number | null;
     expires_at: string | null;
     days_left: number | null;
+    access_tier: AccessTier;
+    is_renewal: boolean;
 }
 
 export interface PlayerStatusResponse {

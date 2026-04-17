@@ -43,3 +43,29 @@ export async function getConnections(): Promise<ConnectionsResponse> {
     const res = await api.get('/admin/connections');
     return res.data;
 }
+
+export interface ToggleMaintenanceResponse {
+    maintenance_mode: boolean;
+    frozen_seconds: number | null;
+}
+
+export async function toggleMaintenance(): Promise<ToggleMaintenanceResponse> {
+    const res = await api.post('/admin/maintenance/toggle');
+    return res.data;
+}
+
+export interface BanUserRequest {
+    days: number;
+    reason: string;
+    missed_workouts: number;
+}
+
+export async function banUser(userId: string, req: BanUserRequest): Promise<{ banned: boolean; ban_until: string }> {
+    const res = await api.post(`/admin/users/${userId}/ban`, req);
+    return res.data;
+}
+
+export async function unbanUser(userId: string): Promise<{ banned: boolean }> {
+    const res = await api.post(`/admin/users/${userId}/unban`);
+    return res.data;
+}

@@ -38,6 +38,20 @@ api.interceptors.response.use(
       (sentinel as any).__accessRevoked = true;
       return Promise.reject(sentinel);
     }
+    // BANNED — пользователь или его Ответственный забанен
+    if (err.response?.status === 403 && typeof detail === 'object' && detail?.code === 'BANNED') {
+      useAuthStore.getState().setBanInfo({
+        until: detail.ban_until,
+        reason: detail.reason ?? '',
+        missed: detail.missed_workouts ?? 0,
+      });
+      return Promise.reject(err);
+    }
+    // MAINTENANCE — техработы
+    if (err.response?.status === 503 && typeof detail === 'object' && detail?.code === 'MAINTENANCE') {
+      useAuthStore.getState().setMaintenanceMode(true);
+      return Promise.reject(err);
+    }
     return Promise.reject(err);
   }
 );

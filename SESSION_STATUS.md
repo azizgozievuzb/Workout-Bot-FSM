@@ -2,8 +2,29 @@
 
 > **AI-агент:** Прочитай этот файл ПОСЛЕ `CLAUDE.md`. Здесь написано, на чём остановился предыдущий агент.
 
-**Последнее обновление:** 2026-04-17 (сессия 9)
+**Последнее обновление:** 2026-04-18 (сессия 10)
 **Последний агент:** Claude Sonnet 4.6 (Cowork)
+
+---
+
+## ✅ Выполнено в сессии 10 (2026-04-18) — Foundation: AccessTier, Bans, Maintenance, RenewalRequests
+
+### Что сделано
+- **Миграции 014 + 015** (Supabase): `access_tier` enum, `promo_codes.access_tier/is_renewal`, `users.access_tier/ban_until/ban_reason/ban_missed_workouts`, таблицы `app_settings` + `renewal_requests`, функция `extend_active_promos_by_seconds()`
+- **`backend/core/deps.py`**: Ban-check (403 BANNED) + Maintenance-check (503 MAINTENANCE) до TTL-проверки; `_get_app_settings()` с 30-сек кешем через `time.monotonic()`; `require_admin` dependency; `_invalidate_settings_cache()`
+- **`backend/api/routers/admin_settings.py`** (новый): `POST /admin/maintenance/toggle` (freeze/unfreeze TTL), `POST /admin/users/{id}/ban`, `POST /admin/users/{id}/unban`
+- **`backend/main.py`**: зарегистрирован `admin_settings_router`
+- **`backend/api/routers/promo.py`**: `_activate_player_code` копирует `access_tier` в `users`; `new_player_code` наследует tier от R-кода Responsible; cap duration `{7,30,90,180}`; `_create_player_code` принимает `access_tier`
+- **`frontend/src/api/promo.ts`**: `access_tier`, `is_renewal` в `MyPlayerCodeResponse`; экспортирован тип `AccessTier`
+- **`frontend/src/api/admin.ts`**: `toggleMaintenance()`, `banUser()`, `unbanUser()`
+- **`frontend/src/stores/authStore.ts`**: `maintenanceMode`, `banInfo: BanInfo|null`, `accessTier`, сеттеры; типы `AccessTier`, `BanInfo`
+- **`frontend/src/api/client.ts`**: interceptor 403 BANNED → `setBanInfo()`; 503 MAINTENANCE → `setMaintenanceMode(true)`
+- **`frontend/src/components/shared/MaintenanceScreen.tsx`** (новый): полноэкранный блок-экран техработ
+- **`frontend/src/components/shared/BanScreen.tsx`** (новый): полноэкранный блок-экран бана
+- **`frontend/src/App.tsx`**: `banInfo` → `<BanScreen>`, `maintenanceMode && role!='admin'` → `<MaintenanceScreen>` (до accessRevoked)
+
+### Коммит
+- `feat(foundation): access tiers, bans, maintenance mode, renewal requests`
 
 ---
 
@@ -24,29 +45,15 @@
 
 ## ⚠️ ОТКРЫТЫЕ ВОПРОСЫ (НАПОМНИТЬ В НАЧАЛЕ СЛЕДУЮЩЕЙ СЕССИИ)
 
-### 1. Рефакторинг ActionCube — duration selector НЕ там
-**Текущее состояние:** duration selector добавлен в ActionCube (Responsible view) — это НЕПРАВИЛЬНО.
-**Нужно:**
-- ActionCube: код для Игрока просто **появляется автоматически**, без выбора длительности
-- AdminCube: при создании промокода для Ответственного — Админ задаёт длительность (7/30/90 дней)
-- Длительность player-кода наследуется от промокода Ответственного
-- **Исключение:** первый player-код Админа (от ADMIN_PROMO_CODE) — **вечный** (`duration_days = None`)
+### 1. Рефакторинг ActionCube — duration selector (СЛЕДУЮЩИЙ ЭПИК)
+- ActionCube: код для Игрока появляется автоматически, без выбора длительности
+- AdminCube: Админ задаёт длительность (7/30/90/180 дней) при создании R-кода
+- Длительность player-кода наследуется от R-кода (уже реализовано на бэке, нужен UI)
 
-### 2. 🕳️ ДЫРА В ЛОГИКЕ — Продление доступа Игрока (НЕ РЕШЕНО)
-**Проблема:** Нет механизма продления. Если у Игрока заканчивается срок — он просто теряет доступ. Ответственный не может продлить.
-
-**Нужное решение:**
-- Ответственный должен уметь **купить/создать renewal-промокод** для своего Игрока (в своём экране)
-- Игрок должен иметь **поле для ввода кода** — открывается в последние 3–4 дня до истечения (или всегда видимо)
-- Игрок вводит renewal-код → срок продлевается
-
-**Что требует проектирования:**
-- Новый `code_type = "renewal"` в `promo_codes`?
-- Или переиспользовать `code_type = "player"` с флагом `is_renewal = True`?
-- Откуда Ответственный берёт renewal-коды: покупает за Stars / бесплатно генерирует / получает от Админа?
-- UI: где именно появляется поле ввода у Игрока (ActionCube player view)
-
-> ⚠️ Эта дыра означает, что текущая promo-архитектура **не финальная**. Не стоит полностью полировать её до решения renewal-вопроса.
+### 2. 🕳️ Продление доступа Игрока (СЛЕДУЮЩИЙ ЭПИК)
+- Фундамент заложен: `renewal_requests` таблица, `is_renewal` флаг в `promo_codes`
+- Нужны: UI Ответственного (создать renewal-код), UI Игрока (ввести код за 3–4 дня до истечения)
+- Решение архитектуры: `code_type='player'` + `is_renewal=True` (флаг уже есть)
 
 ### 3. Архитектура Админа (ОТЛОЖЕНО)
 NULL partnership как Игрок — полная реализация отложена.

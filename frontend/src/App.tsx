@@ -12,6 +12,8 @@ import AdminCube from './components/cubes/AdminCube';
 import { ThemeContext } from './contexts/ThemeContext';
 import { useAuthStore } from './stores/authStore';
 import AccessRevokedScreen from './components/shared/AccessRevokedScreen';
+import MaintenanceScreen from './components/shared/MaintenanceScreen';
+import BanScreen from './components/shared/BanScreen';
 import './App.css';
 import DashboardPanel from './components/shared/DashboardPanel';
 import DashboardRoleSwitch from './components/shared/DashboardRoleSwitch';
@@ -35,7 +37,7 @@ const carouselVariants = {
 
 const App: React.FC = () => {
     const { isLoading, onboardingDone, photoUrl, error, role } = useAuth();
-    const { is_admin, accessRevoked } = useAuthStore();
+    const { is_admin, accessRevoked, banInfo, maintenanceMode } = useAuthStore();
     const [theme, setTheme] = useState<'dark' | 'light'>('dark');
     const [layoutMode, setLayoutMode] = useState<LayoutMode>('chaos');
     const [activeModule, setActiveModule] = useState<ModuleName | null>(null);
@@ -152,6 +154,8 @@ const App: React.FC = () => {
         setTimeout(() => { wheelCooldown.current = false; }, 400);
     }, [activeModule, nextMod]);
 
+    if (banInfo) return <BanScreen info={banInfo} />;
+    if (maintenanceMode && role !== 'admin') return <MaintenanceScreen />;
     if (accessRevoked && !isLoading) {
         return <AccessRevokedScreen />;
     }

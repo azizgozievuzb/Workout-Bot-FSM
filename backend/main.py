@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .api.routers.activity_feed import router as activity_feed_router
 from .api.routers.admin import router as admin_router, general_router as admin_general_router, admin_bot_router
+from .api.routers.admin_settings import router as admin_settings_router
 from .api.routers.auth import router as auth_router
 from .api.routers.partnerships import router as partnerships_router
 from .api.routers.promo import router as promo_router
@@ -98,6 +99,7 @@ app.include_router(activity_feed_router)
 app.include_router(promo_router)
 app.include_router(admin_router)
 app.include_router(admin_general_router)
+app.include_router(admin_settings_router)
 app.include_router(stats_router)
 app.include_router(shop_router)
 app.include_router(boosts_router)
