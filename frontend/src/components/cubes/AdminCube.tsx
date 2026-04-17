@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { useHapticFeedback } from '@telegram-apps/sdk-react';
+import { hapticImpact } from '../../utils/haptic';
 import { listPromoCodes, getConnections } from '../../api/admin';
 import { createResponsibleCode, createRenewalCode } from '../../api/promo';
 import type { AccessTier, DurationDays } from '../../api/promo';
@@ -61,7 +61,6 @@ const TIER_LABELS: Record<AccessTier, string> = {
 const DURATION_OPTIONS: DurationDays[] = [7, 30, 90, 180];
 
 const CodeGeneratorPanel: React.FC = () => {
-    const haptic = useHapticFeedback();
     const [mode, setMode] = useState<GeneratorMode>('responsible');
     const [tier, setTier] = useState<AccessTier>('standard');
     const [duration, setDuration] = useState<DurationDays>(30);
@@ -70,7 +69,7 @@ const CodeGeneratorPanel: React.FC = () => {
     const [toast, setToast] = useState('');
 
     const handleModeChange = (m: GeneratorMode) => {
-        haptic.impactOccurred('light');
+        hapticImpact('light');
         setMode(m);
         setGeneratedCode(null);
     };
@@ -88,23 +87,23 @@ const CodeGeneratorPanel: React.FC = () => {
                 code = res.code;
             }
             setGeneratedCode(code);
-            haptic.impactOccurred('medium');
+            hapticImpact('medium');
         } catch {
             setToast('Ошибка создания кода');
             setTimeout(() => setToast(''), 2500);
         } finally {
             setGenerating(false);
         }
-    }, [mode, tier, duration, haptic]);
+    }, [mode, tier, duration]);
 
     const copyToClipboard = useCallback((e: React.MouseEvent) => {
         e.stopPropagation();
         if (!generatedCode) return;
         navigator.clipboard.writeText(generatedCode);
-        haptic.impactOccurred('light');
+        hapticImpact('light');
         setToast('Скопировано!');
         setTimeout(() => setToast(''), 2000);
-    }, [generatedCode, haptic]);
+    }, [generatedCode]);
 
     return (
         <div className="admin-generator-form">
