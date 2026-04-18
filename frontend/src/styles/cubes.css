@@ -1623,3 +1623,37 @@
 
 .light-theme .ban-filter-btn { color: rgba(44,32,22,0.5); }
 .light-theme .ban-filter-btn.active { color: #fff; }
+
+/* --- Market payment hint --- */
+
+.market-payment-hint {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    background: var(--tg-theme-secondary-bg-color, rgba(255,255,255,0.05));
+    border-radius: 12px;
+    margin-bottom: 16px;
+    opacity: 0.75;
+}
+
+.market-payment-hint-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.market-payment-hint-text {
+    flex: 1;
+}
+
+.market-payment-hint-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--tg-theme-text-color, rgba(255,255,255,0.85));
+}
+
+.market-payment-hint-sub {
+    font-size: 12px;
+    color: var(--tg-theme-hint-color, rgba(255,255,255,0.4));
+}

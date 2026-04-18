@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Архитектура FSM: Promo & Onboarding</title>
+    <style>
+        :root {
+            --bg: #f4f6f9;
+            --admin-color: #e3f2fd;
+            --admin-border: #90caf9;
+            --resp-color: #e8f5e9;
+            --resp-border: #a5d6a7;
+            --player-color: #fff3e0;
+            --player-border: #ffcc80;
+            --stub-color: #f5f5f5;
+            --stub-border: #bdbdbd;
+            --text: #333;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .flowchart {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            max-width: 1000px;
+        }
+
+        .box {
+            background: #fff;
+            border: 2px solid #ccc;
+            border-radius: 10px;
+            padding: 15px 20px;
+            width: 340px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            position: relative;
+            z-index: 2;
+        }
+
+        .box h3 { margin: 0 0 10px 0; font-size: 16px; }
+        .box p { margin: 0; font-size: 13.5px; line-height: 1.4; }
+        
+        .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 12px; font-weight: bold; margin-bottom: 8px; }
+        .code { font-family: monospace; font-weight: bold; background: #eee; padding: 2px 5px; border-radius: 4px; letter-spacing: 0.5px; }
+        .alert { color: #d32f2f; font-weight: bold; }
+
+        /* Специфичные цвета */
+        .admin { background: var(--admin-color); border-color: var(--admin-border); }
+        .resp { background: var(--resp-color); border-color: var(--resp-border); }
+        .player { background: var(--player-color); border-color: var(--player-border); }
+        
+        .stub { 
+            background: var(--stub-color); 
+            border: 2px dashed var(--stub-border); 
+            margin-top: 10px;
+            padding: 10px;
+            font-size: 12px;
+            color: #666;
+        }
+
+        /* Правила кодов */
+        .rules-box {
+            background: #fff;
+            border: 2px solid #333;
+            border-radius: 8px;
+            padding: 15px 25px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .rules-box h4 { margin: 0 0 10px 0; width: 100%; text-align: center; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+        .rule-item { font-size: 14px; display: flex; align-items: center; gap: 8px; }
+        .rule-item span { background: #333; color: #fff; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-weight: bold; }
+
+        /* Линии и стрелки */
+        .arrow-down { width: 2px; height: 30px; background-color: #aaa; position: relative; }
+        .arrow-down::after { content: ''; position: absolute; bottom: -5px; left: -4px; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 8px solid #aaa; }
+
+        .row { display: flex; gap: 40px; align-items: flex-start; position: relative; }
+        
+        /* Соединительные линии для развилки */
+        .branch-line-top { width: 100%; height: 2px; background: #aaa; position: absolute; top: -15px; z-index: 1; }
+        .branch-line-vert { width: 2px; height: 15px; background: #aaa; position: absolute; top: -15px; }
+
+        .note {
+            background: #fff9c4;
+            border-left: 4px solid #fbc02d;
+            padding: 12px;
+            font-size: 13px;
+            border-radius: 4px;
+            margin-top: 10px;
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+
+    <h2 style="margin-bottom: 20px;">FSM: Onboarding & Code Architecture</h2>
+
+    <div class="rules-box">
+        <div style="width: 100%;">
+            <h4>Глобальные правила генерации кодов</h4>
+            <div style="display: flex; justify-content: center; gap: 30px;">
+                <div class="rule-item"><span>R</span> Код Ответственного (Responsible)</div>
+                <div class="rule-item"><span>P</span> Код Игрока (Player)</div>
+                <div class="rule-item" style="color: #d32f2f; font-weight: bold;">Мин. длина: 8 символов</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="flowchart">
+        
+        <div class="box admin">
+            <span class="badge" style="background:#bbdefb; color:#0d47a1;">ROOT ENTRY</span>
+            <h3>1. Регистрация Админа</h3>
+            <p>Ввод <span class="code">hard_code_admin</span></p>
+            <p style="margin-top: 8px; font-size: 12px;">Выдает сразу две роли: <b>Admin</b> + <b>Responsible</b></p>
+        </div>
+
+        <div class="arrow-down"></div>
+
+        <div class="row">
+            <div class="branch-line-top"></div>
+            
+            <div style="display: flex; flex-direction: column; align-items: center; position: relative;">
+                <div class="branch-line-vert" style="left: 50%;"></div>
+                
+                <div class="box resp">
+                    <span class="badge" style="background:#c8e6c9; color:#1b5e20;">ЭКРАН: ACTION</span>
+                    <h3>2a. Первая пара (Root)</h3>
+                    <p>Авто-генерация кода:<br><span class="code">P_UNLIM_88X</span></p>
+                    <p style="margin-top:5px; font-size: 12px; color: #555;">Код исчезнет после 1 использования.</p>
+                </div>
+                
+                <div class="arrow-down"></div>
+                
+                <div class="box player">
+                    <h3>Тестовый Аккаунт</h3>
+                    <p>Вводит код &rarr; Становится Игроком.</p>
+                    <p><b>Итог:</b> Создана уникальная пара Root-Admin с Игроком (Безлимит).</p>
+                </div>
+            </div>
+
+            <div style="display: flex; flex-direction: column; align-items: center; position: relative;">
+                <div class="branch-line-vert" style="left: 50%;"></div>
+                
+                <div class="box admin">
+                    <span class="badge" style="background:#bbdefb; color:#0d47a1;">ЭКРАН: CUBE (Генератор)</span>
+                    <h3>2b. Фабрика кодов Админа</h3>
+                    <p>Генерация новых кодов вручную.</p>
+                </div>
+
+                <div class="arrow-down"></div>
+
+                <div class="row" style="gap: 20px;">
+                    <div class="branch-line-top"></div>
+                    
+                    <div style="display: flex; flex-direction: column; align-items: center; position: relative;">
+                        <div class="branch-line-vert" style="left: 50%;"></div>
+                        <div class="box" style="width: 200px; border-color: #ff9800;">
+                            <h3>Путь А: Player</h3>
+                            <p class="alert">ТОЛЬКО для продления!</p>
+                            <p style="font-size: 12px; margin-top: 5px; line-height: 1.3;">Указанная длительность зашивается в этот код (напр. <span class="code">P_RENEW_30D</span>). Как только он активируется, эта длительность начинает отсчитываться.</p>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; flex-direction: column; align-items: center; position: relative;">
+                        <div class="branch-line-vert" style="left: 50%;"></div>
+                        <div class="box resp" style="width: 250px;">
+                            <h3>Путь Б: Responsible</h3>
+                            <p>Админ генерирует код для нового Ответственного (напр. <span class="code">R_COACH_99Y</span>) и задает дату (например, 30 дней).</p>
+                        </div>
+
+                        <div class="arrow-down"></div>
+
+                        <div class="box resp" style="width: 250px;">
+                            <span class="badge" style="background:#c8e6c9; color:#1b5e20;">НОВЫЙ ОТВЕТСТВЕННЫЙ</span>
+                            <h3>Его Action Экран</h3>
+                            <p>Авто-генерация кода для Игрока (напр. <span class="code">P_AUTO_55Z</span>).</p>
+                            <div class="note">
+                                <b>Магия наследования:</b> Этот авто-код автоматически получит длительность в <b>30 дней</b> (заложенную Админом шагом ранее).
+                            </div>
+
+                            <div class="stub">
+                                <b>UI ЗАГЛУШКИ (В разработке):</b><br>
+                                [Купить код для нового игрока (Stars)]<br>
+                                [Продлить срок игроку (Crypto)]
+                            </div>
+                            
+                            <div class="note" style="background: #e3f2fd; border-color: #64b5f6; margin-top: 10px;">
+                                <b>Текущий реальный флоу продления:</b><br>
+                                1. Ответственный просит код у Админа (Путь А).<br>
+                                2. Передает код своему Игроку.<br>
+                                3. Игрок вводит его сам и продлевает доступ.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>

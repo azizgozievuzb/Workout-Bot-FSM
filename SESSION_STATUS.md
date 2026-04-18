@@ -2,8 +2,80 @@
 
 > **AI-агент:** Прочитай этот файл ПОСЛЕ `CLAUDE.md`. Здесь написано, на чём остановился предыдущий агент.
 
-**Последнее обновление:** 2026-04-18 (сессия 13)
-**Последний агент:** Claude Opus 4.7
+**Последнее обновление:** 2026-04-18 (сессия 16)
+**Последний агент:** Claude Haiku 4.5
+
+---
+
+## ✅ Выполнено в сессии 16 (2026-04-18) — Epic 6: Stars/Crypto Coming-Soon UI Stubs
+
+### Frontend
+- **`frontend/src/components/shared/BuyCodesModal.tsx`**: добавлена `handleComingSoon()` функция + секция с 3 кнопками оплаты (Free, Stars, Crypto) перед submit-кнопкой; Free — active state, Stars/Crypto — disabled с haptic warning + toast
+- **`frontend/src/components/shared/BuyCodesModal.css`**: добавлены стили `.payment-methods*`, `.payment-method*` — flex layout, Telegram theme vars, opacity для disabled кнопок
+- **`frontend/src/components/cubes/MarketCube.tsx`**: в `PlayerShop` добавлена секция `.market-payment-hint` сверху с двумя "Coming Soon" строками (Stars + Crypto)
+- **`frontend/src/styles/cubes.css`**: добавлены стили `.market-payment-hint*` — flex layout, opacity 0.75, theme-aware цвета
+
+### Build
+- ✓ `npm run build` green в `frontend/`
+
+### Коммит
+`feat(payment): Stars/Crypto coming-soon stubs in BuyCodesModal + MarketCube`
+
+### Тестирование (acceptance criteria)
+1. Admin → Промокоды → Купить пачку → видит 3 кнопки: Free (active 🎁), Stars (disabled ⭐ скоро), Crypto (disabled 💎 скоро)
+2. Тап Stars/Crypto → haptic warning + toast "Stars оплата — скоро" / "Crypto оплата — скоро" на 2.5s
+3. Player → Market → видит две "Coming Soon" строки сверху (opacity 75%)
+4. Светлая/тёмная тема корректны (CSS vars)
+
+---
+
+## ✅ Выполнено в сессии 15 (2026-04-18) — Admin Screen II: Stats, BuyCodes, Ban History
+
+### Backend
+- **`backend/db/migrations/016_ban_history.sql`**: CREATE TABLE `ban_history` (user_id, banned_by, banned_at, ban_until, reason, missed_workouts, unbanned_early_at); индексы по user_id + banned_at
+- **`backend/api/routers/admin_settings.py`**: `BanUserReq.days` default=2; `ban_user` теперь INSERT в `ban_history` (с lookup admin UUID); `unban_user` UPDATE `ban_history.unbanned_early_at` для активной записи (filter `ban_until > now` + `unbanned_early_at IS NULL`)
+- **`backend/api/routers/admin.py`**: новые модели `PlayerStats`, `ResponsibleStats`, `BatchBuyReq/Resp`, `BanHistoryEntry/Response`; `PlayerInPair` + `stats: PlayerStats | None`; `ResponsibleGroup` + `stats: ResponsibleStats | None`; `/admin/connections` — bulk-fetch `player_stats` (single query, no N+1), вычисление `completion_rate = min(1.0, global_score / days_since_join)`, агрегация `ResponsibleStats`; новый `POST /admin/codes/batch-buy` (bulk INSERT N кодов одной транзакцией, `total_stars_cost=0` заглушка); новый `GET /admin/bans/history` (последние 50 + активные старше 30 дней, bulk-fetch user info)
+
+### Frontend
+- **`frontend/src/api/admin.ts`**: новые интерфейсы `PlayerStats`, `ResponsibleStats`, `BanHistoryEntry`, `BatchBuyRequest/Response`, `BatchCodeType`; функции `batchBuyCodes()`, `getBanHistory()`
+- **`frontend/src/components/shared/BuyCodesModal.tsx`** (новый): bottom-sheet; tab Responsible/Player/Renewal; chip-buttons тир/длительность/количество; bulk generate → список кодов + copy-all + поштучно; haptic success
+- **`frontend/src/components/shared/BuyCodesModal.css`** (новый): стили bottom-sheet, chips, batch-buy-result
+- **`frontend/src/components/shared/BanUserModal.tsx`**: default days=2; preset chips «2 дня (стандарт)/7/14/30»; hint «Игрок увидит причину на экране блокировки»
+- **`frontend/src/components/shared/BanUserModal.css`**: `.ban-modal-presets`, `.ban-modal-preset-btn`, `.ban-modal-hint`
+- **`frontend/src/components/cubes/AdminCube.tsx`**: 4й таб «Баны»; `BanHistoryPanel` с фильтрами (Все/🔴 Активен/⚪ Истёк/🟢 Снят), аккордеон с reason+missed+кнопкой Разбанить; `ConnectionsPanel` — переключатель Карточки|Таблица; таблица с горизонтальным скроллом, sticky первый столбец, аккордеон по R-строке показывает P-строки с ⋮-меню; карточки показывают completion_rate mini-progressbar; `PromosPanel` — кнопка «Купить пачку» → `BuyCodesModal`; `CompletionBar` mini-компонент
+- **`frontend/src/styles/cubes.css`**: `.connections-view-switcher`, `.connections-view-btn`, `.connections-table-wrap`, `.connections-table`, `.connections-expand-icon`, `.completion-bar-*`, `.ban-history-*`, `.ban-status-badge-*`, `.ban-filter-btn`
+
+### Коммит
+`898312c` — feat(admin): R↔P stats table, batch code purchase, ban history panel
+
+### Pending (не в scope этой сессии)
+- Применить миграцию `016` в Supabase SQL Editor
+- Telegram Stars оплата для batch-buy (Epic 6)
+- Графики/чарты по аналитике
+
+---
+
+## ✅ Выполнено в сессии 14 (2026-04-18) — Maintenance Mode UX + Ban/Unban Flow
+
+### Backend
+- **`backend/api/routers/admin_settings.py`**: новый GET `/admin/maintenance/status` (`MaintenanceStatusResp`: `maintenance_mode`, `started_at`, `frozen_seconds`)
+- **`backend/api/routers/admin.py`**: `PlayerInPair` расширен полями `id: str`, `is_banned: bool`, `ban_until: str | None`; bulk-fetch `ban_until` из users (single query, no N+1); добавлен `from datetime import datetime, timezone`
+- **`backend/api/routers/auth.py`**: `TokenResponse` + `ban_until`, `ban_reason`, `ban_missed`; SELECT добавлены `ban_until, ban_reason, ban_missed_workouts`; при `/auth/telegram` если бан активен — поля заполняются
+
+### Frontend
+- **`frontend/src/api/admin.ts`**: `PlayerInPair` + `id`, `is_banned`, `ban_until`; новые `MaintenanceStatus` + `getMaintenanceStatus()`
+- **`frontend/src/stores/authStore.ts`**: `BanInfo.until` и `BanInfo.reason` стали `string | null`
+- **`frontend/src/api/client.ts`**: 403 BANNED interceptor — `until` и `reason` nullable
+- **`frontend/src/hooks/useAuth.ts`**: после `/auth/telegram` — если `data.ban_until` есть → `setBanInfo()` сразу (BanScreen без ожидания 403)
+- **`frontend/src/components/shared/MaintenanceScreen.tsx`** + **`.css`**: SVG шестерёнка с `@keyframes rotate 4s`, живой счётчик `Заморожено: HH:MM:SS`, Telegram theme vars, zero inline styles
+- **`frontend/src/components/shared/BanScreen.tsx`** + **`.css`**: карточка с причиной, `Осталось: N дн./ч./мин.`, auto-reload при истечении бана, `var(--tg-theme-destructive-text-color)` акцент без агрессивного фона
+- **`frontend/src/components/shared/BanUserModal.tsx`** + **`.css`**: bottom-sheet, days [1,3,7,14,30], textarea, missed [0..10], swipe-down dismiss, haptic warning
+- **`frontend/src/components/cubes/AdminCube.tsx`**: 3 таба (Промокоды | Соединения | Настройки); `SettingsPanel` с toggle-switch, frozen-timer, confirm-диалог, polling 30s; `ConnectionsPanel` с ⋮-меню на каждом игроке (Забанить/Разбанить), `opacity:0.4` + `🚫` для забаненных; `PromoListPanel` + `CodeGeneratorPanel` вынесены отдельно
+- **`frontend/src/styles/cubes.css`**: `.settings-panel`, `.settings-row`, `.toggle-switch`, `.frozen-timer`, `.settings-confirm`, `.player-context-menu`, `.player-context-menu-item`, `.maintenance-admin-banner`
+- **`frontend/src/App.tsx`**: `maintenanceMode && !is_admin` (было `role !== 'admin'`); плавающий banner для admin при активном maintenance (клик → Admin куб)
+
+### Коммит
+`feat(maintenance): admin toggle UI, ban/unban flow, polished block-screens`
 
 ---
 

@@ -90,6 +90,23 @@ const PlayerShop: React.FC = () => {
 
     return (
         <>
+            <div className="market-payment-hint">
+                <div className="market-payment-hint-row">
+                    <span className="payment-method-icon">⭐</span>
+                    <div className="market-payment-hint-text">
+                        <div className="market-payment-hint-title">Оплата Stars</div>
+                        <div className="market-payment-hint-sub">Скоро — покупай лоты за Telegram Stars</div>
+                    </div>
+                </div>
+                <div className="market-payment-hint-row">
+                    <span className="payment-method-icon">💎</span>
+                    <div className="market-payment-hint-text">
+                        <div className="market-payment-hint-title">Crypto (TON)</div>
+                        <div className="market-payment-hint-sub">Скоро — оплата через TON Connect</div>
+                    </div>
+                </div>
+            </div>
+
             <div className="cube-balance">{balance}</div>
 
             {toast && <div className="admin-toast">{toast}</div>}

@@ -226,3 +226,67 @@
 .buy-modal-cancel:active {
     transform: scale(0.97);
 }
+
+.payment-methods {
+    margin-top: 16px;
+}
+
+.payment-methods-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--tg-theme-hint-color, rgba(255,255,255,0.4));
+    margin-bottom: 8px;
+    display: block;
+}
+
+.payment-methods-row {
+    display: flex;
+    gap: 8px;
+}
+
+.payment-method {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 12px 8px;
+    background: var(--tg-theme-secondary-bg-color, rgba(255,255,255,0.05));
+    border: 1px solid transparent;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+    position: relative;
+}
+
+.payment-method--active {
+    border-color: var(--tg-theme-button-color, rgba(99, 102, 241, 0.6));
+    background: color-mix(in srgb, var(--tg-theme-button-color, #6366f1) 12%, transparent);
+}
+
+.payment-method--disabled {
+    opacity: 0.55;
+}
+
+.payment-method--disabled:active {
+    transform: scale(0.97);
+}
+
+.payment-method-icon {
+    font-size: 22px;
+}
+
+.payment-method-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--tg-theme-text-color, rgba(255,255,255,0.9));
+}
+
+.payment-method-badge {
+    font-size: 10px;
+    color: var(--tg-theme-hint-color, rgba(255,255,255,0.4));
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}

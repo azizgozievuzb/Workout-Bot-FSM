@@ -69,6 +69,12 @@ const BuyCodesModal: React.FC<Props> = ({ onClose }) => {
         hapticImpact('light');
     }, []);
 
+    const handleComingSoon = (method: string) => {
+        hapticNotification('warning');
+        setToast(`${method} оплата — скоро`);
+        setTimeout(() => setToast(''), 2500);
+    };
+
     return (
         <div
             className="buy-modal-backdrop"
@@ -136,6 +142,36 @@ const BuyCodesModal: React.FC<Props> = ({ onClose }) => {
                                     {n}
                                 </button>
                             ))}
+                        </div>
+
+                        <div className="payment-methods">
+                            <div className="payment-methods-label">Способ оплаты</div>
+                            <div className="payment-methods-row">
+                                <button
+                                    className="payment-method payment-method--active"
+                                    onClick={(e) => { e.stopPropagation(); }}
+                                >
+                                    <span className="payment-method-icon">🎁</span>
+                                    <span className="payment-method-label">Free</span>
+                                    <span className="payment-method-badge">admin</span>
+                                </button>
+                                <button
+                                    className="payment-method payment-method--disabled"
+                                    onClick={(e) => { e.stopPropagation(); handleComingSoon('Stars'); }}
+                                >
+                                    <span className="payment-method-icon">⭐</span>
+                                    <span className="payment-method-label">Stars</span>
+                                    <span className="payment-method-badge">скоро</span>
+                                </button>
+                                <button
+                                    className="payment-method payment-method--disabled"
+                                    onClick={(e) => { e.stopPropagation(); handleComingSoon('Crypto'); }}
+                                >
+                                    <span className="payment-method-icon">💎</span>
+                                    <span className="payment-method-label">Crypto</span>
+                                    <span className="payment-method-badge">скоро</span>
+                                </button>
+                            </div>
                         </div>
 
                         <button className="buy-modal-submit" onClick={handleSubmit} disabled={submitting}>
