@@ -265,7 +265,7 @@ class OnboardingService:
         from ...core.config import settings
         if settings.ADMIN_PROMO_CODE and code.strip() == settings.ADMIN_PROMO_CODE:
             # Admin gets Elite tier automatically
-            return {"ok": True, "tier": "admin", "access_tier": "elite", "promo_id": None}
+            return {"ok": True, "role": "admin", "tier": "admin", "access_tier": "elite", "promo_id": None}
 
         # 2. Look up code in DB (with code_type guard against matryoshka)
         promo_res = (
@@ -299,10 +299,20 @@ class OnboardingService:
         code_type = promo.get("code_type") or (
             "player" if promo.get("responsible_id") else "responsible"
         )
-        # Reject player codes in bot — those belong in the mini-app
-        if code_type == "player":
-            return {"ok": False, "reason": "code_is_player"}
 
+        # Handle player codes — activate directly in bot
+        if code_type == "player":
+            return {
+                "ok": True,
+                "role": "player",
+                "promo_id": promo["id"],
+                "responsible_id": promo.get("responsible_id"),
+                "access_tier": promo.get("access_tier") or "standard",
+                "duration_days": promo.get("duration_days") or 30,
+                "tier": promo.get("tier") or "basic",
+            }
+
+        # Handle responsible code
         # 3. Valid! Save pending_promo_id on user if row exists (new users get this after INSERT)
         user_res = (
             await self.db.table("users")
@@ -325,6 +335,7 @@ class OnboardingService:
 
         return {
             "ok": True,
+            "role": "responsible",
             "tier": promo["tier"],
             "access_tier": promo.get("access_tier") or "standard",
             "promo_id": promo["id"],

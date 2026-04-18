@@ -7,7 +7,7 @@ Player flow:      /start PAIR_XXXXXX → validate → language → gender → su
 """
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from aiogram import F, Router, types
 from aiogram.filters import Command
@@ -324,14 +324,6 @@ async def process_text_input(message: types.Message) -> None:
                 await message.answer(
                     f"❌ Слишком много попыток. Повторите через {minutes} мин."
                 )
-            elif promo_result.get("reason") == "code_is_player":
-                # Matryoshka guard: player codes must be activated in the mini-app
-                await message.answer(
-                    "🎮 Это код Игрока.\n\n"
-                    "Откройте приложение и введите код там — вы станете Игроком, "
-                    "закреплённым за Ответственным, который выдал код.",
-                    reply_markup=get_miniapp_keyboard(),
-                )
             elif promo_result.get("attempts_left") is not None:
                 await message.answer(
                     f"Осталось {promo_result['attempts_left']} попыток, введите код повторно."
@@ -342,8 +334,6 @@ async def process_text_input(message: types.Message) -> None:
 
         # Promo valid — create user row if it doesn't exist yet.
         # This is the ONLY place new user rows are created for the responsible flow.
-        tier = promo_result["tier"]
-        access_tier = promo_result.get("access_tier", "standard")
         tg = message.from_user
         db = await get_supabase()
 
@@ -407,7 +397,142 @@ async def process_text_input(message: types.Message) -> None:
             )
             return
 
+        # Player code activation via bot
+        if promo_result.get("role") == "player":
+            responsible_id = promo_result.get("responsible_id")
+            duration_days = int(promo_result.get("duration_days") or 30)
+            p_access_tier = promo_result.get("access_tier") or "standard"
+            promo_id = promo_result["promo_id"]
+
+            # Self-invite guard
+            existing_self = (
+                await db.table("users")
+                .select("id")
+                .eq("telegram_id", tg.id)
+                .maybe_single()
+                .execute()
+            )
+            self_id = existing_self.data["id"] if (existing_self and existing_self.data) else None
+            if self_id and self_id == responsible_id:
+                await message.answer("Нельзя использовать свой собственный код.")
+                return
+
+            # Fetch responsible (name + tier for slot limit)
+            resp_res = await (
+                db.table("users")
+                .select("first_name, access_tier")
+                .eq("id", responsible_id)
+                .maybe_single()
+                .execute()
+            )
+            if not resp_res or not resp_res.data:
+                await message.answer("Ответственный не найден.")
+                return
+            responsible_name = resp_res.data.get("first_name") or "Ответственный"
+            resp_tier = resp_res.data.get("access_tier") or "standard"
+
+            # Slot limit
+            TIER_LIMITS = {"standard": 1, "premium": 2, "elite": 3}
+            slot_limit = TIER_LIMITS.get(resp_tier, 1)
+            count_res = await (
+                db.table("partnerships")
+                .select("id", count="exact")
+                .eq("responsible_id", responsible_id)
+                .eq("status", "active")
+                .execute()
+            )
+            if (count_res.count or 0) >= slot_limit:
+                await message.answer(f"У Ответственного достигнут лимит игроков ({slot_limit}).")
+                return
+
+            now = datetime.now(timezone.utc)
+            expires_at = (now + timedelta(days=duration_days)).isoformat()
+
+            # Upsert player user row
+            await (
+                db.table("users")
+                .upsert(
+                    {
+                        "telegram_id": tg.id,
+                        "telegram_username": tg.username,
+                        "first_name": tg.first_name,
+                        "role": "player",
+                        "primary_role": "player",
+                        "has_player_access": True,
+                        "access_tier": p_access_tier,
+                        "deactivated_at": None,
+                        "scheduled_deletion_at": None,
+                        "onboarding_state": "onboardingComplete",
+                        "onboarding_done": True,
+                    },
+                    on_conflict="telegram_id",
+                )
+                .execute()
+            )
+
+            # Get fresh user_id
+            user_row = (
+                await db.table("users")
+                .select("id")
+                .eq("telegram_id", tg.id)
+                .single()
+                .execute()
+            ).data
+            player_id = user_row["id"]
+
+            # Atomic mark code used
+            mark = await (
+                db.table("promo_codes")
+                .update({
+                    "is_used": True,
+                    "used_by": player_id,
+                    "used_at": now.isoformat(),
+                    "activated_at": now.isoformat(),
+                    "activated_by": tg.id,
+                    "expires_at": expires_at,
+                })
+                .eq("id", promo_id)
+                .eq("is_used", False)
+                .execute()
+            )
+            if not mark.data:
+                await message.answer("Этот код уже был активирован.")
+                return
+
+            # Create partnership
+            await (
+                db.table("partnerships")
+                .insert({
+                    "player_id": player_id,
+                    "responsible_id": responsible_id,
+                    "status": "active",
+                })
+                .execute()
+            )
+
+            # Auto-regen fresh P-code for Responsible (inherit tier)
+            try:
+                resp_tg_res = await db.table("users").select("telegram_id").eq("id", responsible_id).single().execute()
+                await svc.create_player_invite_code(
+                    resp_tg_res.data["telegram_id"],
+                    tier=promo_result.get("tier") or "basic",
+                    access_tier=p_access_tier,
+                )
+            except Exception as e:
+                logger.error("auto-regen player code after bot activation failed: %s", e)
+
+            await db.table("users").update({"promo_attempts": 0, "promo_locked_until": None}).eq("telegram_id", tg.id).execute()
+
+            await message.answer(
+                f"✅ Вы зарегистрированы как Игрок у {responsible_name}.\n\n"
+                f"Откройте приложение:",
+                reply_markup=get_miniapp_keyboard(),
+            )
+            return
+
         # Regular responsible promo — create user row + player P-code immediately
+        tier = promo_result["tier"]
+        access_tier = promo_result.get("access_tier", "standard")
         await (
             db.table("users")
             .upsert(
