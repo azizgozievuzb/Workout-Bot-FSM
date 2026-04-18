@@ -2,8 +2,53 @@
 
 > **AI-агент:** Прочитай этот файл ПОСЛЕ `CLAUDE.md`. Здесь написано, на чём остановился предыдущий агент.
 
-**Последнее обновление:** 2026-04-18 (сессия 18)
+**Последнее обновление:** 2026-04-18 (сессия 19)
 **Последний агент:** Claude Haiku 4.5
+
+---
+
+## ✅ Выполнено в сессии 19 (2026-04-18) — Allow Player P-Code Activation Directly in Bot
+
+### Архитектурные изменения
+- **Reverse Matryoshka Guard**: P-код раньше отвергался в боте и требовал активации в мини-апп. Теперь P-код активируется прямо в боте, создавая:
+  - User row с role='player'
+  - Partnership (player ↔ responsible)
+  - Mark promo_code as used + set expires_at
+  - Auto-regenerate свежий P-код для Ответственного
+
+### Изменения кода
+
+1. **`backend/services/fsm/onboarding_fsm.py`** → `validate_promo_code()`
+   - Убран reject `"reason": "code_is_player"`
+   - Вместо этого возвращает `{"ok": True, "role": "player", "promo_id": ..., "responsible_id": ..., "access_tier": ..., "duration_days": ..., "tier": ...}`
+   - Добавлен `"role": "responsible"` для R-кодов
+   - Добавлен `"role": "admin"` для ADMIN_PROMO_CODE
+
+2. **`backend/handlers/onboarding.py`** → text handler
+   - Удалена ветка `elif promo_result.get("reason") == "code_is_player"` (строки 327-334)
+   - Добавлена новая ветка **player code activation** (120+ строк):
+     - Self-invite guard (нельзя использовать свой код)
+     - Fetch responsible (name + access_tier для slot limit)
+     - Проверка slot limit по tier (standard=1, premium=2, elite=3)
+     - Upsert player user row (role='player', has_player_access=True)
+     - Атомарный mark code used (с `.eq("is_used", False)` guard от race condition)
+     - Create partnership (active)
+     - Auto-regen fresh P-код для Responsible (inherit tier)
+     - Ответ: "Вы зарегистрированы как Игрок у {name}. Откройте приложение" + mini-app button
+   - Moved `tier` extraction ПОСЛЕ admin+player веток (перед responsible блоком)
+   - Добавлен импорт `timedelta`
+
+### Acceptance Criteria
+1. ✅ TRUNCATE BD → Admin через ADMIN_PROMO_CODE в боте → role='admin', access_tier='elite', P-код (PE…)
+2. ✅ Новый TG-аккаунт `/start` + P-код (PE…) → бот отвечает "Вы зарегистрированы как Игрок у {admin_name}. Откройте приложение" + mini-app button
+3. ✅ В БД: users (role='player', has_player_access=True), partnership (active), promo_codes (is_used=True, expires_at set), новый PE…-код для админа
+4. ✅ Mini App открывается → `/auth/telegram` вернёт role='player' (не 'new') → PhotoGate сразу (без promo screen)
+5. ✅ Повторная активация того же кода → "Этот код уже был активирован" (race guard `.eq("is_used", False)`)
+6. ✅ Self-activate: player вводит свой же PE-код → "Нельзя использовать свой собственный код"
+
+### Коммит
+- `2554605` — `feat(bot): activate player P-codes directly in bot, skip mini-app promo input`
+- ✅ `git push` выполнен (Railway + Vercel деплой триггерятся автоматически)
 
 ---
 
