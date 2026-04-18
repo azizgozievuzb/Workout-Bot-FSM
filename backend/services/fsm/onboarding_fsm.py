@@ -248,7 +248,9 @@ class OnboardingService:
 
     async def validate_promo_code(self, telegram_id: int, code: str) -> dict:
         """Validate promo code from DB or admin env.
-        Returns {"ok": True, "tier": str, "promo_id": str} or {"ok": False, "reason": str, ...}."""
+        Returns {"ok": True, "tier": str, "access_tier": str, "promo_id": str}
+        or {"ok": False, "reason": str, ...}.
+        Rejects player codes — those must be activated in the mini-app."""
 
         # 1. Rate limit check
         rate = await self.check_promo_rate_limit(telegram_id)
@@ -262,13 +264,13 @@ class OnboardingService:
         # 1.5. Check admin promo code from env
         from ...core.config import settings
         if settings.ADMIN_PROMO_CODE and code.strip() == settings.ADMIN_PROMO_CODE:
-            # Fields will be applied in handler via upsert (handles both new and existing users)
-            return {"ok": True, "tier": "admin", "promo_id": None}
+            # Admin gets Elite tier automatically
+            return {"ok": True, "tier": "admin", "access_tier": "elite", "promo_id": None}
 
-        # 2. Look up code in DB
+        # 2. Look up code in DB (with code_type guard against matryoshka)
         promo_res = (
             await self.db.table("promo_codes")
-            .select("id, tier, is_used")
+            .select("id, tier, access_tier, code_type, responsible_id, is_used")
             .eq("code", code.strip())
             .execute()
         )
@@ -293,6 +295,14 @@ class OnboardingService:
                 "attempts_left": fail["attempts_left"],
             }
 
+        # Safe code_type inference (matches promo.py fallback)
+        code_type = promo.get("code_type") or (
+            "player" if promo.get("responsible_id") else "responsible"
+        )
+        # Reject player codes in bot — those belong in the mini-app
+        if code_type == "player":
+            return {"ok": False, "reason": "code_is_player"}
+
         # 3. Valid! Save pending_promo_id on user if row exists (new users get this after INSERT)
         user_res = (
             await self.db.table("users")
@@ -313,7 +323,12 @@ class OnboardingService:
                 .execute()
             )
 
-        return {"ok": True, "tier": promo["tier"], "promo_id": promo["id"]}
+        return {
+            "ok": True,
+            "tier": promo["tier"],
+            "access_tier": promo.get("access_tier") or "standard",
+            "promo_id": promo["id"],
+        }
 
     async def burn_promo_code(self, telegram_id: int) -> None:
         """Mark the pending promo code as used. Called after link is generated."""
@@ -351,11 +366,15 @@ class OnboardingService:
     # ------------------------------------------------------------------
 
     async def create_player_invite_code(
-        self, responsible_telegram_id: int, tier: str = "basic"
+        self,
+        responsible_telegram_id: int,
+        tier: str = "basic",
+        access_tier: str = "standard",
     ) -> str | None:
         """Create a player_code row in promo_codes so /promo/my-player-code
         returns a valid code for the mini-app. Idempotent: if an unused code
-        already exists for this responsible, returns it instead of creating."""
+        already exists for this responsible, returns it instead of creating.
+        Code format: P<tier_letter><6-char random> (e.g. PE7FG2XB for Elite)."""
         resp_res = (
             await self.db.table("users")
             .select("id")
@@ -367,21 +386,37 @@ class OnboardingService:
             return None
         responsible_id = resp_res.data["id"]
 
-        # Return existing unused code if present
+        # Invalidate all old unused player codes that don't match P<tier_letter> format
+        tier_letter = {"standard": "S", "premium": "P", "elite": "E"}.get(access_tier, "S")
+        expected_prefix = f"P{tier_letter}"
+
         existing = (
             await self.db.table("promo_codes")
-            .select("code")
+            .select("id, code")
             .eq("responsible_id", responsible_id)
             .eq("code_type", "player")
             .eq("is_used", False)
-            .limit(1)
             .execute()
         )
-        if existing.data:
-            return existing.data[0]["code"]
 
+        valid = [r for r in (existing.data or []) if r["code"].startswith(expected_prefix) and len(r["code"]) == 8]
+        invalid_ids = [r["id"] for r in (existing.data or []) if r not in valid]
+
+        if invalid_ids:
+            await (
+                self.db.table("promo_codes")
+                .update({"is_used": True})
+                .in_("id", invalid_ids)
+                .execute()
+            )
+
+        if valid:
+            return valid[0]["code"]
+
+        # Prefix: P + tier letter (S/P/E), then 6 random chars → 8 total
+        tier_letter = {"standard": "S", "premium": "P", "elite": "E"}.get(access_tier, "S")
         chars = string.ascii_uppercase + string.digits
-        code_str = "".join(random.choices(chars, k=8))
+        code_str = f"P{tier_letter}" + "".join(random.choices(chars, k=6))
         token = str(uuid.uuid4())
 
         await (
@@ -390,6 +425,7 @@ class OnboardingService:
                 "code": code_str,
                 "code_type": "player",
                 "tier": tier,
+                "access_tier": access_tier,
                 "responsible_id": responsible_id,
                 "deep_link_token": token,
                 "is_used": False,

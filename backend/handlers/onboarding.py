@@ -1,12 +1,13 @@
 """
 Aiogram handlers для онбординга v3.
 
-Responsible flow: /start → promo_code (DB) → language → gender → player_name → link → done
+Responsible flow: /start → promo_code (DB) → create user + P-code → Mini App → done
 Player flow:      /start PAIR_XXXXXX → validate → language → gender → survey → miniapp → done
 Повторный визит:  /start → smart menu (зависит от состояния)
 """
 import logging
 import re
+from datetime import datetime, timezone
 
 from aiogram import F, Router, types
 from aiogram.filters import Command
@@ -323,6 +324,14 @@ async def process_text_input(message: types.Message) -> None:
                 await message.answer(
                     f"❌ Слишком много попыток. Повторите через {minutes} мин."
                 )
+            elif promo_result.get("reason") == "code_is_player":
+                # Matryoshka guard: player codes must be activated in the mini-app
+                await message.answer(
+                    "🎮 Это код Игрока.\n\n"
+                    "Откройте приложение и введите код там — вы станете Игроком, "
+                    "закреплённым за Ответственным, который выдал код.",
+                    reply_markup=get_miniapp_keyboard(),
+                )
             elif promo_result.get("attempts_left") is not None:
                 await message.answer(
                     f"Осталось {promo_result['attempts_left']} попыток, введите код повторно."
@@ -334,6 +343,7 @@ async def process_text_input(message: types.Message) -> None:
         # Promo valid — create user row if it doesn't exist yet.
         # This is the ONLY place new user rows are created for the responsible flow.
         tier = promo_result["tier"]
+        access_tier = promo_result.get("access_tier", "standard")
         tg = message.from_user
         db = await get_supabase()
 
@@ -355,6 +365,7 @@ async def process_text_input(message: types.Message) -> None:
                         "telegram_id": tg.id,
                         "telegram_username": tg.username,
                         "first_name": tg.first_name,
+                        "access_tier": "elite",
                     })
                     .eq("id", existing_admin.data["id"])
                     .execute()
@@ -373,6 +384,7 @@ async def process_text_input(message: types.Message) -> None:
                             "has_responsible_access": True,
                             "primary_role": "responsible",
                             "role": "responsible",
+                            "access_tier": "elite",  # admin always Elite
                             "onboarding_state": "onboardingComplete",
                             "onboarding_done": True,
                         },
@@ -381,9 +393,11 @@ async def process_text_input(message: types.Message) -> None:
                     .execute()
                 )
 
-            # Ensure admin has a player_code for mini-app invite flow
+            # Ensure admin has a player_code (Elite tier → PE prefix)
             try:
-                await svc.create_player_invite_code(message.from_user.id, tier="basic")
+                await svc.create_player_invite_code(
+                    message.from_user.id, tier="basic", access_tier="elite"
+                )
             except Exception as e:
                 logger.error("create_player_invite_code (admin) failed: %s", e)
 
@@ -393,7 +407,7 @@ async def process_text_input(message: types.Message) -> None:
             )
             return
 
-        # Regular responsible promo — ensure user row exists before FSM transition
+        # Regular responsible promo — create user row + player P-code immediately
         await (
             db.table("users")
             .upsert(
@@ -404,83 +418,62 @@ async def process_text_input(message: types.Message) -> None:
                     "role": "responsible",
                     "primary_role": "responsible",
                     "has_responsible_access": True,
-                    "onboarding_state": "resp_promo",
+                    "access_tier": access_tier,
+                    "onboarding_state": "onboardingComplete",
+                    "onboarding_done": True,
                 },
                 on_conflict="telegram_id",
-                ignore_duplicates=True,
             )
             .execute()
         )
 
-        # Send FSM event with tier from DB
-        result = await svc.send_event(
-            message.from_user.id,
-            {"type": "SET_PROMO", "tier": tier},
-        )
-        if result.error:
-            await message.answer("Ошибка обработки промокода. Попробуйте снова.")
-            return
+        # Burn the R-promo (equivalent to previous burn_promo_code path)
+        promo_id = promo_result.get("promo_id")
+        if promo_id:
+            user_res = await db.table("users").select("id").eq("telegram_id", tg.id).single().execute()
+            user_id = user_res.data["id"]
+            await (
+                db.table("promo_codes")
+                .update({
+                    "is_used": True,
+                    "used_by": user_id,
+                    "used_at": datetime.now(timezone.utc).isoformat(),
+                })
+                .eq("id", promo_id)
+                .eq("is_used", False)
+                .execute()
+            )
 
-        # Create a player_code row so the mini-app ActionCube (Responsible)
-        # can display an invite code immediately.
+        # Create fresh prefixed P-code (PS/PP/PE) for the Responsible to invite a Player
+        code_str = None
         try:
-            await svc.create_player_invite_code(message.from_user.id, tier=tier)
+            code_str = await svc.create_player_invite_code(
+                message.from_user.id, tier=tier, access_tier=access_tier,
+            )
         except Exception as e:
             logger.error("create_player_invite_code failed: %s", e)
 
-        await message.answer(
-            "✅ Промокод принят. Вы теперь Ответственный.\n\n"
-            "Выберите язык / Tilni tanlang / Choose language:",
-            reply_markup=get_language_keyboard(),
-        )
+        # Reset promo attempts
+        await db.table("users").update({"promo_attempts": 0, "promo_locked_until": None}).eq("telegram_id", tg.id).execute()
+
+        if code_str:
+            await message.answer(
+                f"✅ Вы теперь Ответственный.\n\n"
+                f"👇 Ваш код для приглашения игрока:\n<code>{code_str}</code>\n\n"
+                f"Передайте его игроку — он введёт код в приложении.",
+                parse_mode="HTML",
+                reply_markup=get_miniapp_keyboard(),
+            )
+        else:
+            await message.answer(
+                "✅ Вы теперь Ответственный.\nОткройте приложение:",
+                reply_markup=get_miniapp_keyboard(),
+            )
         return
 
     # Ignore commands in other states
     if message.text.startswith("/"):
         return
-
-    # --- PLAYER NAME → GENERATE LINK ---
-    if db_state == "resp_player_name":
-        name = message.text.strip()
-        if not name:
-            await message.answer("Имя не может быть пустым. Попробуйте ещё раз:")
-            return
-
-        result = await svc.send_event(
-            message.from_user.id,
-            {"type": "SET_PLAYER_NAME", "name": name},
-        )
-        if result.error:
-            await message.answer(f"Ошибка: {result.error}. Попробуйте ещё раз.")
-            return
-
-        try:
-            code = await svc.generate_pair_code(message.from_user.id, name)
-        except Exception as e:
-            logger.error("generate_pair_code failed for %s: %s", message.from_user.id, e)
-            await message.answer("Ошибка генерации ссылки. Попробуйте /start заново.")
-            return
-
-        link = f"https://t.me/{BOT_USERNAME}?start=PAIR_{code}"
-        await message.answer(
-            f"✅ Ссылка для игрока {name} создана!\n\n"
-            f"👇 Нажмите на ссылку, чтобы скопировать:\n"
-            f"<code>{link}</code>\n\n"
-            f"⚠️ Важно:\n"
-            f"• Ссылка действительна 7 дней\n"
-            f"• Ссылка одноразовая — ей может воспользоваться только один человек\n"
-            f"• Если по ссылке перейдёт не тот человек, отменить это будет нельзя\n"
-            f"• Будьте внимательны при отправке!\n\n"
-            f"❗ Если в течение 7 дней ссылка не активирована — возможность сгорает, "
-            f"и оплата за приглашение не возвращается.",
-            parse_mode="HTML",
-            reply_markup=get_share_keyboard(link),
-        )
-        # Фикс 1: сразу показать кнопку приложения
-        await message.answer(
-            "Отлично! Теперь откройте приложение:",
-            reply_markup=get_miniapp_keyboard(),
-        )
 
 
 # ---------------------------------------------------------------------------

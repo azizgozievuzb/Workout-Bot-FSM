@@ -24,7 +24,7 @@ interface BackdropProps {
  *   3. Vignette
  */
 const Backdrop = forwardRef<GlassCubesHandle, BackdropProps>(({ theme = 'dark', paused = false }, ref) => {
-    const { photoUrl, photoDarkUrl, photoLightUrl, is_admin } = useAuthStore();
+    const { photoDarkUrl, photoLightUrl, is_admin } = useAuthStore();
     const mouseX = useMotionValue(0.5);
     const mouseY = useMotionValue(0.5);
     const springX = useSpring(mouseX, { stiffness: 25, damping: 30 });
@@ -47,9 +47,14 @@ const Backdrop = forwardRef<GlassCubesHandle, BackdropProps>(({ theme = 'dark', 
         };
     }, [mouseX, mouseY]);
 
+    // Only use theme-processed photos as face source; never show the raw
+    // (unprocessed) upload — it flashes in before Gemini stylisation finishes
+    // and creates a jarring "raw → styled" swap. Fall back to the default
+    // cosmic/meditating art until the themed variant is ready.
+    const hasStyled = Boolean(theme === 'dark' ? photoDarkUrl : photoLightUrl);
     const faceSrc = theme === 'dark'
-        ? (photoDarkUrl || photoUrl || womanCosmic)
-        : (photoLightUrl || photoUrl || womanMeditating);
+        ? (photoDarkUrl || womanCosmic)
+        : (photoLightUrl || womanMeditating);
 
     return (
         <div className={`backdrop-stage ${theme}-mode`}>
@@ -63,7 +68,7 @@ const Backdrop = forwardRef<GlassCubesHandle, BackdropProps>(({ theme = 'dark', 
                         alt="Flying Entity"
                         className="face-image"
                         initial={{ opacity: 0, filter: 'blur(16px)' }}
-                        animate={{ opacity: photoUrl ? 0.2 : 0.15, filter: 'blur(0px)' }}
+                        animate={{ opacity: hasStyled ? 0.2 : 0.15, filter: 'blur(0px)' }}
                         exit={{ opacity: 0, filter: 'blur(16px)' }}
                         transition={{ duration: 1.5, ease: 'easeInOut' }}
                     />

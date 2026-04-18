@@ -11,8 +11,8 @@ export interface MyPlayerCodeResponse {
     duration_days: number | null;
     expires_at: string | null;
     days_left: number | null;
-    access_tier: AccessTier;
-    is_renewal: boolean;
+    access_tier: AccessTier | null;
+    is_renewal?: boolean;
 }
 
 export interface PlayerStatusResponse {

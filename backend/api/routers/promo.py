@@ -49,6 +49,7 @@ class MyPlayerCodeResponse(BaseModel):
     duration_days: int | None = None
     expires_at: str | None = None
     days_left: int | None = None
+    access_tier: str | None = None
 
 
 class PlayerStatusResponse(BaseModel):
@@ -89,9 +90,20 @@ class RenewPlayerResp(BaseModel):
 # Helpers
 # ---------------------------------------------------------------------------
 
+_TIER_LETTER: dict[str, str] = {"standard": "S", "premium": "P", "elite": "E"}
+
+
 def _generate_code(length: int = 8) -> str:
     alphabet = string.ascii_uppercase + string.digits
     return "".join(choices(alphabet, k=length))
+
+
+def _generate_prefixed_code(role_letter: str, access_tier: str) -> str:
+    """Generate 8-char code: <role_letter><tier_letter><6 random>.
+    role_letter: 'P' (player) | 'R' (responsible). Tier: standard=S, premium=P, elite=E."""
+    tier_letter = _TIER_LETTER.get(access_tier, "S")
+    alphabet = string.ascii_uppercase + string.digits
+    return f"{role_letter}{tier_letter}" + "".join(choices(alphabet, k=6))
 
 
 def _compute_days_left(expires_at_str: str | None) -> int | None:
@@ -143,8 +155,9 @@ async def _create_player_code(
     parent_code_id: str | None = None, duration_days: int = 30,
     access_tier: str = "standard",
 ) -> str:
-    """Generate a player_code for a responsible/admin. Returns the code string."""
-    code_str = _generate_code(8)
+    """Generate a player_code for a responsible/admin. Returns the code string.
+    Format: P<tier_letter><6 random> — e.g. PE7FG2XB (player, Elite)."""
+    code_str = _generate_prefixed_code("P", access_tier)
     token = str(uuid.uuid4())
     insert_data = {
         "code": code_str,
@@ -265,10 +278,11 @@ async def _activate_player_code(db, user_id: str, telegram_id: int, code_row: di
 
     await _reset_attempts(db, telegram_id)
 
-    # Auto-regenerate: create a fresh player code for the responsible
+    # Auto-regenerate: create a fresh player code inheriting the Responsible's tier
     await _create_player_code(
         db, responsible_id,
         duration_days=code_row.get("duration_days") or 30,
+        access_tier=code_tier,
     )
 
     return ActivatePromoResponse(
@@ -320,12 +334,13 @@ async def activate_promo(
                 "has_player_access": False,   # не игрок до приглашения
                 "has_responsible_access": True,
                 "primary_role": "responsible",
+                "access_tier": "elite",  # admin is always Elite
                 "onboarding_done": True,
             })
             .eq("telegram_id", telegram_id)
             .execute()
         )
-        player_code_str = await _create_player_code(db, user_id)
+        player_code_str = await _create_player_code(db, user_id, access_tier="elite")
         await _reset_attempts(db, telegram_id)
         return ActivatePromoResponse(
             success=True,
@@ -375,12 +390,14 @@ async def activate_promo(
             except (ValueError, TypeError):
                 pass  # malformed date — proceed, let admin handle
 
+        r_access_tier = code_row.get("access_tier") or "standard"
         await (
             db.table("users")
             .update({
                 "primary_role": "responsible",
                 "has_responsible_access": True,
                 "subscription_tier": code_row.get("tier", "basic"),
+                "access_tier": r_access_tier,
             })
             .eq("telegram_id", telegram_id)
             .execute()
@@ -398,8 +415,12 @@ async def activate_promo(
         )
         if not resp_mark_res.data:
             raise HTTPException(status_code=409, detail="Промокод уже активирован.")
+        # Player code inherits Responsible's access_tier → PS/PP/PE prefix
         player_code_str = await _create_player_code(
-            db, user_id, tier=code_row.get("tier", "basic"), parent_code_id=code_row["id"]
+            db, user_id,
+            tier=code_row.get("tier", "basic"),
+            parent_code_id=code_row["id"],
+            access_tier=r_access_tier,
         )
         await _reset_attempts(db, telegram_id)
         return ActivatePromoResponse(
@@ -435,10 +456,13 @@ async def my_player_code(current_user: dict = Depends(get_current_user)):
 
     codes_res = await (
         db.table("promo_codes")
-        .select("code, deep_link_token, is_used, used_by, duration_days, expires_at")
+        .select("code, deep_link_token, is_used, used_by, duration_days, expires_at, access_tier")
         .eq("responsible_id", user_id)
         .eq("code_type", "player")
         .eq("is_used", False)
+        .like("code", "P%")
+        .order("created_at", desc=True)
+        .limit(1)
         .execute()
     )
 
@@ -457,6 +481,7 @@ async def my_player_code(current_user: dict = Depends(get_current_user)):
         duration_days=code_row.get("duration_days"),
         expires_at=expires_at,
         days_left=days_left,
+        access_tier=code_row.get("access_tier"),
     )
 
 

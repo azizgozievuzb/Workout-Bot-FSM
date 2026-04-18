@@ -2,8 +2,65 @@
 
 > **AI-агент:** Прочитай этот файл ПОСЛЕ `CLAUDE.md`. Здесь написано, на чём остановился предыдущий агент.
 
-**Последнее обновление:** 2026-04-18 (сессия 16)
-**Последний агент:** Claude Haiku 4.5
+**Последнее обновление:** 2026-04-18 (сессия 17)
+**Последний агент:** Claude Opus 4.7
+
+---
+
+## ✅ Выполнено в сессии 17 (2026-04-18) — Code Prefixes + Matryoshka Fix + Admin=Elite + Backdrop Raw-Photo Fix
+
+### Архитектура кодов
+- **R-код** (ответственный): `R<tier><6 rnd>` → `RS…/RP…/RE…`
+- **P-код** (игрок): `P<tier><6 rnd>` → `PS…/PP…/PE…`
+- **RN-код** (продление): `RN<tier><5 rnd>` → `RNS…/RNP…/RNE…`
+- **Tier letter:** S=Standard, P=Premium, E=Elite
+- **Admin** всегда получает `access_tier='elite'` (его P-коды → `PE…`)
+- **Player**, вошедший по P-коду, наследует `access_tier` своего Ответственного
+
+### 🐛 Исправленные баги
+
+1. **Матрёшка** (критично): P-код, введённый в боте, делал юзера Ответственным.
+   - `backend/services/fsm/onboarding_fsm.py::validate_promo_code`: теперь селектит `code_type, access_tier`. Если `code_type='player'` — возвращает `reason='code_is_player'` и НЕ даёт активировать в боте.
+   - `backend/handlers/onboarding.py`: на `code_is_player` бот отвечает «Это код Игрока. Откройте приложение» + кнопка Mini App.
+
+2. **Админ → Elite автоматом**:
+   - `backend/handlers/onboarding.py` (bot): при активации ADMIN_PROMO_CODE ставит `users.access_tier='elite'`; генерация P-кода с `access_tier='elite'` (→ PE…).
+   - `backend/api/routers/promo.py::activate_promo` (mini-app): тот же fix для ADMIN_PROMO_CODE пути.
+
+3. **Наследование tier P-кодом**:
+   - Ответственный активирует R-код → создаваемый P-код наследует `access_tier` из R-кода.
+   - `_activate_player_code` авто-регенерирует P-код с `access_tier=code_tier` (не дефолтный standard).
+
+4. **Префиксы по всей системе**:
+   - `promo.py::_create_player_code` → `_generate_prefixed_code("P", access_tier)`.
+   - `admin.py` → новые хелперы `_gen_prefixed("R"|"P", tier)` и `_gen_renewal(tier)`; все роуты (`/admin/promo/responsible`, `/admin/promo/renewal`, `/admin/codes/batch-buy`, bot `/new_promo`) используют их.
+   - `onboarding_fsm.py::create_player_invite_code` принимает `access_tier`, генерит `P<letter>…`.
+
+5. **Backdrop: сырое фото на фоне**:
+   - `frontend/src/design/backdrop/Backdrop.tsx`: убран промежуточный `photoUrl` из `faceSrc` — до готовности обработанного `photoDarkUrl/photoLightUrl` показывается дефолт (`womanCosmic/womanMeditating`), а не сырой аватар. Плавный кроссфейд в итоговое тематическое фото.
+
+### API изменения
+- `GET /promo/my-player-code` теперь возвращает `access_tier` → ActionCube показывает правильный TierBadge на чипе.
+- `MyPlayerCodeResponse.access_tier: str | None` (frontend `AccessTier | null`).
+
+### Стек
+- Backend: `backend/services/fsm/onboarding_fsm.py`, `backend/handlers/onboarding.py`, `backend/api/routers/promo.py`, `backend/api/routers/admin.py`.
+- Frontend: `frontend/src/design/backdrop/Backdrop.tsx`, `frontend/src/api/promo.ts`.
+
+### Проверка (acceptance)
+1. Admin `/start` + ADMIN_PROMO_CODE → `users.access_tier='elite'`, P-код в Action начинается с `PE`.
+2. Другой TG-аккаунт `/start` + P-код (`PE…`) → бот отвечает «Это код Игрока. Откройте приложение» (НЕ делает его Ответственным).
+3. Аккаунт открывает Mini App, вводит `PE…` → становится Игроком (Elite), партнёрство создаётся.
+4. Новый P-код после активации — тоже `PE…`.
+5. Фон: при открытии Mini App сырое фото не мигает — сразу видно тематизированное (или дефолт-арт).
+
+### Commit / Deploy
+- ✅ `git push` выполнен (Railway + Vercel деплой триггерятся автоматически)
+- Commit message: `fix(codes): R/P/RN prefixes with tier letter, admin=elite, reject player code in bot, inherit access_tier; fix(backdrop): no raw-photo flash`
+
+### ⚠️ Важно для следующей сессии
+- Старые неиспользованные P-коды в БД (без префикса, напр. `MJ00L469`) остаются как есть — новые коды идут с префиксами (`PE…`, `PS…`). Для чистого теста: TRUNCATE `promo_codes` или у каждого Ответственного нажать «Обновить» в Action (это инвалидирует старые unused P-коды и создаёт новые с префиксом).
+- Миграция БД не требуется — `access_tier` колонка уже есть (миграция 014).
 
 ---
 

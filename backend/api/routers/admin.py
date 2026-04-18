@@ -139,9 +139,27 @@ class BanHistoryResponse(BaseModel):
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _generate_responsible_code() -> str:
+_TIER_LETTER: dict[str, str] = {"standard": "S", "premium": "P", "elite": "E"}
+
+
+def _gen_prefixed(role_letter: str, access_tier: str) -> str:
+    """8-char code: <role_letter><tier_letter><6 random>. Used for R/P codes."""
     alphabet = string.ascii_uppercase + string.digits
-    return "R-" + "".join(choices(alphabet, k=6))
+    tl = _TIER_LETTER.get(access_tier, "S")
+    return f"{role_letter}{tl}" + "".join(choices(alphabet, k=6))
+
+
+def _gen_renewal(access_tier: str) -> str:
+    """Renewal code (given by Admin to Responsible, applied to a Player).
+    Format: RN<tier_letter><5 random> → 8 chars total."""
+    alphabet = string.ascii_uppercase + string.digits
+    tl = _TIER_LETTER.get(access_tier, "S")
+    return f"RN{tl}" + "".join(choices(alphabet, k=5))
+
+
+def _generate_responsible_code() -> str:
+    # Legacy basic-tier generator retained for back-compat (/admin/promo/create)
+    return _gen_prefixed("R", "standard")
 
 
 async def _require_admin(current_user: dict):
@@ -235,18 +253,14 @@ async def list_promos(
 # POST /admin/promo/responsible  — create R-code with tier + duration
 # ---------------------------------------------------------------------------
 
-def _generate_r_code() -> str:
-    alphabet = string.ascii_uppercase + string.digits
-    return "R_" + "".join(choices(alphabet, k=8))
-
-
 @router.post("/responsible", response_model=CreateResponsibleCodeResp)
 async def create_responsible_code(
     body: CreateResponsibleCodeReq,
     admin: dict = Depends(require_admin),
 ):
     db = await get_supabase()
-    code = _generate_r_code()
+    # R-code format: R<tier_letter><6 random> (e.g. RE7FG2XB for Elite)
+    code = _gen_prefixed("R", body.access_tier)
     await (
         db.table("promo_codes")
         .insert({
@@ -274,8 +288,8 @@ async def create_renewal_code(
 ):
     db = await get_supabase()
     import uuid as _uuid
-    alphabet = string.ascii_uppercase + string.digits
-    code = "".join(choices(alphabet, k=8))
+    # Renewal code format: RN<tier_letter><5 random>
+    code = _gen_renewal(body.access_tier)
     await (
         db.table("promo_codes")
         .insert({
@@ -437,14 +451,14 @@ async def get_connections(current_user: dict = Depends(get_current_user)):
 # POST /admin/codes/batch-buy
 # ---------------------------------------------------------------------------
 
-def _generate_batch_code(code_type: str) -> str:
-    alphabet = string.ascii_uppercase + string.digits
+def _generate_batch_code(code_type: str, access_tier: str) -> str:
+    """Batch-code format matches the canonical prefix spec:
+       R<tier>... | P<tier>... | RN<tier>... (tier letter = S/P/E)."""
     if code_type == 'responsible':
-        return "R_" + "".join(choices(alphabet, k=8))
-    elif code_type == 'renewal':
-        return "RN_" + "".join(choices(alphabet, k=7))
-    else:
-        return "P_" + "".join(choices(alphabet, k=8))
+        return _gen_prefixed("R", access_tier)
+    if code_type == 'renewal':
+        return _gen_renewal(access_tier)
+    return _gen_prefixed("P", access_tier)
 
 
 @general_router.post("/codes/batch-buy", response_model=BatchBuyResp, tags=["admin"])
@@ -455,7 +469,7 @@ async def batch_buy_codes(body: BatchBuyReq, admin: dict = Depends(require_admin
     is_renewal = body.code_type == 'renewal'
     db_code_type = 'player' if is_renewal else body.code_type
     for _ in range(body.count):
-        code = _generate_batch_code(body.code_type)
+        code = _generate_batch_code(body.code_type, body.tier)
         codes.append(code)
         rows.append({
             "code": code,
@@ -593,13 +607,15 @@ async def cb_admin_promo_duration(callback: types.CallbackQuery) -> None:
 
     duration_days = int(callback.data.split("_")[-1])
 
-    code = "R-" + "".join(choices(string.ascii_uppercase + string.digits, k=6))
+    # Bot-generated R-code defaults to Standard tier (RS prefix)
+    code = _gen_prefixed("R", "standard")
     await (
         db.table("promo_codes")
         .insert({
             "code": code,
             "code_type": "responsible",
             "tier": "basic",
+            "access_tier": "standard",
             "is_used": False,
             "duration_days": duration_days,
         })
