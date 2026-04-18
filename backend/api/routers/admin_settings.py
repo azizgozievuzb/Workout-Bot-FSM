@@ -23,7 +23,7 @@ class ToggleMaintenanceResp(BaseModel):
 
 
 class BanUserReq(BaseModel):
-    days: int = Field(ge=1, le=30)
+    days: int = Field(ge=1, le=30, default=2)
     reason: str = Field(min_length=3, max_length=500)
     missed_workouts: int = Field(ge=0, le=10, default=2)
 
@@ -116,9 +116,9 @@ async def toggle_maintenance(user=Depends(require_admin)):
 
 @router.post("/users/{user_id}/ban")
 async def ban_user(user_id: UUID, req: BanUserReq, user=Depends(require_admin)):
+    from datetime import timedelta
     db = await get_supabase()
     now = datetime.now(timezone.utc)
-    from datetime import timedelta
     ban_until = (now + timedelta(days=req.days)).isoformat()
 
     res = await (
@@ -133,12 +133,36 @@ async def ban_user(user_id: UUID, req: BanUserReq, user=Depends(require_admin)):
     )
     if not res.data:
         raise HTTPException(status_code=404, detail="User not found")
+
+    # Lookup admin UUID for audit trail
+    admin_res = await (
+        db.table("users")
+        .select("id")
+        .eq("telegram_id", user["telegram_id"])
+        .maybe_single()
+        .execute()
+    )
+    admin_uuid = admin_res.data["id"] if admin_res and admin_res.data else None
+
+    await (
+        db.table("ban_history")
+        .insert({
+            "user_id": str(user_id),
+            "banned_by": admin_uuid,
+            "ban_until": ban_until,
+            "reason": req.reason,
+            "missed_workouts": req.missed_workouts,
+        })
+        .execute()
+    )
     return {"banned": True, "ban_until": ban_until}
 
 
 @router.post("/users/{user_id}/unban")
 async def unban_user(user_id: UUID, user=Depends(require_admin)):
     db = await get_supabase()
+    now = datetime.now(timezone.utc)
+
     res = await (
         db.table("users")
         .update({
@@ -151,4 +175,14 @@ async def unban_user(user_id: UUID, user=Depends(require_admin)):
     )
     if not res.data:
         raise HTTPException(status_code=404, detail="User not found")
+
+    # Stamp unbanned_early_at on the active ban_history record
+    await (
+        db.table("ban_history")
+        .update({"unbanned_early_at": now.isoformat()})
+        .eq("user_id", str(user_id))
+        .is_("unbanned_early_at", "null")
+        .gt("ban_until", now.isoformat())
+        .execute()
+    )
     return {"banned": False}

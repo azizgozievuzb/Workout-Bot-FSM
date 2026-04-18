@@ -124,3 +124,37 @@
 .ban-modal-cancel:active {
     transform: scale(0.97);
 }
+
+.ban-modal-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.ban-modal-preset-btn {
+    padding: 7px 12px;
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.05);
+    color: var(--tg-theme-text-color, rgba(255,255,255,0.7));
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+
+.ban-modal-preset-btn.active {
+    background: rgba(231, 76, 60, 0.25);
+    border-color: rgba(231, 76, 60, 0.5);
+    color: #e74c3c;
+}
+
+.ban-modal-preset-btn:active {
+    transform: scale(0.95);
+}
+
+.ban-modal-hint {
+    margin-top: 4px;
+    font-size: 11px;
+    color: var(--tg-theme-hint-color, rgba(255,255,255,0.35));
+}

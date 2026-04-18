@@ -1282,3 +1282,344 @@
 .maintenance-admin-banner:active {
     opacity: 0.8;
 }
+
+/* --- Connections table view --- */
+
+.connections-view-switcher {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+
+.connections-view-btn {
+    padding: 6px 14px;
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: transparent;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--tg-theme-text-color, rgba(255,255,255,0.55));
+    transition: background 0.15s;
+}
+
+.connections-view-btn.active {
+    background: rgba(99, 102, 241, 0.3);
+    border-color: rgba(99, 102, 241, 0.5);
+    color: #fff;
+}
+
+.connections-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 14px;
+}
+
+.connections-table {
+    width: 100%;
+    min-width: 480px;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.connections-table th {
+    padding: 8px 10px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+}
+
+.dark-theme .connections-table th {
+    background: rgba(26,23,20,0.95);
+    color: rgba(250,245,239,0.35);
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+
+.light-theme .connections-table th {
+    background: rgba(255,255,255,0.9);
+    color: rgba(44,32,22,0.4);
+    border-bottom: 1px solid rgba(0,0,0,0.06);
+}
+
+.connections-table th:first-child,
+.connections-table td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+}
+
+.dark-theme .connections-table th:first-child,
+.dark-theme .connections-table td:first-child {
+    background: rgba(26,23,20,0.97);
+}
+
+.light-theme .connections-table th:first-child,
+.light-theme .connections-table td:first-child {
+    background: rgba(255,255,255,0.97);
+}
+
+.connections-table td {
+    padding: 9px 10px;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
+.dark-theme .connections-table td {
+    color: rgba(250,245,239,0.75);
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+
+.light-theme .connections-table td {
+    color: rgba(44,32,22,0.7);
+    border-bottom: 1px solid rgba(0,0,0,0.04);
+}
+
+.connections-table tr.r-row {
+    cursor: pointer;
+}
+
+.dark-theme .connections-table tr.r-row:hover td {
+    background: rgba(255,255,255,0.03);
+}
+
+.light-theme .connections-table tr.r-row:hover td {
+    background: rgba(0,0,0,0.02);
+}
+
+.connections-table tr.p-row td {
+    font-size: 12px;
+    padding-left: 24px;
+}
+
+.dark-theme .connections-table tr.p-row td {
+    background: rgba(255,255,255,0.02);
+    color: rgba(250,245,239,0.55);
+}
+
+.light-theme .connections-table tr.p-row td {
+    background: rgba(0,0,0,0.02);
+    color: rgba(44,32,22,0.5);
+}
+
+.connections-table tr.p-row td:first-child {
+    padding-left: 28px;
+}
+
+.r-row-name {
+    font-weight: 700;
+    font-size: 13px;
+}
+
+.connections-expand-icon {
+    display: inline-block;
+    font-style: normal;
+    margin-left: 4px;
+    transition: transform 0.2s;
+    font-size: 10px;
+    opacity: 0.5;
+}
+
+.connections-expand-icon.open {
+    transform: rotate(90deg);
+}
+
+/* --- Completion bar --- */
+
+.completion-bar-wrap {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 60px;
+}
+
+.completion-bar {
+    height: 4px;
+    border-radius: 2px;
+    flex: 1;
+    min-width: 36px;
+    background: rgba(255,255,255,0.1);
+    overflow: hidden;
+}
+
+.completion-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: linear-gradient(90deg, #CCFF00 0%, #88CC00 100%);
+    transition: width 0.3s ease;
+}
+
+.light-theme .completion-bar {
+    background: rgba(0,0,0,0.08);
+}
+
+.completion-bar-pct {
+    font-size: 10px;
+    opacity: 0.55;
+    flex-shrink: 0;
+    min-width: 28px;
+}
+
+/* --- Ban history panel --- */
+
+.ban-history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.ban-history-item {
+    border-radius: 12px;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.dark-theme .ban-history-item {
+    background: rgba(26,23,20,0.7);
+    border: 1px solid rgba(255,255,255,0.06);
+}
+
+.light-theme .ban-history-item {
+    background: rgba(255,255,255,0.55);
+    border: 1px solid rgba(0,0,0,0.06);
+}
+
+.ban-history-item.expanded {
+    gap: 8px;
+}
+
+.ban-history-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.ban-history-name {
+    font-size: 14px;
+    font-weight: 600;
+    flex: 1;
+    min-width: 0;
+}
+
+.dark-theme .ban-history-name { color: rgba(250,245,239,0.85); }
+.light-theme .ban-history-name { color: rgba(44,32,22,0.8); }
+
+.ban-history-date {
+    font-size: 11px;
+}
+
+.dark-theme .ban-history-date { color: rgba(250,245,239,0.3); }
+.light-theme .ban-history-date { color: rgba(44,32,22,0.3); }
+
+.ban-status-badge {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 20px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.ban-status-badge--active {
+    background: rgba(231,76,60,0.15);
+    color: #e74c3c;
+    border: 1px solid rgba(231,76,60,0.3);
+}
+
+.ban-status-badge--expired {
+    background: rgba(255,255,255,0.06);
+    color: rgba(255,255,255,0.35);
+    border: 1px solid rgba(255,255,255,0.08);
+}
+
+.light-theme .ban-status-badge--expired {
+    color: rgba(0,0,0,0.3);
+    border-color: rgba(0,0,0,0.08);
+    background: rgba(0,0,0,0.04);
+}
+
+.ban-status-badge--lifted {
+    background: rgba(39,174,96,0.12);
+    color: #27ae60;
+    border: 1px solid rgba(39,174,96,0.25);
+}
+
+.ban-history-detail {
+    font-size: 12px;
+    line-height: 1.5;
+    padding: 8px 10px;
+    border-radius: 8px;
+}
+
+.dark-theme .ban-history-detail {
+    background: rgba(255,255,255,0.04);
+    color: rgba(250,245,239,0.5);
+}
+
+.light-theme .ban-history-detail {
+    background: rgba(0,0,0,0.03);
+    color: rgba(44,32,22,0.5);
+}
+
+.ban-history-reason {
+    font-style: italic;
+    margin-bottom: 4px;
+}
+
+.ban-history-meta {
+    font-size: 11px;
+    opacity: 0.7;
+}
+
+.ban-history-unban-btn {
+    align-self: flex-start;
+    padding: 6px 14px;
+    border-radius: 10px;
+    border: none;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    background: rgba(39,174,96,0.15);
+    color: #27ae60;
+    transition: transform 0.1s;
+}
+
+.ban-history-unban-btn:active {
+    transform: scale(0.95);
+}
+
+.ban-history-filter {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    margin-bottom: 4px;
+}
+
+.ban-filter-btn {
+    padding: 5px 12px;
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: transparent;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--tg-theme-text-color, rgba(255,255,255,0.5));
+    transition: background 0.12s;
+}
+
+.ban-filter-btn.active {
+    background: rgba(99,102,241,0.25);
+    border-color: rgba(99,102,241,0.4);
+    color: #fff;
+}
+
+.light-theme .ban-filter-btn { color: rgba(44,32,22,0.5); }
+.light-theme .ban-filter-btn.active { color: #fff; }

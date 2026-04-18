@@ -1,0 +1,228 @@
+.buy-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    z-index: 9000;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+}
+
+.buy-modal-sheet {
+    width: 100%;
+    max-width: 480px;
+    max-height: 88vh;
+    border-radius: 20px 20px 0 0;
+    padding: 16px 20px 36px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    background: var(--tg-theme-bg-color, #1a1a1a);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-bottom: none;
+    touch-action: none;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.buy-modal-handle {
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.2);
+    margin: 0 auto 4px;
+    flex-shrink: 0;
+}
+
+.buy-modal-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--tg-theme-text-color, rgba(255,255,255,0.9));
+    margin: 0;
+}
+
+.buy-modal-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--tg-theme-hint-color, rgba(255,255,255,0.4));
+    margin-bottom: -4px;
+}
+
+.buy-modal-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.buy-modal-chip {
+    padding: 7px 14px;
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.05);
+    color: var(--tg-theme-text-color, rgba(255,255,255,0.7));
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.buy-modal-chip.active {
+    background: rgba(99, 102, 241, 0.35);
+    border-color: rgba(99, 102, 241, 0.6);
+    color: #fff;
+}
+
+.buy-modal-chip:active {
+    transform: scale(0.95);
+}
+
+.buy-modal-submit {
+    margin-top: 4px;
+    width: 100%;
+    padding: 15px;
+    border-radius: 14px;
+    border: none;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    background: rgba(99, 102, 241, 0.8);
+    color: #fff;
+    transition: transform 0.12s, opacity 0.12s;
+}
+
+.buy-modal-submit:active {
+    transform: scale(0.97);
+}
+
+.buy-modal-submit:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.buy-modal-result-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.buy-modal-result-count {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--tg-theme-text-color, rgba(255,255,255,0.8));
+}
+
+.buy-modal-copy-all {
+    padding: 6px 14px;
+    border-radius: 10px;
+    border: none;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    background: rgba(204, 255, 0, 0.15);
+    color: #CCFF00;
+    transition: transform 0.1s;
+}
+
+.buy-modal-copy-all:active {
+    transform: scale(0.95);
+}
+
+.batch-buy-result {
+    max-height: 280px;
+    overflow-y: auto;
+    border-radius: 12px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    padding: 4px 0;
+    -webkit-overflow-scrolling: touch;
+}
+
+.batch-buy-result-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.batch-buy-result-row:last-child {
+    border-bottom: none;
+}
+
+.batch-buy-code {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--tg-theme-text-color, rgba(255,255,255,0.85));
+}
+
+.buy-modal-chip-copy {
+    padding: 2px 8px;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    font-size: 14px;
+    cursor: pointer;
+    opacity: 0.7;
+    transition: opacity 0.1s;
+    flex-shrink: 0;
+}
+
+.buy-modal-chip-copy:active {
+    opacity: 1;
+    transform: scale(0.9);
+}
+
+.buy-modal-reset {
+    width: 100%;
+    padding: 12px;
+    border-radius: 12px;
+    border: none;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    background: rgba(255,255,255,0.06);
+    color: var(--tg-theme-hint-color, rgba(255,255,255,0.5));
+    transition: transform 0.12s;
+}
+
+.buy-modal-reset:active {
+    transform: scale(0.97);
+}
+
+.buy-modal-toast {
+    text-align: center;
+    font-size: 13px;
+    font-weight: 600;
+    color: #CCFF00;
+    animation: buyFadeInOut 2s ease forwards;
+}
+
+@keyframes buyFadeInOut {
+    0% { opacity: 0; }
+    15% { opacity: 1; }
+    80% { opacity: 1; }
+    100% { opacity: 0; }
+}
+
+.buy-modal-cancel {
+    width: 100%;
+    padding: 12px;
+    border-radius: 12px;
+    border: none;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    background: rgba(255,255,255,0.06);
+    color: var(--tg-theme-hint-color, rgba(255,255,255,0.5));
+    transition: transform 0.12s;
+}
+
+.buy-modal-cancel:active {
+    transform: scale(0.97);
+}

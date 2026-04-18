@@ -10,11 +10,16 @@ interface Props {
     onSuccess: () => void;
 }
 
-const DAY_OPTIONS = [1, 3, 7, 14, 30] as const;
+const DAY_PRESETS = [
+    { label: '2 дня (стандарт)', value: 2 },
+    { label: '7 дней', value: 7 },
+    { label: '14 дней', value: 14 },
+    { label: '30 дней', value: 30 },
+] as const;
 const MISSED_OPTIONS = Array.from({ length: 11 }, (_, i) => i);
 
 const BanUserModal: React.FC<Props> = ({ userId, userName, onClose, onSuccess }) => {
-    const [days, setDays] = useState<number>(7);
+    const [days, setDays] = useState<number>(2);
     const [reason, setReason] = useState('');
     const [missed, setMissed] = useState(2);
     const [submitting, setSubmitting] = useState(false);
@@ -69,16 +74,17 @@ const BanUserModal: React.FC<Props> = ({ userId, userName, onClose, onSuccess })
 
                 <div>
                     <div className="ban-modal-label">Срок</div>
-                    <select
-                        className="ban-modal-select"
-                        value={days}
-                        onChange={(e) => setDays(Number(e.target.value))}
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        {DAY_OPTIONS.map(d => (
-                            <option key={d} value={d}>{d} {d === 1 ? 'день' : d < 5 ? 'дня' : 'дней'}</option>
+                    <div className="ban-modal-presets">
+                        {DAY_PRESETS.map(p => (
+                            <button
+                                key={p.value}
+                                className={`ban-modal-preset-btn${days === p.value ? ' active' : ''}`}
+                                onClick={(e) => { e.stopPropagation(); setDays(p.value); }}
+                            >
+                                {p.label}
+                            </button>
                         ))}
-                    </select>
+                    </div>
                 </div>
 
                 <div>
@@ -91,6 +97,7 @@ const BanUserModal: React.FC<Props> = ({ userId, userName, onClose, onSuccess })
                         onChange={(e) => { setReason(e.target.value); setReasonError(false); }}
                         onClick={(e) => e.stopPropagation()}
                     />
+                    <div className="ban-modal-hint">Игрок увидит причину на экране блокировки</div>
                 </div>
 
                 <div>

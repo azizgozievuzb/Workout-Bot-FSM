@@ -1,4 +1,5 @@
 import api from './client';
+import type { AccessTier, DurationDays } from './promo';
 
 export interface PromoCodeInfo {
     id: string;
@@ -21,6 +22,20 @@ export async function listPromoCodes(params?: { code_type?: string; is_used?: bo
     return res.data as { codes: PromoCodeInfo[] };
 }
 
+export interface PlayerStats {
+    workouts_done: number;
+    stars_balance: number;
+    last_workout_at: string | null;
+    completion_rate: number;
+}
+
+export interface ResponsibleStats {
+    total_workouts: number;
+    active_players: number;
+    total_stars_earned: number;
+    avg_completion_rate: number;
+}
+
 export interface PlayerInPair {
     id: string;
     telegram_id: number;
@@ -29,6 +44,7 @@ export interface PlayerInPair {
     is_deactivated: boolean;
     is_banned: boolean;
     ban_until: string | null;
+    stats: PlayerStats | null;
 }
 
 export interface ResponsibleGroup {
@@ -36,6 +52,34 @@ export interface ResponsibleGroup {
     display_name: string | null;
     username: string | null;
     players: PlayerInPair[];
+    stats: ResponsibleStats | null;
+}
+
+export interface BanHistoryEntry {
+    id: string;
+    user_id: string;
+    display_name: string | null;
+    telegram_id: number;
+    banned_at: string;
+    ban_until: string;
+    reason: string;
+    missed_workouts: number;
+    is_active: boolean;
+    unbanned_early: boolean;
+}
+
+export type BatchCodeType = 'responsible' | 'player' | 'renewal';
+
+export interface BatchBuyRequest {
+    code_type: BatchCodeType;
+    tier: AccessTier;
+    duration: DurationDays;
+    count: number;
+}
+
+export interface BatchBuyResponse {
+    codes: string[];
+    total_stars_cost: number;
 }
 
 export interface ConnectionsResponse {
@@ -81,5 +125,15 @@ export interface MaintenanceStatus {
 
 export async function getMaintenanceStatus(): Promise<MaintenanceStatus> {
     const res = await api.get('/admin/maintenance/status');
+    return res.data;
+}
+
+export async function batchBuyCodes(req: BatchBuyRequest): Promise<BatchBuyResponse> {
+    const res = await api.post('/admin/codes/batch-buy', req);
+    return res.data;
+}
+
+export async function getBanHistory(): Promise<{ bans: BanHistoryEntry[] }> {
+    const res = await api.get('/admin/bans/history');
     return res.data;
 }

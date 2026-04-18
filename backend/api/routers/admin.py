@@ -1,12 +1,12 @@
 """Admin-only endpoints: create/list promo codes."""
 import string
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from random import choices
 
 from aiogram import Router as AiogramRouter, types, F
 from aiogram.filters import Command
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from typing import Literal
 
@@ -69,6 +69,20 @@ class CreateRenewalCodeResp(BaseModel):
     code: str
 
 
+class PlayerStats(BaseModel):
+    workouts_done: int
+    stars_balance: int
+    last_workout_at: str | None
+    completion_rate: float
+
+
+class ResponsibleStats(BaseModel):
+    total_workouts: int
+    active_players: int
+    total_stars_earned: int
+    avg_completion_rate: float
+
+
 class PlayerInPair(BaseModel):
     id: str
     telegram_id: int
@@ -77,15 +91,48 @@ class PlayerInPair(BaseModel):
     is_deactivated: bool
     is_banned: bool
     ban_until: str | None
+    stats: PlayerStats | None = None
+
 
 class ResponsibleGroup(BaseModel):
     telegram_id: int
     display_name: str | None
     username: str | None
     players: list[PlayerInPair]
+    stats: ResponsibleStats | None = None
+
 
 class ConnectionsResponse(BaseModel):
     groups: list[ResponsibleGroup]
+
+
+class BatchBuyReq(BaseModel):
+    code_type: Literal['responsible', 'player', 'renewal']
+    tier: Literal['standard', 'premium', 'elite'] = 'standard'
+    duration: Literal[7, 30, 90, 180] = 30
+    count: int = Field(ge=1, le=50, default=1)
+
+
+class BatchBuyResp(BaseModel):
+    codes: list[str]
+    total_stars_cost: int
+
+
+class BanHistoryEntry(BaseModel):
+    id: str
+    user_id: str
+    display_name: str | None
+    telegram_id: int
+    banned_at: str
+    ban_until: str
+    reason: str
+    missed_workouts: int
+    is_active: bool
+    unbanned_early: bool
+
+
+class BanHistoryResponse(BaseModel):
+    bans: list[BanHistoryEntry]
 
 
 # ---------------------------------------------------------------------------
@@ -281,22 +328,58 @@ async def get_connections(current_user: dict = Depends(get_current_user)):
     # Collect all unique player IDs
     all_player_ids = list({p["player_id"] for p in all_partnerships if p.get("player_id")})
 
-    # Bulk fetch all players (including ban fields)
+    # Bulk fetch all players (including ban fields + created_at for completion_rate)
     players_by_id: dict = {}
     if all_player_ids:
         pl_res = await (
             db.table("users")
-            .select("id, telegram_id, display_name, username, deactivated_at, ban_until")
+            .select("id, telegram_id, display_name, username, deactivated_at, ban_until, created_at")
             .in_("id", all_player_ids)
             .execute()
         )
         for pl in (pl_res.data or []):
             players_by_id[pl["id"]] = pl
 
+    # Bulk fetch player_stats for all players (single query, no N+1)
+    stats_by_id: dict = {}
+    if all_player_ids:
+        st_res = await (
+            db.table("player_stats")
+            .select("player_id, global_score, star_balance, last_workout_date")
+            .in_("player_id", all_player_ids)
+            .execute()
+        )
+        for st in (st_res.data or []):
+            stats_by_id[st["player_id"]] = st
+
     # Group partnerships by responsible_id
     partnerships_by_resp: dict[str, list[str]] = {}
     for p in all_partnerships:
         partnerships_by_resp.setdefault(p["responsible_id"], []).append(p["player_id"])
+
+    now = datetime.now(timezone.utc)
+
+    def _compute_player_stats(pl: dict, st: dict | None) -> PlayerStats:
+        workouts = st["global_score"] if st else 0
+        stars = st["star_balance"] if st else 0
+        last_raw = st["last_workout_date"] if st else None
+        created_raw = pl.get("created_at")
+        days_since_join = 1
+        if created_raw:
+            try:
+                created = datetime.fromisoformat(created_raw)
+                if created.tzinfo is None:
+                    created = created.replace(tzinfo=timezone.utc)
+                days_since_join = max(1, (now - created).days)
+            except Exception:
+                pass
+        rate = min(1.0, workouts / days_since_join)
+        return PlayerStats(
+            workouts_done=workouts,
+            stars_balance=stars,
+            last_workout_at=last_raw,
+            completion_rate=round(rate, 3),
+        )
 
     # Assemble response
     groups = []
@@ -313,9 +396,10 @@ async def get_connections(current_user: dict = Depends(get_current_user)):
                         ban_dt = datetime.fromisoformat(ban_until_raw)
                         if ban_dt.tzinfo is None:
                             ban_dt = ban_dt.replace(tzinfo=timezone.utc)
-                        is_banned = ban_dt > datetime.now(timezone.utc)
+                        is_banned = ban_dt > now
                     except Exception:
                         pass
+                pstats = _compute_player_stats(pl, stats_by_id.get(pid))
                 players.append(PlayerInPair(
                     id=pl["id"],
                     telegram_id=pl["telegram_id"],
@@ -324,16 +408,139 @@ async def get_connections(current_user: dict = Depends(get_current_user)):
                     is_deactivated=bool(pl.get("deactivated_at")),
                     is_banned=is_banned,
                     ban_until=ban_until_raw if is_banned else None,
+                    stats=pstats,
                 ))
+
+        active_count = sum(1 for p in players if not p.is_deactivated and not p.is_banned)
+        total_workouts = sum(p.stats.workouts_done for p in players if p.stats)
+        total_stars = sum(p.stats.stars_balance for p in players if p.stats)
+        rates = [p.stats.completion_rate for p in players if p.stats]
+        avg_rate = round(sum(rates) / len(rates), 3) if rates else 0.0
 
         groups.append(ResponsibleGroup(
             telegram_id=r["telegram_id"],
             display_name=r.get("display_name"),
             username=r.get("username"),
             players=players,
+            stats=ResponsibleStats(
+                total_workouts=total_workouts,
+                active_players=active_count,
+                total_stars_earned=total_stars,
+                avg_completion_rate=avg_rate,
+            ),
         ))
 
     return ConnectionsResponse(groups=groups)
+
+
+# ---------------------------------------------------------------------------
+# POST /admin/codes/batch-buy
+# ---------------------------------------------------------------------------
+
+def _generate_batch_code(code_type: str) -> str:
+    alphabet = string.ascii_uppercase + string.digits
+    if code_type == 'responsible':
+        return "R_" + "".join(choices(alphabet, k=8))
+    elif code_type == 'renewal':
+        return "RN_" + "".join(choices(alphabet, k=7))
+    else:
+        return "P_" + "".join(choices(alphabet, k=8))
+
+
+@general_router.post("/codes/batch-buy", response_model=BatchBuyResp, tags=["admin"])
+async def batch_buy_codes(body: BatchBuyReq, admin: dict = Depends(require_admin)):
+    db = await get_supabase()
+    codes: list[str] = []
+    rows: list[dict] = []
+    is_renewal = body.code_type == 'renewal'
+    db_code_type = 'player' if is_renewal else body.code_type
+    for _ in range(body.count):
+        code = _generate_batch_code(body.code_type)
+        codes.append(code)
+        rows.append({
+            "code": code,
+            "code_type": db_code_type,
+            "tier": "basic",
+            "access_tier": body.tier,
+            "is_used": False,
+            "duration_days": body.duration,
+            "is_renewal": is_renewal,
+        })
+    await db.table("promo_codes").insert(rows).execute()
+    return BatchBuyResp(codes=codes, total_stars_cost=0)
+
+
+# ---------------------------------------------------------------------------
+# GET /admin/bans/history
+# ---------------------------------------------------------------------------
+
+@general_router.get("/bans/history", response_model=BanHistoryResponse, tags=["admin"])
+async def get_ban_history(admin: dict = Depends(require_admin)):
+    db = await get_supabase()
+    now = datetime.now(timezone.utc)
+    thirty_days_ago = (now - timedelta(days=30)).isoformat()
+
+    res = await (
+        db.table("ban_history")
+        .select("id, user_id, banned_at, ban_until, reason, missed_workouts, unbanned_early_at")
+        .gte("banned_at", thirty_days_ago)
+        .order("banned_at", desc=True)
+        .limit(50)
+        .execute()
+    )
+    records = res.data or []
+
+    # Also include still-active bans older than 30 days
+    active_old_res = await (
+        db.table("ban_history")
+        .select("id, user_id, banned_at, ban_until, reason, missed_workouts, unbanned_early_at")
+        .lt("banned_at", thirty_days_ago)
+        .gt("ban_until", now.isoformat())
+        .is_("unbanned_early_at", "null")
+        .limit(20)
+        .execute()
+    )
+    records = records + (active_old_res.data or [])
+
+    # Bulk-fetch user display info
+    user_ids = list({r["user_id"] for r in records if r.get("user_id")})
+    users_by_id: dict = {}
+    if user_ids:
+        u_res = await (
+            db.table("users")
+            .select("id, telegram_id, display_name")
+            .in_("id", user_ids)
+            .execute()
+        )
+        for u in (u_res.data or []):
+            users_by_id[u["id"]] = u
+
+    entries: list[BanHistoryEntry] = []
+    for r in records:
+        uid = r.get("user_id", "")
+        u = users_by_id.get(uid, {})
+        ban_until_raw = r["ban_until"]
+        try:
+            ban_dt = datetime.fromisoformat(ban_until_raw)
+            if ban_dt.tzinfo is None:
+                ban_dt = ban_dt.replace(tzinfo=timezone.utc)
+            is_active = ban_dt > now and not r.get("unbanned_early_at")
+        except Exception:
+            is_active = False
+        entries.append(BanHistoryEntry(
+            id=r["id"],
+            user_id=uid,
+            display_name=u.get("display_name"),
+            telegram_id=u.get("telegram_id", 0),
+            banned_at=r["banned_at"],
+            ban_until=ban_until_raw,
+            reason=r["reason"],
+            missed_workouts=r.get("missed_workouts", 0),
+            is_active=is_active,
+            unbanned_early=bool(r.get("unbanned_early_at")),
+        ))
+
+    return BanHistoryResponse(bans=entries)
 
 
 # ---------------------------------------------------------------------------
