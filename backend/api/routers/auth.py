@@ -34,6 +34,8 @@ class TokenResponse(BaseModel):
     ban_until: str | None = None
     ban_reason: str | None = None
     ban_missed: int = 0
+    # Tier
+    access_tier: str = 'standard'
 
 
 @router.post("/telegram", response_model=TokenResponse)
@@ -54,7 +56,7 @@ async def telegram_auth(body: TelegramAuthRequest) -> TokenResponse:
     # SELECT only — no upsert. User must exist (created by bot after promo activation).
     user_res = (
         await db.table("users")
-        .select("id, role, onboarding_done, profile_photo_url, photo_dark_url, photo_light_url, primary_role, has_player_access, has_responsible_access, is_admin, ban_until, ban_reason, ban_missed_workouts")
+        .select("id, role, onboarding_done, profile_photo_url, photo_dark_url, photo_light_url, primary_role, has_player_access, has_responsible_access, is_admin, ban_until, ban_reason, ban_missed_workouts, access_tier")
         .eq("telegram_id", telegram_id)
         .maybe_single()
         .execute()
@@ -119,6 +121,7 @@ async def telegram_auth(body: TelegramAuthRequest) -> TokenResponse:
         ban_until=active_ban_until,
         ban_reason=user_data.get("ban_reason") if active_ban_until else None,
         ban_missed=user_data.get("ban_missed_workouts", 0) if active_ban_until else 0,
+        access_tier=user_data.get("access_tier") or "standard",
     )
 
 

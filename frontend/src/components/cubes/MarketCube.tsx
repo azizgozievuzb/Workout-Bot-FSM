@@ -52,6 +52,7 @@ const MarketCube: React.FC = () => {
 /* ---------- PLAYER SHOP ---------- */
 
 const PlayerShop: React.FC = () => {
+    const { accessTier } = useAuthStore();
     const [items, setItems] = useState<ShopItem[]>([]);
     const [balance, setBalance] = useState<number>(0);
     const [loading, setLoading] = useState(true);
@@ -126,13 +127,28 @@ const PlayerShop: React.FC = () => {
                         </button>
                     </div>
                 ))}
-                {/* 6th empty lot — placeholder, non-clickable */}
-                <div className="cube-shop-item cube-shop-item-empty">
-                    <div className="cube-shop-icon">·</div>
-                    <div className="cube-shop-name">Пустой лот</div>
-                    <div className="cube-shop-price">—</div>
-                    <button className="cube-btn-sm" disabled>Скоро</button>
-                </div>
+                {/* 6th slot: unlocked for elite tier */}
+                {accessTier === 'elite' && items[5] ? (
+                    <div className="cube-shop-item" key={items[5].id}>
+                        <div className="cube-shop-icon">{items[5].emoji}</div>
+                        <div className="cube-shop-name">{items[5].name}</div>
+                        <div className="cube-shop-price">{items[5].price_stars}</div>
+                        <button
+                            className="cube-btn-sm"
+                            onClick={(e) => handleBuy(e, items[5].id)}
+                            disabled={balance < items[5].price_stars}
+                        >
+                            {balance < items[5].price_stars ? 'Мало ⭐' : 'Купить'}
+                        </button>
+                    </div>
+                ) : (
+                    <div className="cube-shop-item cube-shop-item-locked">
+                        <div className="cube-shop-icon">🔒</div>
+                        <div className="cube-shop-name">6-й слот</div>
+                        <div className="cube-shop-price" style={{ fontSize: '10px' }}>Elite</div>
+                        <button className="cube-btn-sm" disabled>ELT</button>
+                    </div>
+                )}
             </div>
         </>
     );
@@ -141,6 +157,7 @@ const PlayerShop: React.FC = () => {
 /* ---------- RESPONSIBLE SHOP ---------- */
 
 const ResponsibleShop: React.FC = () => {
+    const { accessTier } = useAuthStore();
     const [players, setPlayers] = useState<PartnerStats[]>([]);
     const [items, setItems] = useState<ShopItem[]>([]);
     const [activeTab, setActiveTab] = useState(0);
@@ -193,12 +210,24 @@ const ResponsibleShop: React.FC = () => {
                         </button>
                     </div>
                 ))}
-                <div className="cube-shop-item cube-shop-item-empty">
-                    <div className="cube-shop-icon">·</div>
-                    <div className="cube-shop-name">Пустой лот</div>
-                    <div className="cube-shop-price">—</div>
-                    <button className="cube-btn-sm" disabled>Скоро</button>
-                </div>
+                {/* 6th slot: unlocked for elite Responsible (their players inherit ELT too) */}
+                {accessTier === 'elite' && items[5] ? (
+                    <div className="cube-shop-item" key={items[5].id}>
+                        <div className="cube-shop-icon">{items[5].emoji}</div>
+                        <div className="cube-shop-name">{items[5].name}</div>
+                        <div className="cube-shop-price">{items[5].price_stars}</div>
+                        <button className="cube-btn-sm" onClick={(e) => e.stopPropagation()}>
+                            Подарить
+                        </button>
+                    </div>
+                ) : (
+                    <div className="cube-shop-item cube-shop-item-locked">
+                        <div className="cube-shop-icon">🔒</div>
+                        <div className="cube-shop-name">6-й слот</div>
+                        <div className="cube-shop-price" style={{ fontSize: '10px' }}>Elite</div>
+                        <button className="cube-btn-sm" disabled>ELT</button>
+                    </div>
+                )}
             </div>
         </>
     );

@@ -17,6 +17,13 @@ router = APIRouter(prefix="/promo", tags=["promo"])
 MAX_ATTEMPTS = 3
 LOCK_DURATION_HOURS = 1
 
+# Max players per access_tier for a Responsible
+TIER_PLAYER_LIMITS: dict[str, int] = {
+    "standard": 1,
+    "premium": 2,
+    "elite": 3,
+}
+
 
 # ---------------------------------------------------------------------------
 # Schemas
@@ -162,9 +169,10 @@ async def _activate_player_code(db, user_id: str, telegram_id: int, code_row: di
     if responsible_id == user_id:
         raise HTTPException(status_code=400, detail="Нельзя использовать свой собственный код")
 
+    # Fetch responsible: name + tier for slot-limit check
     resp_res = await (
         db.table("users")
-        .select("first_name")
+        .select("first_name, access_tier")
         .eq("id", responsible_id)
         .maybe_single()
         .execute()
@@ -173,6 +181,23 @@ async def _activate_player_code(db, user_id: str, telegram_id: int, code_row: di
         raise HTTPException(status_code=404, detail="Ответственный не найден")
     responsible_name = resp_res.data.get("first_name", "Ответственный")
 
+    # Enforce player slot limit based on responsible's tier
+    resp_tier = resp_res.data.get("access_tier") or "standard"
+    slot_limit = TIER_PLAYER_LIMITS.get(resp_tier, 1)
+    count_res = await (
+        db.table("partnerships")
+        .select("id", count="exact")
+        .eq("responsible_id", responsible_id)
+        .eq("status", "active")
+        .execute()
+    )
+    active_count = count_res.count or 0
+    if active_count >= slot_limit:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "PLAYER_LIMIT_REACHED", "limit": slot_limit, "tier": resp_tier},
+        )
+
     now = datetime.now(timezone.utc)
     duration_days = code_row.get("duration_days") or 30
     expires_at = (now + timedelta(days=duration_days)).isoformat()
@@ -180,16 +205,31 @@ async def _activate_player_code(db, user_id: str, telegram_id: int, code_row: di
     # Inherit access_tier from the promo code
     code_tier = code_row.get("access_tier", "standard")
 
+    # Fetch current user flags to preserve admin/responsible dual-role
+    self_res = await (
+        db.table("users")
+        .select("is_admin, has_responsible_access")
+        .eq("id", user_id)
+        .maybe_single()
+        .execute()
+    )
+    self_data = self_res.data if self_res else {}
+    is_dual = self_data.get("is_admin") or self_data.get("has_responsible_access")
+
+    # Build update: never overwrite primary_role for admin/responsible
+    user_update: dict = {
+        "has_player_access": True,
+        "access_tier": code_tier,
+        "deactivated_at": None,
+        "scheduled_deletion_at": None,
+    }
+    if not is_dual:
+        user_update["primary_role"] = "player"
+
     # Update user roles + clear deactivation if reactivating (Job D)
     await (
         db.table("users")
-        .update({
-            "primary_role": "player",
-            "has_player_access": True,
-            "access_tier": code_tier,
-            "deactivated_at": None,
-            "scheduled_deletion_at": None,
-        })
+        .update(user_update)
         .eq("telegram_id", telegram_id)
         .execute()
     )

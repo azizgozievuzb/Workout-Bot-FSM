@@ -233,7 +233,10 @@ function relativeTime(iso: string): string {
     return `${days} д назад`;
 }
 
+const TIER_PLAYER_LIMITS: Record<string, number> = { standard: 1, premium: 2, elite: 3 };
+
 const ResponsibleView: React.FC = () => {
+    const { accessTier } = useAuthStore();
     const [playerCodeData, setPlayerCodeData] = useState<PlayerCodeData | null>(null);
     const [players, setPlayers] = useState<MyPlayer[]>([]);
     const [requests, setRequests] = useState<RenewalRequest[]>([]);
@@ -333,11 +336,14 @@ const ResponsibleView: React.FC = () => {
     }, [fetchPlayers, fetchRequests]);
 
     const selectedPlayer = players.find(p => p.id === renewalModalPlayerId) || null;
+    const slotLimit = TIER_PLAYER_LIMITS[accessTier] ?? 1;
+    const slotsUsed = players.length;
+    const slotsLeft = slotLimit - slotsUsed;
 
     return (
         <>
             <div className="promo-invite-chip-row">
-                {playerCodeData && playerCodeData.code && !playerCodeData.is_used ? (
+                {slotsLeft > 0 && playerCodeData && playerCodeData.code && !playerCodeData.is_used ? (
                     <>
                         <div
                             className="promo-invite-chip"
@@ -352,6 +358,8 @@ const ResponsibleView: React.FC = () => {
                             <TierBadge tier={playerCodeData.access_tier} />
                         )}
                     </>
+                ) : slotsLeft <= 0 ? (
+                    <div className="player-slots-full">Все слоты заняты</div>
                 ) : (
                     <button
                         className="promo-generate-btn"
@@ -364,7 +372,12 @@ const ResponsibleView: React.FC = () => {
 
             {toast && <div className="admin-toast">{toast}</div>}
 
-            <div className="cube-section-title">Мои Игроки</div>
+            <div className="cube-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>Мои Игроки</span>
+                <span className={`player-slots-badge ${slotsLeft <= 0 ? 'player-slots-badge--full' : ''}`}>
+                    {slotsUsed}/{slotLimit}
+                </span>
+            </div>
 
             {loading ? (
                 <div className="cube-section-title" style={{ textAlign: 'center' }}>Загрузка...</div>
