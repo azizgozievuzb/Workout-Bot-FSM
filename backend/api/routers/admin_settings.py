@@ -11,6 +11,12 @@ from ...db.client import get_supabase
 router = APIRouter(prefix="/admin", tags=["admin-settings"])
 
 
+class MaintenanceStatusResp(BaseModel):
+    maintenance_mode: bool
+    started_at: str | None = None
+    frozen_seconds: int | None = None
+
+
 class ToggleMaintenanceResp(BaseModel):
     maintenance_mode: bool
     frozen_seconds: int | None = None
@@ -20,6 +26,31 @@ class BanUserReq(BaseModel):
     days: int = Field(ge=1, le=30)
     reason: str = Field(min_length=3, max_length=500)
     missed_workouts: int = Field(ge=0, le=10, default=2)
+
+
+@router.get("/maintenance/status", response_model=MaintenanceStatusResp)
+async def maintenance_status(user=Depends(require_admin)):
+    db = await get_supabase()
+    res = await (
+        db.table("app_settings")
+        .select("maintenance_mode, maintenance_started_at")
+        .eq("id", 1)
+        .single()
+        .execute()
+    )
+    data = res.data
+    if not data.get("maintenance_mode"):
+        return MaintenanceStatusResp(maintenance_mode=False)
+    started_raw = data.get("maintenance_started_at")
+    started = datetime.fromisoformat(started_raw) if started_raw else None
+    if started and started.tzinfo is None:
+        started = started.replace(tzinfo=timezone.utc)
+    frozen = int((datetime.now(timezone.utc) - started).total_seconds()) if started else 0
+    return MaintenanceStatusResp(
+        maintenance_mode=True,
+        started_at=started_raw,
+        frozen_seconds=frozen,
+    )
 
 
 @router.post("/maintenance/toggle", response_model=ToggleMaintenanceResp)

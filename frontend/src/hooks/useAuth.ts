@@ -42,7 +42,7 @@ function getInitData(): string {
 export function useAuth() {
   const {
     isAuthenticated, role, primary_role, has_player_access, has_responsible_access, is_admin,
-    onboardingDone, photoUrl, photoDarkUrl, photoLightUrl, setAuth, setStyledPhotos, clearAuth,
+    onboardingDone, photoUrl, photoDarkUrl, photoLightUrl, setAuth, setStyledPhotos, clearAuth, setBanInfo,
   } = useAuthStore();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -100,6 +100,10 @@ export function useAuth() {
             photoDarkUrl: data.photo_dark_url,
             photoLightUrl: data.photo_light_url,
           });
+          // Show BanScreen immediately if user is banned (without waiting for a 403)
+          if (data.ban_until) {
+            setBanInfo({ until: data.ban_until, reason: data.ban_reason ?? null, missed: data.ban_missed ?? 0 });
+          }
         }
       } catch (err: any) {
         if (!cancelled) {

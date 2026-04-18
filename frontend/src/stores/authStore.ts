@@ -7,8 +7,8 @@ export type LegacyRole = 'player' | 'responsible' | 'admin' | 'new';
 export type AccessTier = 'standard' | 'premium' | 'elite';
 
 export interface BanInfo {
-    until: string;
-    reason: string;
+    until: string | null;
+    reason: string | null;
     missed: number;
 }
 

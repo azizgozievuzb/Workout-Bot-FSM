@@ -155,7 +155,7 @@ const App: React.FC = () => {
     }, [activeModule, nextMod]);
 
     if (banInfo) return <BanScreen info={banInfo} />;
-    if (maintenanceMode && role !== 'admin') return <MaintenanceScreen />;
+    if (maintenanceMode && !is_admin) return <MaintenanceScreen />;
     if (accessRevoked && !isLoading) {
         return <AccessRevokedScreen />;
     }
@@ -163,6 +163,18 @@ const App: React.FC = () => {
     return (
         <ThemeContext.Provider value={theme}>
         <div className={`app-container ${theme}-theme`}>
+            {maintenanceMode && is_admin && (
+                <div
+                    className="maintenance-admin-banner"
+                    onClick={() => {
+                        setSwipeDir(0);
+                        setLayout('fullscreen');
+                        setActiveModule('Admin');
+                    }}
+                >
+                    🔧 Режим тех. работ активен — нажмите для управления
+                </div>
+            )}
             <div className="app-root">
                 {/* ОСНОВНОЙ КОНТЕНТ */}
                 <main className="content" ref={contentRef}>

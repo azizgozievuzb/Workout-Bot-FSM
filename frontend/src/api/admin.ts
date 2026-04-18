@@ -22,10 +22,13 @@ export async function listPromoCodes(params?: { code_type?: string; is_used?: bo
 }
 
 export interface PlayerInPair {
+    id: string;
     telegram_id: number;
     display_name: string | null;
     username: string | null;
     is_deactivated: boolean;
+    is_banned: boolean;
+    ban_until: string | null;
 }
 
 export interface ResponsibleGroup {
@@ -67,5 +70,16 @@ export async function banUser(userId: string, req: BanUserRequest): Promise<{ ba
 
 export async function unbanUser(userId: string): Promise<{ banned: boolean }> {
     const res = await api.post(`/admin/users/${userId}/unban`);
+    return res.data;
+}
+
+export interface MaintenanceStatus {
+    maintenance_mode: boolean;
+    started_at: string | null;
+    frozen_seconds: number | null;
+}
+
+export async function getMaintenanceStatus(): Promise<MaintenanceStatus> {
+    const res = await api.get('/admin/maintenance/status');
     return res.data;
 }

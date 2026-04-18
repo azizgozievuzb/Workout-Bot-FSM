@@ -1,5 +1,6 @@
 """Admin-only endpoints: create/list promo codes."""
 import string
+from datetime import datetime, timezone
 from random import choices
 
 from aiogram import Router as AiogramRouter, types, F
@@ -69,10 +70,13 @@ class CreateRenewalCodeResp(BaseModel):
 
 
 class PlayerInPair(BaseModel):
+    id: str
     telegram_id: int
     display_name: str | None
     username: str | None
     is_deactivated: bool
+    is_banned: bool
+    ban_until: str | None
 
 class ResponsibleGroup(BaseModel):
     telegram_id: int
@@ -277,12 +281,12 @@ async def get_connections(current_user: dict = Depends(get_current_user)):
     # Collect all unique player IDs
     all_player_ids = list({p["player_id"] for p in all_partnerships if p.get("player_id")})
 
-    # Bulk fetch all players
+    # Bulk fetch all players (including ban fields)
     players_by_id: dict = {}
     if all_player_ids:
         pl_res = await (
             db.table("users")
-            .select("id, telegram_id, display_name, username, deactivated_at")
+            .select("id, telegram_id, display_name, username, deactivated_at, ban_until")
             .in_("id", all_player_ids)
             .execute()
         )
@@ -302,11 +306,24 @@ async def get_connections(current_user: dict = Depends(get_current_user)):
         for pid in player_ids:
             pl = players_by_id.get(pid)
             if pl:
+                ban_until_raw = pl.get("ban_until")
+                is_banned = False
+                if ban_until_raw:
+                    try:
+                        ban_dt = datetime.fromisoformat(ban_until_raw)
+                        if ban_dt.tzinfo is None:
+                            ban_dt = ban_dt.replace(tzinfo=timezone.utc)
+                        is_banned = ban_dt > datetime.now(timezone.utc)
+                    except Exception:
+                        pass
                 players.append(PlayerInPair(
+                    id=pl["id"],
                     telegram_id=pl["telegram_id"],
                     display_name=pl.get("display_name"),
                     username=pl.get("username"),
                     is_deactivated=bool(pl.get("deactivated_at")),
+                    is_banned=is_banned,
+                    ban_until=ban_until_raw if is_banned else None,
                 ))
 
         groups.append(ResponsibleGroup(

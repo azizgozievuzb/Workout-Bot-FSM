@@ -1,4 +1,5 @@
 """POST /auth/telegram — валидирует initData, возвращает JWT."""
+from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
@@ -29,6 +30,10 @@ class TokenResponse(BaseModel):
     is_admin: bool = False
     # Promo v2: has unused player_code (for responsibles)
     has_promo_code: bool = False
+    # Ban info — set if user is currently banned (lets frontend show BanScreen without waiting for 403)
+    ban_until: str | None = None
+    ban_reason: str | None = None
+    ban_missed: int = 0
 
 
 @router.post("/telegram", response_model=TokenResponse)
@@ -49,7 +54,7 @@ async def telegram_auth(body: TelegramAuthRequest) -> TokenResponse:
     # SELECT only — no upsert. User must exist (created by bot after promo activation).
     user_res = (
         await db.table("users")
-        .select("id, role, onboarding_done, profile_photo_url, photo_dark_url, photo_light_url, primary_role, has_player_access, has_responsible_access, is_admin")
+        .select("id, role, onboarding_done, profile_photo_url, photo_dark_url, photo_light_url, primary_role, has_player_access, has_responsible_access, is_admin, ban_until, ban_reason, ban_missed_workouts")
         .eq("telegram_id", telegram_id)
         .maybe_single()
         .execute()
@@ -86,6 +91,19 @@ async def telegram_auth(body: TelegramAuthRequest) -> TokenResponse:
 
     token = create_access_token(telegram_id, compat_role)
 
+    # Compute active ban info (only if ban_until is in the future)
+    ban_until_raw = user_data.get("ban_until")
+    active_ban_until: str | None = None
+    if ban_until_raw:
+        try:
+            ban_dt = datetime.fromisoformat(ban_until_raw)
+            if ban_dt.tzinfo is None:
+                ban_dt = ban_dt.replace(tzinfo=timezone.utc)
+            if ban_dt > datetime.now(timezone.utc):
+                active_ban_until = ban_until_raw
+        except Exception:
+            pass
+
     return TokenResponse(
         access_token=token,
         role=compat_role,
@@ -98,6 +116,9 @@ async def telegram_auth(body: TelegramAuthRequest) -> TokenResponse:
         has_responsible_access=user_data.get("has_responsible_access", False),
         is_admin=is_admin,
         has_promo_code=has_promo,
+        ban_until=active_ban_until,
+        ban_reason=user_data.get("ban_reason") if active_ban_until else None,
+        ban_missed=user_data.get("ban_missed_workouts", 0) if active_ban_until else 0,
     )
 
 

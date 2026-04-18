@@ -41,8 +41,8 @@ api.interceptors.response.use(
     // BANNED — пользователь или его Ответственный забанен
     if (err.response?.status === 403 && typeof detail === 'object' && detail?.code === 'BANNED') {
       useAuthStore.getState().setBanInfo({
-        until: detail.ban_until,
-        reason: detail.reason ?? '',
+        until: detail.ban_until ?? null,
+        reason: detail.reason ?? null,
         missed: detail.missed_workouts ?? 0,
       });
       return Promise.reject(err);
