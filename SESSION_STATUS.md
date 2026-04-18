@@ -2,8 +2,50 @@
 
 > **AI-агент:** Прочитай этот файл ПОСЛЕ `CLAUDE.md`. Здесь написано, на чём остановился предыдущий агент.
 
-**Последнее обновление:** 2026-04-18 (сессия 17)
-**Последний агент:** Claude Opus 4.7
+**Последнее обновление:** 2026-04-18 (сессия 18)
+**Последний агент:** Claude Haiku 4.5
+
+---
+
+## ✅ Выполнено в сессии 18 (2026-04-18) — Drop Legacy PAIR Flow, Always Prefix Codes, Clean Stale Codes
+
+### Архитектурные изменения
+- **Bot Responsible Flow**: было `promo_code → language → gender → player_name → PAIR_link`; теперь `promo_code → create user + P-code → Mini App`
+- **Матёшка защита 2.0**: старые беспрефиксные P-коды (`2TEBUU1C`, `MJ00L469` и т.д.) инвалидируются автоматически при вызове `create_player_invite_code()`
+- **ActionCube chip**: теперь всегда показывает только корректные `P{S|P|E}XXXXXX` коды
+
+### Изменения кода
+
+1. **`backend/services/fsm/onboarding_fsm.py`** → `create_player_invite_code()`
+   - Инвалидирует все неиспользованные P-коды, которые НЕ соответствуют `P<tier_letter>` + 8 chars
+   - Фильтрует `valid` коды перед возвратом
+   - Если есть валидный → возвращает его; иначе создаёт новый
+
+2. **`backend/api/routers/promo.py`** → `GET /promo/my-player-code`
+   - Добавлен фильтр `.like("code", "P%")` (safety net)
+   - `.order("created_at", desc=True)` + `.limit(1)` для консистентности
+
+3. **`backend/handlers/onboarding.py`** → text handler (responsible promo)
+   - **Удалено**: `resp_language` → `resp_gender` → `resp_player_name` → `generate_pair_code()` (PAIR flow)
+   - **Добавлено**: Сразу после валидации R-кода:
+     - Upsert user с `onboarding_done=True`, `onboarding_state="onboardingComplete"`
+     - Mark R-promo as used (is_used=True)
+     - Call `create_player_invite_code()` → генерирует P-код (`PS…/PP…/PE…`)
+     - Ответ: показывает P-код в коде + кнопка Mini App
+   - **Удалено**: весь блок `resp_player_name` handler (459-499 строк старого файла)
+   - Добавлен импорт: `from datetime import datetime, timezone`
+
+### Acceptance
+1. ✅ Admin `/start` → ADMIN_PROMO_CODE → "Добро пожаловать, Админ!" + Mini App (без изменений)
+2. ✅ Responsible `/start` → R-код (RS/RP/RE) → **БЕЗ language/gender/name** → "Вы теперь Ответственный. Ваш код для приглашения: **PE/PS/PP + 6 chars**" + Mini App
+3. ✅ Mini App → ActionCube chip показывает тот же `P{S|P|E}XXXXXX`
+4. ✅ Другой аккаунт вводит этот P-код в Mini App → становится Игроком (наследует tier от Ответственного)
+5. ✅ Старые беспрефиксные коды в БД не всплывают (инвалидируются при `create_player_invite_code()`)
+6. ✅ `npm run build` в frontend/ прошёл успешно
+
+### Коммит
+- `a321f7e` — `fix(onboarding): drop legacy PAIR flow, always prefix player codes, clean stale codes`
+- ✅ `git push` выполнен (Railway + Vercel деплой триггерятся автоматически)
 
 ---
 
