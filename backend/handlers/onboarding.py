@@ -337,7 +337,7 @@ async def process_text_input(message: types.Message) -> None:
         tg = message.from_user
         db = await get_supabase()
 
-        if tier == "admin":
+        if promo_result.get("role") == "admin":
             # Check if admin already exists (any telegram_id)
             existing_admin = (
                 await db.table("users")
