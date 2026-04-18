@@ -1,5 +1,6 @@
 """Promo code endpoints: activate, my-player-code, activate-link, player-status."""
 import math
+import secrets
 import string
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -248,12 +249,15 @@ async def _activate_player_code(db, user_id: str, telegram_id: int, code_row: di
     )
 
     # Create partnership
+    _pc = "".join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(8))
     await (
         db.table("partnerships")
         .insert({
             "player_id": user_id,
             "responsible_id": responsible_id,
             "status": "active",
+            "pairing_code": _pc,
+            "pair_code": _pc,
         })
         .execute()
     )

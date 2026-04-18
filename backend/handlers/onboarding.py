@@ -7,6 +7,8 @@ Player flow:      /start PAIR_XXXXXX → validate → language → gender → su
 """
 import logging
 import re
+import secrets
+import string as _s
 from datetime import datetime, timezone, timedelta
 
 from aiogram import F, Router, types
@@ -500,12 +502,15 @@ async def process_text_input(message: types.Message) -> None:
                 return
 
             # Create partnership
+            _pc = "".join(secrets.choice(_s.ascii_uppercase + _s.digits) for _ in range(8))
             await (
                 db.table("partnerships")
                 .insert({
                     "player_id": player_id,
                     "responsible_id": responsible_id,
                     "status": "active",
+                    "pairing_code": _pc,
+                    "pair_code": _pc,
                 })
                 .execute()
             )
