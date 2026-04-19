@@ -19,6 +19,7 @@ import type { RenewalRequest, MyPlayer } from '../../api/renewal';
 import { hapticImpact, hapticNotification } from '../../utils/haptic';
 import RoleTransition from '../shared/RoleTransition';
 import RenewalModal from '../renewal/RenewalModal';
+import WorkoutScreen from '../workout/WorkoutScreen';
 import '../../styles/cubes.css';
 
 const RENEWAL_PENDING_KEY = 'wb_renewal_pending_until';
@@ -85,6 +86,13 @@ const PlayerView: React.FC = () => {
         return Number.isFinite(until) && until > Date.now();
     });
     const [cooldownError, setCooldownError] = useState<string>('');
+    const [workoutOpen, setWorkoutOpen] = useState(false);
+
+    const handleStartWorkout = useCallback((e: React.MouseEvent) => {
+        e.stopPropagation();
+        hapticImpact('medium');
+        setWorkoutOpen(true);
+    }, []);
 
     useEffect(() => {
         let done = 0;
@@ -172,9 +180,11 @@ const PlayerView: React.FC = () => {
                 </div>
             )}
 
-            <button className="cube-btn-primary" onClick={(e) => e.stopPropagation()}>
+            <button className="cube-btn-primary" onClick={handleStartWorkout}>
                 Приступим
             </button>
+
+            {workoutOpen && <WorkoutScreen onClose={() => setWorkoutOpen(false)} />}
 
             <div className="cube-card">
                 <div className="cube-stat">
