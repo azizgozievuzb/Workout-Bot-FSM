@@ -24,6 +24,7 @@ from .api.routers.stats import router as stats_router
 from .api.routers.shop import router as shop_router
 from .api.routers.boosts import router as boosts_router
 from .api.routers.workout import router as workout_router
+from .api.routers.player import router as player_router
 from .api.routers.notifications import router as notifications_router
 from .core.config import settings
 from .handlers.onboarding import onboarding_router
@@ -108,6 +109,7 @@ app.include_router(stats_router)
 app.include_router(shop_router)
 app.include_router(boosts_router)
 app.include_router(workout_router)
+app.include_router(player_router)
 app.include_router(notifications_router)
 
 
