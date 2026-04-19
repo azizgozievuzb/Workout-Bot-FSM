@@ -1,9 +1,130 @@
-# SESSION_STATUS.md — Текущий статус и передача смены
+# SESSION STATUS — Session 23 handoff
 
-> **AI-агент:** Прочитай этот файл ПОСЛЕ `CLAUDE.md`. Здесь написано, на чём остановился предыдущий агент.
+## ✅ Завершено в сессии 23 (этапы 1 → 2.5)
+- Этап 1: migration 020_subscription_model_v2.sql → commit `dbf1a98`
+- Этап 2.1: admin.py (5 типов промо) → commit `83b87dd`
+- Этап 2.2: promo.py (apply-renewal/apply-bonus-pack, resurrect/delete_others) → commit `0c83f7b`
+- Этап 2.3: shop.py (per-player лоты, gift-freeze) → commit `c49769a`
+- Этап 2.4: partnerships.py (DELETE /{id}, my-players с TTL) → commit `4a2babd`
+- Этап 2.5: auth.py (TokenResponse v2) → commit `143c730`
 
-**Последнее обновление:** 2026-04-18 (сессия 19)
-**Последний агент:** Claude Haiku 4.5
+## 📦 Догнано попутно
+- Session 20 workout stack (router + vision + migrations 017/019 + frontend) → commit `e70ba4a`
+- Legacy cleanup → commit `7efb8a5`
+
+## ▶️ Следующая точка входа (новый чат)
+**Этап 2.6 — Notification Center (backend)**
+- Новый `backend/services/notifications.py` → `emit_notification(db, user_id, type, title, message, payload)` — bus-хелпер
+- Новый `backend/api/routers/notifications.py`:
+  - `GET /notifications?limit=50&offset=0`
+  - `POST /notifications/{id}/read`
+  - `POST /notifications/read-all`
+  - `GET /notifications/unread-count`
+- Подключить router в `backend/api/main.py`
+- Точки emit'а (расставить в существующих роутерах, но физический emit сделаем в 2.6):
+  - shop.py → `gift_freeze_received` (уже вставлено в 2.3 как INSERT — перевести на сервис)
+  - promo.py → `partnership_renewed`, `bonus_pack_credited`
+  - partnerships.py → `partnership_deleted`
+
+## 🔜 Далее
+- 2.6.1 — POST /player/use-rest-day (женщины, manual)
+- 2.7 — Scheduler: Job E (streak_freeze auto), Job F (hard-delete старых workout_sessions), Job G (cleanup истёкших partnerships >90d)
+- 2.8 — Cleanup: `core/deps.py` TTL → partnerships.expires_at; снести Jobs A/B/C; удалить `renewal_requests`
+- 3.1–3.9 — Frontend refactor
+- 4 — Acceptance
+
+---
+
+## ✅ Выполнено в сессии 22 (2026-04-19) — Hotfix: 180-day duration constraint
+
+### Баг
+Админ генерировал R-код с Elite VIP + 180 дней → "Ошибка создания кода". Причина: миграция `012_promo_ttl.sql` добавила `CHECK (duration_days IN (7, 30, 90))`. Backend/Frontend уже принимают 180, но БД отклоняла INSERT.
+
+### Фикс
+- **`backend/db/migrations/019_promo_duration_180.sql`** (НОВАЯ): DROP + RECREATE constraint → `CHECK (duration_days IN (7, 30, 90, 180))`.
+- ✅ Применена в Supabase через MCP.
+
+### Состояние БД на момент отключения
+- `users`: 2 (A=player+elite+dual-access, ₳ⱫłⱫ=responsible+elite+dual-access).
+- `partnerships`: 2 **взаимных** (A↔₳ⱫłⱫ в обе стороны, status='active').
+- `promo_codes`: 6 (3 used, 3 unused).
+- **Замечание:** Дублирующиеся взаимные партнёрства могут быть артефактом тестов. При следующем чистом прогоне — TRUNCATE.
+
+---
+
+## ✅ Выполнено в сессии 21 (2026-04-19) — DB Cleanup + Pairing Code Hotfix
+
+### Контекст
+После применения миграции 017 (workout_sessions) и создания bucket `avatars` + `workout-clips`, тестовый прогон провалился: `/start` + P-код → 500 на INSERT в `partnerships` (`null value in column "pairing_code" violates not-null constraint`). Причина — после дропа PAIR-флоу в сессии 18 `pairing_code` больше не генерируется, но колонка осталась `NOT NULL`.
+
+### Backend изменения
+1. **`backend/db/migrations/018_drop_pairing_code_not_null.sql`** (НОВАЯ) — `ALTER TABLE partnerships ALTER COLUMN pairing_code DROP NOT NULL;`. Применена в Supabase SQL Editor.
+
+### Storage / DB Cleanup
+- Buckets `avatars` и `workout-clips` уже пустые (фото не было).
+- Полный TRUNCATE по таблицам: `workout_exercises, workout_sessions, ban_history, renewal_requests, activity_feed, purchases, boosts, player_stats, partnerships, subscriptions, promo_codes_archive, promo_codes, users` с `RESTART IDENTITY CASCADE`.
+- Прогон прошёл: `/start` + ADMIN_PROMO_CODE → admin → P-код (PE…) → второй TG-аккаунт `/start` + PE… → партнёрство создаётся без 23502.
+
+### Известные нюансы
+- `storage.objects` нельзя чистить через `DELETE FROM storage.objects` напрямую (триггер `protect_delete` + owner=`supabase_storage_admin`). Для очистки storage — Dashboard UI или Storage API под Service Role Key.
+- Миграция 017 применена, но end-to-end тренировочный loop с Gemini ещё не прогонялся.
+
+### 🔜 Первое действие следующей сессии
+1. Прогнать full workout loop на реальном Telegram: старт → 2-3 подхода → finish → проверить `workout_sessions`/`workout_exercises`/`player_stats.star_balance`.
+2. Если Gemini video-input не работает на 2.5-flash — переключить `MODEL_PRIMARY` в `backend/services/workout_vision.py` на `gemini-2.0-flash`.
+3. Далее: Админ-архитектура (NULL partnership как Игрок) ИЛИ переработка Маркета — спросить пользователя.
+
+---
+
+## ✅ Выполнено в сессии 20 (2026-04-19) — Workout Session Interface (200_workoutSessionMachine)
+
+### Архитектура
+- **FSM-контракт 1:1** с `fsm_blueprints/200_workoutSessionMachine.ts`, но без xstate — `useReducer` в `frontend/src/fsm/workoutSessionMachine.ts`.
+- **Разделение слоёв**:
+  - FSM (pure reducer) — `frontend/src/fsm/workoutSessionMachine.ts`
+  - Hardware (Camera + MediaRecorder + WakeLock + таймер) — inside `WorkoutScreen.tsx`
+  - API — `frontend/src/api/workout.ts`
+  - UI/CSS — `WorkoutScreen.css` (Telegram theme vars, mobile-first, safe-area insets)
+- **Контракт BE↔FE**: `backend/core/workout_config.py` — единый источник `EXERCISES[16]`, длительностей фаз, MAX_STARS. FE забирает через `GET /workout/config`.
+
+### Backend изменения
+1. **`backend/db/migrations/017_workout_sessions.sql`** (НОВАЯ) — таблицы `workout_sessions` (status: in_progress|finished|cancelled, total_score, stars_earned) + `workout_exercises` (UNIQUE session_id+exercise_idx, ai_score 0..100, feedback). Индексы + CHECK constraints.
+2. **`backend/core/workout_config.py`** (НОВАЯ) — dataclass `Exercise`, 16 упражнений, константы `PREPARE_SEC=5 / EXERCISE_SEC=40 / REST_SEC=90 / REVIEW_SEC=5`, `MAX_STARS_PER_SESSION=50`.
+3. **`backend/services/workout_vision.py`** (НОВАЯ) — Gemini Vision async `analyze_exercise_clip(video_bytes, mime, Exercise) -> {score, feedback}`; `gemini-2.5-flash` → fallback `gemini-2.0-flash`; JSON-only response; tolerant parse; never raises (возвращает 0 при ошибке).
+4. **`backend/api/routers/workout.py`** (НОВЫЙ) — `GET /workout/config`, `POST /workout/start` (убивает stale in_progress), `POST /workout/clip` (multipart → Storage bucket `workout-clips` + Gemini), `POST /workout/finish` (считает total/avg/stars, апдейтит `player_stats.star_balance` + streak), `POST /workout/cancel`. Только role=player.
+5. **`backend/main.py`** — зарегистрирован `workout_router`.
+
+### Frontend изменения
+1. **`frontend/src/api/workout.ts`** (НОВЫЙ) — `getWorkoutConfig`, `startWorkoutSession` (отправляет tz_offset_min), `uploadWorkoutClip` (multipart, timeout 90s), `finishWorkoutSession`, `cancelWorkoutSession`.
+2. **`frontend/src/fsm/workoutSessionMachine.ts`** (НОВЫЙ) — useReducer FSM, типы `WorkoutState/Event/Context`, 1:1 с blueprint.
+3. **`frontend/src/components/workout/WorkoutScreen.tsx`** (НОВЫЙ) — fullscreen z-index 9999; `getUserMedia({facingMode:'user'})` в idle→start; WakeLock + re-acquire на visibilitychange; MediaRecorder 1.5 Mbps (vp9→vp8→mp4 fallback); phase timer 250ms тик; upload верdict приходит во время rest-фазы; `aiVerdictReview` showing score+feedback; `finishSession` → `/workout/finish` + звёзды; кнопка × → `/workout/cancel`. Haptic feedback на все переходы.
+4. **`frontend/src/components/workout/WorkoutScreen.css`** (НОВЫЙ) — mobile-first, Telegram theme vars, `env(safe-area-inset-*)`, REC-dot pulse animation, phase-specific badges, центральная карточка c backdrop-blur.
+5. **`frontend/src/components/cubes/ActionCube.tsx`** — кнопка «Приступим» → `setWorkoutOpen(true)` → `<WorkoutScreen onClose={...} />` (portal через fixed-inset). Добавлен `workoutOpen` state + handler с haptic.
+
+### Stack проверки
+- ✅ `npx tsc --noEmit -p tsconfig.json` → exit 0 (типы зелёные)
+
+### Pending перед деплоем
+1. Применить миграцию `017_workout_sessions.sql` в Supabase SQL Editor.
+2. Создать bucket `workout-clips` в Supabase Storage (private, policies optional для MVP).
+3. Убедиться, что `GEMINI_API_KEY` (Railway env) имеет доступ к `gemini-2.5-flash` video input.
+
+### Acceptance Criteria
+1. Player → ActionCube → «Приступим» → запрос камеры → экран idle «Готовы?»
+2. «Начать» → preparePhase 5s countdown → exercisingPhase 40s с REC-точкой → restAndAnalyzingPhase 90s (во время отдыха приезжает verdict)
+3. aiVerdictReview: показывается score% + feedback + «Дальше»
+4. После 16го подхода → finishSession → `/workout/finish` → `total_score`, `stars_earned`, `player_stats.star_balance += stars`, `last_workout_date=today`, `current_streak` инкрементируется корректно
+5. Кнопка × в любой момент → `/workout/cancel` → `status='cancelled'`, `finished_at=now`, камера/wakelock отпускаются
+6. Stale in_progress сессия при повторном старте автоматически cancel'ится
+
+### Коммит
+- Не закоммичено (пуш локально).
+
+### 🔜 Первое действие следующей сессии
+1. Применить миграцию 017 + создать Storage bucket `workout-clips` (см. Pending).
+2. Прогнать full loop на реальном Telegram: старт → 2-3 подхода → finish → проверить `workout_sessions`/`workout_exercises`/`player_stats.star_balance`.
+3. Если Gemini video-input не работает на 2.5-flash — переключить `MODEL_PRIMARY` в `backend/services/workout_vision.py` на `gemini-2.0-flash`.
+4. Далее: Админ-архитектура (NULL partnership как Игрок) ИЛИ переработка Маркета — спросить пользователя.
 
 ---
 
@@ -569,11 +690,8 @@ claude --dangerously-skip-permissions
 
 ## 🔜 Что дальше (приоритет)
 
-### 1. Тренировочный интерфейс (ГЛАВНАЯ ЦЕЛЬ)
-- Кнопка "Приступим" → `200_workoutSessionMachine`
-- Камера (getUserMedia, landscape lock), WakeLock, таймер 35 мин
-- Запись кусками → Gemini Vision → звёзды
-- FSM: `200_workoutSessionMachine.ts`
+### 1. Тренировочный интерфейс — ✅ РЕАЛИЗОВАН в сессии 20
+Осталось: миграция 017 + Storage bucket + end-to-end тест с Gemini.
 
 ### 2. Архитектура Админа (ОТЛОЖЕНО)
 Обе роли без промокодов, NULL partnership как Игрок.
@@ -581,7 +699,7 @@ claude --dangerously-skip-permissions
 ### 3. Глобальная переработка Маркета (ОТЛОЖЕНО)
 Нативные лоты + лоты Ответственного, разные валюты.
 
-### 4. rootMachine обновление + Unit tests
+### 4. rootMachine обновление + Unit tests для `workoutSessionMachine` reducer
 
 ---
 
