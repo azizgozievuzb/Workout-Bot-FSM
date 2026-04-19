@@ -50,23 +50,32 @@ class ListPromoResponse(BaseModel):
     codes: list[PromoCodeInfo]
 
 
-class CreateResponsibleCodeReq(BaseModel):
+class CreateTierCodeReq(BaseModel):
     access_tier: Literal['standard', 'premium', 'elite'] = 'standard'
     duration_days: Literal[7, 30, 90, 180]
 
 
-class CreateResponsibleCodeResp(BaseModel):
+class CreateTierCodeResp(BaseModel):
     code: str
     expires_at: str | None = None
 
 
 class CreateRenewalCodeReq(BaseModel):
-    access_tier: Literal['standard', 'premium', 'elite']
     duration_days: Literal[7, 30, 90, 180]
 
 
 class CreateRenewalCodeResp(BaseModel):
     code: str
+
+
+class CreateBonusPackReq(BaseModel):
+    freeze_count: int = Field(ge=1, le=100)
+    price_stars: int = Field(ge=0, le=100000)
+
+
+class CreateBonusPackResp(BaseModel):
+    code: str
+    code_type: str
 
 
 class PlayerStats(BaseModel):
@@ -107,10 +116,12 @@ class ConnectionsResponse(BaseModel):
 
 
 class BatchBuyReq(BaseModel):
-    code_type: Literal['responsible', 'player', 'renewal']
-    tier: Literal['standard', 'premium', 'elite'] = 'standard'
+    code_type: Literal['responsible', 'player', 'renewal', 'bonus_pack_shop', 'bonus_pack_gift']
+    tier: Literal['standard', 'premium', 'elite'] | None = 'standard'
     duration: Literal[7, 30, 90, 180] = 30
     count: int = Field(ge=1, le=50, default=1)
+    freeze_count: int | None = None
+    price_stars: int | None = None
 
 
 class BatchBuyResp(BaseModel):
@@ -149,12 +160,17 @@ def _gen_prefixed(role_letter: str, access_tier: str) -> str:
     return f"{role_letter}{tl}" + "".join(choices(alphabet, k=6))
 
 
-def _gen_renewal(access_tier: str) -> str:
-    """Renewal code (given by Admin to Responsible, applied to a Player).
-    Format: RN<tier_letter><5 random> → 8 chars total."""
+def _gen_renewal() -> str:
+    """Renewal code. Format: RN + 6 random = 8 chars."""
     alphabet = string.ascii_uppercase + string.digits
-    tl = _TIER_LETTER.get(access_tier, "S")
-    return f"RN{tl}" + "".join(choices(alphabet, k=5))
+    return "RN" + "".join(choices(alphabet, k=6))
+
+
+def _gen_bonus_pack(kind: str) -> str:
+    """Bonus pack code. Format: BD<S|G> + 5 random = 8 chars."""
+    alphabet = string.ascii_uppercase + string.digits
+    letter = "S" if kind == "shop" else "G"
+    return f"BD{letter}" + "".join(choices(alphabet, k=5))
 
 
 def _generate_responsible_code() -> str:
@@ -250,35 +266,32 @@ async def list_promos(
 
 
 # ---------------------------------------------------------------------------
-# POST /admin/promo/responsible  — create R-code with tier + duration
+# POST /admin/promo/tier  — create R-code with tier + duration
 # ---------------------------------------------------------------------------
 
-@router.post("/responsible", response_model=CreateResponsibleCodeResp)
-async def create_responsible_code(
-    body: CreateResponsibleCodeReq,
+@router.post("/tier", response_model=CreateTierCodeResp)
+async def create_tier_code(
+    body: CreateTierCodeReq,
     admin: dict = Depends(require_admin),
 ):
     db = await get_supabase()
-    # R-code format: R<tier_letter><6 random> (e.g. RE7FG2XB for Elite)
     code = _gen_prefixed("R", body.access_tier)
     await (
         db.table("promo_codes")
         .insert({
             "code": code,
             "code_type": "responsible",
-            "tier": "basic",
             "access_tier": body.access_tier,
             "is_used": False,
             "duration_days": body.duration_days,
-            "is_renewal": False,
         })
         .execute()
     )
-    return CreateResponsibleCodeResp(code=code)
+    return CreateTierCodeResp(code=code)
 
 
 # ---------------------------------------------------------------------------
-# POST /admin/promo/renewal  — create renewal P-code (for Responsible to give Player)
+# POST /admin/promo/renewal
 # ---------------------------------------------------------------------------
 
 @router.post("/renewal", response_model=CreateRenewalCodeResp)
@@ -287,25 +300,73 @@ async def create_renewal_code(
     admin: dict = Depends(require_admin),
 ):
     db = await get_supabase()
-    import uuid as _uuid
-    # Renewal code format: RN<tier_letter><5 random>
-    code = _gen_renewal(body.access_tier)
+    code = _gen_renewal()
     await (
         db.table("promo_codes")
         .insert({
             "code": code,
-            "code_type": "player",
-            "tier": "basic",
-            "access_tier": body.access_tier,
+            "code_type": "renewal",
+            "access_tier": None,
             "is_used": False,
             "duration_days": body.duration_days,
-            "is_renewal": True,
-            "responsible_id": None,
-            "deep_link_token": str(_uuid.uuid4()),
         })
         .execute()
     )
     return CreateRenewalCodeResp(code=code)
+
+
+# ---------------------------------------------------------------------------
+# POST /admin/promo/bonus-pack-shop
+# ---------------------------------------------------------------------------
+
+@router.post("/bonus-pack-shop", response_model=CreateBonusPackResp)
+async def create_bonus_pack_shop(
+    body: CreateBonusPackReq,
+    admin: dict = Depends(require_admin),
+):
+    db = await get_supabase()
+    code = _gen_bonus_pack("shop")
+    await (
+        db.table("promo_codes")
+        .insert({
+            "code": code,
+            "code_type": "bonus_pack_shop",
+            "access_tier": None,
+            "is_used": False,
+            "duration_days": 0,
+            "freeze_count": body.freeze_count,
+            "price_stars": body.price_stars,
+        })
+        .execute()
+    )
+    return CreateBonusPackResp(code=code, code_type="bonus_pack_shop")
+
+
+# ---------------------------------------------------------------------------
+# POST /admin/promo/bonus-pack-gift
+# ---------------------------------------------------------------------------
+
+@router.post("/bonus-pack-gift", response_model=CreateBonusPackResp)
+async def create_bonus_pack_gift(
+    body: CreateBonusPackReq,
+    admin: dict = Depends(require_admin),
+):
+    db = await get_supabase()
+    code = _gen_bonus_pack("gift")
+    await (
+        db.table("promo_codes")
+        .insert({
+            "code": code,
+            "code_type": "bonus_pack_gift",
+            "access_tier": None,
+            "is_used": False,
+            "duration_days": 0,
+            "freeze_count": body.freeze_count,
+            "price_stars": body.price_stars,
+        })
+        .execute()
+    )
+    return CreateBonusPackResp(code=code, code_type="bonus_pack_gift")
 
 
 # ---------------------------------------------------------------------------
@@ -451,35 +512,52 @@ async def get_connections(current_user: dict = Depends(get_current_user)):
 # POST /admin/codes/batch-buy
 # ---------------------------------------------------------------------------
 
-def _generate_batch_code(code_type: str, access_tier: str) -> str:
-    """Batch-code format matches the canonical prefix spec:
-       R<tier>... | P<tier>... | RN<tier>... (tier letter = S/P/E)."""
+def _generate_batch_code(code_type: str, tier: str | None) -> str:
     if code_type == 'responsible':
-        return _gen_prefixed("R", access_tier)
+        return _gen_prefixed("R", tier or "standard")
+    if code_type == 'player':
+        return _gen_prefixed("P", tier or "standard")
     if code_type == 'renewal':
-        return _gen_renewal(access_tier)
-    return _gen_prefixed("P", access_tier)
+        return _gen_renewal()
+    if code_type == 'bonus_pack_shop':
+        return _gen_bonus_pack("shop")
+    return _gen_bonus_pack("gift")
 
 
 @general_router.post("/codes/batch-buy", response_model=BatchBuyResp, tags=["admin"])
 async def batch_buy_codes(body: BatchBuyReq, admin: dict = Depends(require_admin)):
+    is_bonus = body.code_type in ('bonus_pack_shop', 'bonus_pack_gift')
+    if is_bonus and (body.freeze_count is None or body.price_stars is None):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="freeze_count and price_stars required for bonus_pack types",
+        )
+
     db = await get_supabase()
     codes: list[str] = []
     rows: list[dict] = []
-    is_renewal = body.code_type == 'renewal'
-    db_code_type = 'player' if is_renewal else body.code_type
+
     for _ in range(body.count):
         code = _generate_batch_code(body.code_type, body.tier)
         codes.append(code)
-        rows.append({
+        row: dict = {
             "code": code,
-            "code_type": db_code_type,
-            "tier": "basic",
-            "access_tier": body.tier,
+            "code_type": body.code_type,
             "is_used": False,
-            "duration_days": body.duration,
-            "is_renewal": is_renewal,
-        })
+        }
+        if body.code_type in ('responsible', 'player'):
+            row["access_tier"] = body.tier
+            row["duration_days"] = body.duration
+        elif body.code_type == 'renewal':
+            row["access_tier"] = None
+            row["duration_days"] = body.duration
+        else:
+            row["access_tier"] = None
+            row["duration_days"] = 0
+            row["freeze_count"] = body.freeze_count
+            row["price_stars"] = body.price_stars
+        rows.append(row)
+
     await db.table("promo_codes").insert(rows).execute()
     return BatchBuyResp(codes=codes, total_stars_cost=0)
 
