@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from ...core.deps import get_current_user
 from ...db.client import get_supabase
+from ...services.notifications import emit_notification
 
 router = APIRouter(prefix="/shop", tags=["shop"])
 
@@ -545,16 +546,13 @@ async def gift_freeze(
         )
         raise HTTPException(status_code=409, detail={"code": "RACE"})
 
-    await (
-        db.table("notifications")
-        .insert({
-            "user_id": target_player_id,
-            "type": "freeze_gift",
-            "title": "🎁 Подарок от Ответственного",
-            "message": body.message or "",
-            "payload": {"freeze_count": body.freeze_count, "from_user_id": me_id},
-        })
-        .execute()
+    await emit_notification(
+        db,
+        user_id=target_player_id,
+        type="freeze_gift",
+        title="🎁 Подарок от Ответственного",
+        message=body.message or "",
+        payload={"freeze_count": body.freeze_count, "from_user_id": me_id},
     )
 
     return GiftFreezeResp(

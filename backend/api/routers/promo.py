@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from ...core.config import settings
 from ...core.deps import get_current_user
 from ...db.client import get_supabase
+from ...services.notifications import emit_notification
 
 router = APIRouter(prefix="/promo", tags=["promo"])
 
@@ -794,7 +795,7 @@ async def apply_renewal(req: ApplyRenewalReq, current_user: dict = Depends(get_c
     now_iso = now.isoformat()
     active_res = await (
         db.table("partnerships")
-        .select("id, expires_at")
+        .select("id, player_id, expires_at")
         .eq("responsible_id", user_id)
         .gt("expires_at", now_iso)
         .execute()
@@ -840,6 +841,17 @@ async def apply_renewal(req: ApplyRenewalReq, current_user: dict = Depends(get_c
             .eq("id", pair["id"])
             .execute()
         )
+
+        player_id = pair.get("player_id")
+        if player_id:
+            await emit_notification(
+                db,
+                user_id=player_id,
+                type="partnership_renewed",
+                title="✨ Доступ продлён",
+                message=f"Ответственный продлил твой доступ на {duration_days} дн.",
+                payload={"duration_days": duration_days, "new_expires_at": new_expires},
+            )
 
     return ApplyRenewalResp(renewed_count=len(pairs), added_days=duration_days)
 
@@ -907,10 +919,12 @@ async def apply_bonus_pack(req: ApplyBonusPackReq, current_user: dict = Depends(
         kind = "shop"
         balance_field = "shop_freeze_balance"
         current = current_shop
+        pocket_label = "Магазин"
     else:
         kind = "gift"
         balance_field = "gift_freeze_balance"
         current = current_gift
+        pocket_label = "Подарки"
 
     # Optimistic update with 1 retry on race
     for _ in range(2):
@@ -922,6 +936,14 @@ async def apply_bonus_pack(req: ApplyBonusPackReq, current_user: dict = Depends(
             .execute()
         )
         if upd_res.data:
+            await emit_notification(
+                db,
+                user_id=user_id,
+                type="bonus_pack_credited",
+                title="❄️ Пачка заморозок зачислена",
+                message=f"+{add} шт. в кошелёк «{pocket_label}»",
+                payload={"freeze_count": add, "pocket": kind},
+            )
             return ApplyBonusPackResp(kind=kind, added=add, new_balance=current + add)
         fresh_res = await (
             db.table("users")

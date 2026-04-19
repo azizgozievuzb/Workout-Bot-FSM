@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from ...core.deps import get_current_user
 from ...db.client import get_supabase
 from ...services.fsm.onboarding_fsm import OnboardingService
+from ...services.notifications import emit_notification
 
 router = APIRouter(prefix="/partnerships", tags=["partnerships"])
 
@@ -287,6 +288,15 @@ async def delete_partnership(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"code": "NOT_YOUR_PARTNERSHIP"})
 
     player_id = pair["player_id"]
+
+    await emit_notification(
+        db,
+        user_id=player_id,
+        type="partnership_deleted",
+        title="🚪 Партнёрство завершено",
+        message="Ответственный удалил ваше партнёрство.",
+        payload={"responsible_id": me_id},
+    )
 
     await (
         db.table("partnerships")
