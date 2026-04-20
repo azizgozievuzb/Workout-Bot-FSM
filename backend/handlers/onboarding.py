@@ -357,7 +357,7 @@ async def process_text_input(message: types.Message) -> None:
                         "telegram_id": tg.id,
                         "telegram_username": tg.username,
                         "first_name": tg.first_name,
-                        "access_tier": "elite",
+                        "responsible_access_tier": "elite",
                     })
                     .eq("id", existing_admin.data["id"])
                     .execute()
@@ -376,7 +376,7 @@ async def process_text_input(message: types.Message) -> None:
                             "has_responsible_access": True,
                             "primary_role": "responsible",
                             "role": "responsible",
-                            "access_tier": "elite",  # admin always Elite
+                            "responsible_access_tier": "elite",  # admin always Elite
                             "onboarding_state": "onboardingComplete",
                             "onboarding_done": True,
                         },
@@ -422,7 +422,7 @@ async def process_text_input(message: types.Message) -> None:
             # Fetch responsible (name + tier for slot limit)
             resp_res = await (
                 db.table("users")
-                .select("first_name, access_tier")
+                .select("first_name, responsible_access_tier")
                 .eq("id", responsible_id)
                 .maybe_single()
                 .execute()
@@ -431,7 +431,7 @@ async def process_text_input(message: types.Message) -> None:
                 await message.answer("Ответственный не найден.")
                 return
             responsible_name = resp_res.data.get("first_name") or "Ответственный"
-            resp_tier = resp_res.data.get("access_tier") or "standard"
+            resp_tier = resp_res.data.get("responsible_access_tier") or "standard"
 
             # Slot limit
             TIER_LIMITS = {"standard": 1, "premium": 2, "elite": 3}
@@ -461,7 +461,7 @@ async def process_text_input(message: types.Message) -> None:
                         "role": "player",
                         "primary_role": "player",
                         "has_player_access": True,
-                        "access_tier": p_access_tier,
+                        "player_access_tier": p_access_tier,
                         "deactivated_at": None,
                         "scheduled_deletion_at": None,
                         "onboarding_state": "onboardingComplete",
@@ -548,7 +548,7 @@ async def process_text_input(message: types.Message) -> None:
                     "role": "responsible",
                     "primary_role": "responsible",
                     "has_responsible_access": True,
-                    "access_tier": access_tier,
+                    "responsible_access_tier": access_tier,
                     "onboarding_state": "onboardingComplete",
                     "onboarding_done": True,
                 },

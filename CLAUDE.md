@@ -58,15 +58,32 @@
 
 ## 📢 AGENT PROMPT-DELIVERY RULE (PERMANENT)
 
-Когда агент (архитектор-постановщик задач) выдаёт пользователю промпт **именно для Claude Code CLI** (тот что запускается локально через `claude --dangerously-skip-permissions`), **ОБЯЗАТЕЛЬНО** в сообщении помимо самого промпта указывать:
+Когда агент (архитектор-постановщик задач) выдаёт пользователю промпт **именно для Claude Code CLI** (тот что запускается локально через `claude --dangerously-skip-permissions`), **ОБЯЗАТЕЛЬНО** перед самим промптом дать блок **Meta** с 4 полями. Эти настройки — CLI-сторона (пользователь настраивает сессию), НЕ вставлять их внутрь текста промпта.
 
-1. **Recommended effort** — `think` / `think hard` / `think harder` / `ultrathink` (в зависимости от сложности задачи).
-2. **Transcript View hint** — напомнить запустить с `Ctrl+R` (показывает полный tool output / reasoning в реальном времени) для задач с множественными file edits.
+**Формат Meta-блока (перед промптом):**
 
-Формат в конце промпт-блока:
 ```
-⚙️ Effort: `think hard` (или другое)
-👁 Transcript View: нажми Ctrl+R после запуска claude для отслеживания tool-calls
+**Meta:**
+- 🧠 Model: `/model <alias>`  (opus = 4.7, sonnet = 4.6, haiku = 4.5)
+- ⚙️ Reasoning effort: low | medium | high | xhigh (только opus 4.7) | max
+- 💭 Ultrathink: да / нет  (если да — добавить слово `ultrathink` в конец промпта)
+- 👁 Transcript: Ctrl+O  (toggle детального tool-output — включать для задач с множеством file-edits)
 ```
+
+**Правила подбора Model + Effort:**
+
+| Сложность задачи | Model | Effort | Ultrathink |
+|---|---|---|---|
+| Trivial cleanup, dead-code | `haiku` | `medium` | нет |
+| Одно-файловый фикс, средняя логика | `sonnet` | `medium` | нет |
+| Multi-file + осторожная логика | `sonnet` | `high` | нет |
+| Race conditions / security-critical | `sonnet` | `high` | опционально |
+| Multi-file архитектурный рефакторинг + миграция | `opus` | `xhigh` | да |
+| Самые сложные one-shot задачи (новая FSM, сложные алгоритмы) | `opus` | `max` | да |
 
 **НЕ применяется** к промптам для Cowork-чатов, Claude.ai web, или других интерфейсов — там этих фич нет.
+
+**Источники (актуально на апрель 2026):**
+- Effort levels: https://code.claude.com/docs/en/model-config
+- Transcript toggle (Ctrl+O): https://code.claude.com/docs/en/interactive-mode
+- Ultrathink как one-off: https://code.claude.com/docs/en/common-workflows
