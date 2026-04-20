@@ -18,7 +18,6 @@ from .api.routers.admin_settings import router as admin_settings_router
 from .api.routers.auth import router as auth_router
 from .api.routers.partnerships import router as partnerships_router
 from .api.routers.promo import router as promo_router
-from .api.routers.renewal import router as renewal_router
 from .api.routers.users import router as users_router
 from .api.routers.stats import router as stats_router
 from .api.routers.shop import router as shop_router
@@ -101,7 +100,6 @@ app.include_router(users_router)
 app.include_router(partnerships_router)
 app.include_router(activity_feed_router)
 app.include_router(promo_router)
-app.include_router(renewal_router)
 app.include_router(admin_router)
 app.include_router(admin_general_router)
 app.include_router(admin_settings_router)

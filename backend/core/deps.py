@@ -1,7 +1,7 @@
 """FastAPI dependencies: текущий пользователь из JWT."""
 import logging
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from functools import lru_cache
 
 from fastapi import Depends, HTTPException, status
@@ -65,8 +65,8 @@ async def get_current_user(
 ) -> dict:
     """
     Dependency: декодирует JWT из Authorization: Bearer <token>.
-    Для роли player: доступ разрешён только при наличии живой строки в promo_codes
-    (code_type='player', activated_by=tg_id, expires_at > now()). Иначе → 403 PROMO_EXPIRED.
+    Для роли player: доступ разрешён только при наличии live-партнёрства
+    (partnerships.player_id=user.id, expires_at > now()). Иначе → 403 PROMO_EXPIRED.
     """
     payload = decode_access_token(credentials.credentials)
     telegram_id = payload.get("sub")
@@ -120,52 +120,41 @@ async def get_current_user(
         from ..db.client import get_supabase
         db = await get_supabase()
 
-        # Fast path: already deactivated — no extra query needed
+        # Onboarding fast-path: role='new' or onboarding_done=False → skip TTL
         user_res = await (
             db.table("users")
-            .select("deactivated_at, onboarding_done")
+            .select("id, onboarding_done")
             .eq("telegram_id", tg_id)
             .maybe_single()
             .execute()
         )
-
-        # Пользователь ещё в онбординге — пропускаем TTL-проверку
         if role == "new" or (
             user_res and user_res.data and not user_res.data.get("onboarding_done", True)
         ):
             return {"telegram_id": tg_id, "role": role}
-        if user_res and user_res.data and user_res.data.get("deactivated_at"):
+
+        if not user_res or not user_res.data:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail={"code": "PROMO_EXPIRED"},
+                detail={"code": "NO_ACCESS"},
             )
 
-        # Authoritative check: live promo_codes row
-        now = datetime.now(timezone.utc)
-        promo_res = await (
-            db.table("promo_codes")
-            .select("id, expires_at")
-            .eq("code_type", "player")
-            .eq("activated_by", tg_id)
-            .gt("expires_at", now.isoformat())
-            .maybe_single()
+        user_uuid = user_res.data["id"]
+
+        # Authoritative TTL: live partnership with expires_at > now()
+        now_iso = datetime.now(timezone.utc).isoformat()
+        part_res = await (
+            db.table("partnerships")
+            .select("id")
+            .eq("player_id", user_uuid)
+            .gt("expires_at", now_iso)
+            .limit(1)
             .execute()
         )
 
-        if not promo_res or not promo_res.data:
-            # Self-heal: stamp deactivated_at so Job C can clean up
-            if user_res and user_res.data and not user_res.data.get("deactivated_at"):
-                await (
-                    db.table("users")
-                    .update({
-                        "deactivated_at": now.isoformat(),
-                        "scheduled_deletion_at": (now + timedelta(days=30)).isoformat(),
-                    })
-                    .eq("telegram_id", tg_id)
-                    .execute()
-                )
+        if not part_res.data:
             if _mark_revoked_logged(tg_id):
-                logger.info("player %s revoked: no live promo_codes row", tg_id)
+                logger.info("player %s revoked: no active partnership", tg_id)
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail={"code": "PROMO_EXPIRED"},
