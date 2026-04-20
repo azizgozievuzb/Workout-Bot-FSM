@@ -131,6 +131,19 @@ async def get_shop_items(
                 detail={"code": "PLAYER_ID_REQUIRED"},
             )
         target_player_id = str(player_id)
+        ownership = await (
+            db.table("partnerships")
+            .select("player_id")
+            .eq("responsible_id", me_id)
+            .eq("player_id", target_player_id)
+            .limit(1)
+            .execute()
+        )
+        if not (ownership.data or []):
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "NOT_YOUR_PLAYER"},
+            )
     else:
         raise HTTPException(status_code=403, detail="Forbidden")
 

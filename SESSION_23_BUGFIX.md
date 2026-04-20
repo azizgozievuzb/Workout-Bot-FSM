@@ -33,7 +33,7 @@
 
 ---
 
-### [ ] B3 — Race: optimistic lock на streak_freeze_balance в purchase
+### [x] B3 — Race: optimistic lock на streak_freeze_balance в purchase — commit `8cf6abf`
 
 **Meta (вне промпта):**
 - ⚙️ Effort: `think hard`
@@ -401,7 +401,7 @@ Task: При DELETE /partnerships/{id} отправлять Player-у прямо
 
 ## 📊 Прогресс
 
-- [ ] B3 — streak_freeze race fix
+- [x] B3 — streak_freeze race fix (`8cf6abf`)
 - [ ] B4 — shop/items privacy guard
 - [ ] B5 — resurrect_partnership_id rename
 - [ ] B6 — legacy /admin/promo/create remove
