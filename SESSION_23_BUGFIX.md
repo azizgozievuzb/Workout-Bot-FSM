@@ -92,7 +92,7 @@ Task: Fix race condition on player_stats.streak_freeze_balance в POST /shop/pur
 
 ---
 
-### [ ] B4 — Privacy: GET /shop/items проверяет ownership partnership
+### [x] B4 — Privacy: GET /shop/items проверяет ownership partnership — commit `d13a954`
 
 **Meta (вне промпта):**
 - ⚙️ Effort: `think`
@@ -402,7 +402,7 @@ Task: При DELETE /partnerships/{id} отправлять Player-у прямо
 ## 📊 Прогресс
 
 - [x] B3 — streak_freeze race fix (`8cf6abf`)
-- [ ] B4 — shop/items privacy guard
+- [x] B4 — shop/items privacy guard (`d13a954`)
 - [ ] B5 — resurrect_partnership_id rename
 - [ ] B6 — legacy /admin/promo/create remove
 - [ ] B7 — dual-role tiers split (миграция 021)

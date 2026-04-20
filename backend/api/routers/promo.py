@@ -33,7 +33,7 @@ TIER_PLAYER_LIMITS: dict[str, int] = {
 
 class ActivatePromoRequest(BaseModel):
     code: str
-    resurrect_player_id: uuid.UUID | None = None
+    resurrect_partnership_id: uuid.UUID | None = None
     delete_others: bool = False
 
 
@@ -444,8 +444,8 @@ async def activate_promo(
         duration_days = code_row.get("duration_days") or 30
         now = datetime.now(timezone.utc)
 
-        if body.resurrect_player_id is not None:
-            resurrect_id_str = str(body.resurrect_player_id)
+        if body.resurrect_partnership_id is not None:
+            resurrect_id_str = str(body.resurrect_partnership_id)
             now_iso = now.isoformat()
             resurrect_res = await (
                 db.table("partnerships")
