@@ -254,4 +254,7 @@ def create_scheduler(bot) -> AsyncIOScheduler:
         replace_existing=True,
     )
 
+    from .subscription_lifecycle import register_subscription_jobs
+    register_subscription_jobs(scheduler)
+
     return scheduler
