@@ -1,4 +1,5 @@
 """Shop API — MarketCube (subscription v2)."""
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Literal
@@ -9,6 +10,8 @@ from pydantic import BaseModel, Field
 from ...core.deps import get_current_user
 from ...db.client import get_supabase
 from ...services.notifications import emit_notification
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/shop", tags=["shop"])
 
@@ -404,12 +407,62 @@ async def purchase_item(
 
     if item_type == "streak_freeze":
         cur_freeze = int(stats_res.data.get("streak_freeze_balance") or 0)
-        await (
-            db.table("player_stats")
-            .update({"streak_freeze_balance": cur_freeze + freeze_count})
-            .eq("player_id", user_id)
-            .execute()
-        )
+        new_freeze = cur_freeze + freeze_count
+        bumped = False
+        for _ in range(2):
+            upd_res = await (
+                db.table("player_stats")
+                .update({"streak_freeze_balance": new_freeze})
+                .eq("player_id", user_id)
+                .eq("streak_freeze_balance", cur_freeze)
+                .execute()
+            )
+            if upd_res.data:
+                bumped = True
+                break
+            fresh_res = await (
+                db.table("player_stats")
+                .select("streak_freeze_balance")
+                .eq("player_id", user_id)
+                .single()
+                .execute()
+            )
+            cur_freeze = int(fresh_res.data.get("streak_freeze_balance") or 0)
+            new_freeze = cur_freeze + freeze_count
+
+        if not bumped:
+            # Rollback star_balance (optimistic, max 3 attempts)
+            rolled_back = False
+            cur_bal = new_balance
+            target_bal = balance
+            for _ in range(3):
+                rb_res = await (
+                    db.table("player_stats")
+                    .update({"star_balance": target_bal})
+                    .eq("player_id", user_id)
+                    .eq("star_balance", cur_bal)
+                    .execute()
+                )
+                if rb_res.data:
+                    rolled_back = True
+                    break
+                fresh_bal_res = await (
+                    db.table("player_stats")
+                    .select("star_balance")
+                    .eq("player_id", user_id)
+                    .single()
+                    .execute()
+                )
+                cur_bal = int(fresh_bal_res.data.get("star_balance") or 0)
+                target_bal = cur_bal + price
+            if not rolled_back:
+                logger.critical(
+                    "freeze purchase rollback FAILED user=%s amount=%s",
+                    user_id,
+                    price,
+                )
+            raise HTTPException(status_code=409, detail={"code": "RACE"})
+
         await (
             db.table("shop_items")
             .delete()

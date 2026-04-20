@@ -181,24 +181,24 @@ Do NOT touch: <что нельзя задевать>
 - [x] Dual-role: для юзера с ролями P+R отдать оба тира.
 
 ### 2.6 Notifications (`backend/api/routers/notifications.py` — новый)
-- [ ] `GET /notifications` — список уведомлений юзера, paginated, newest first. Включает `is_read`.
-- [ ] `POST /notifications/{id}/read` — mark single as read.
-- [ ] `POST /notifications/read-all` — mark all as read.
-- [ ] `GET /notifications/unread-count` — {count: int} для badge-polling.
-- [ ] **Notification bus** (`backend/services/notifications.py` — новый): helper-функция `emit_notification(user_id, type, title, message, payload)` — единая точка создания. Вызывается из всех роутеров (gift-freeze, renewal apply, scheduler expiry-warn, shop purchase и т.д.). Типы растут итеративно — добавляем по мере разработки новых фич.
+- [x] `GET /notifications` — список уведомлений юзера, paginated, newest first. Включает `is_read`.
+- [x] `POST /notifications/{id}/read` — mark single as read.
+- [x] `POST /notifications/read-all` — mark all as read.
+- [x] `GET /notifications/unread-count` — {count: int} для badge-polling.
+- [x] **Notification bus** (`backend/services/notifications.py` — новый): helper-функция `emit_notification(user_id, type, title, message, payload)` — единая точка создания. Вызывается из всех роутеров (gift-freeze, renewal apply, scheduler expiry-warn, shop purchase и т.д.). Типы растут итеративно — добавляем по мере разработки новых фич.
 
 ### 2.6.1 Rest-day ручное использование (`backend/api/routers/player.py` или `workout.py`)
-- [ ] `POST /player/use-rest-day` — валидация: `users.gender='female'`, `rest_days_remaining > 0`, `last_rest_day_date != today`. Атомарно: `rest_days_remaining -= 1` + `last_rest_day_date = today` + `rest_days_used_this_month += 1`. Возвращает новые значения.
+- [x] `POST /player/use-rest-day` — валидация: `users.gender='female'`, `rest_days_remaining > 0`, `last_rest_day_date != today`. Атомарно: `rest_days_remaining -= 1` + `last_rest_day_date = today` + `rest_days_used_this_month += 1`. Возвращает новые значения.
 
 ### 2.7 Scheduler (`backend/schedulers/`)
-- [ ] Job E (новый, daily midnight+tz): для каждого Player у которого вчера был стрик но не было workout_session И `last_rest_day_date != вчера` → consume `streak_freeze_balance` (-= 1), если == 0 → `current_streak = 0`. **rest_days в этом job НЕ трогаем** — их списывает только ручная кнопка.
-- [ ] Job F (новый, daily): DELETE workout_sessions + workout_exercises WHERE `player_id IN (SELECT player_id FROM partnerships WHERE expires_at < now() - 90 days AND status != 'deleted')`.
-- [ ] (Опционально) Job G: DELETE partnerships WHERE expires_at < now() - 90 days — чтобы окончательно освободить слоты (у Responsible может быть забытый мёртвый партнёр).
+- [x] Job E (новый, daily midnight+tz): для каждого Player у которого вчера был стрик но не было workout_session И `last_rest_day_date != вчера` → consume `streak_freeze_balance` (-= 1), если == 0 → `current_streak = 0`. **rest_days в этом job НЕ трогаем** — их списывает только ручная кнопка.
+- [x] Job F (новый, daily): DELETE workout_sessions + workout_exercises WHERE `player_id IN (SELECT player_id FROM partnerships WHERE expires_at < now() - 90 days AND status != 'deleted')`.
+- [x] (Опционально) Job G: DELETE partnerships WHERE expires_at < now() - 90 days — чтобы окончательно освободить слоты (у Responsible может быть забытый мёртвый партнёр).
 
 ### 2.8 Удалить/переделать
-- [ ] Убрать старую scheduler-логику TTL для `promo_codes` (Jobs A/B/C) — она теперь не нужна, подписка живёт в `partnerships`. Переписать на проверку `partnerships.expires_at`.
-- [ ] Убрать `renewal_requests` механизм — больше не нужен (Renewal применяется Responsible-ом сам).
-- [ ] `backend/core/deps.py`: TTL-проверка для player теперь `partnership.expires_at > now()`, а не `promo_codes.expires_at`.
+- [x] Убрать старую scheduler-логику TTL для `promo_codes` (Jobs A/B/C) — она теперь не нужна, подписка живёт в `partnerships`. Переписать на проверку `partnerships.expires_at`.
+- [x] Убрать `renewal_requests` механизм — больше не нужен (Renewal применяется Responsible-ом сам).
+- [x] `backend/core/deps.py`: TTL-проверка для player теперь `partnership.expires_at > now()`, а не `promo_codes.expires_at`.
 
 ---
 

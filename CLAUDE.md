@@ -53,3 +53,20 @@
 4. If writing code, verify against FSM logic.
 5. Update `SESSION_STATUS.md` upon task completion.
 6. Stop generating text immediately after the technical objective is met.
+
+---
+
+## 📢 AGENT PROMPT-DELIVERY RULE (PERMANENT)
+
+Когда агент (архитектор-постановщик задач) выдаёт пользователю промпт **именно для Claude Code CLI** (тот что запускается локально через `claude --dangerously-skip-permissions`), **ОБЯЗАТЕЛЬНО** в сообщении помимо самого промпта указывать:
+
+1. **Recommended effort** — `think` / `think hard` / `think harder` / `ultrathink` (в зависимости от сложности задачи).
+2. **Transcript View hint** — напомнить запустить с `Ctrl+R` (показывает полный tool output / reasoning в реальном времени) для задач с множественными file edits.
+
+Формат в конце промпт-блока:
+```
+⚙️ Effort: `think hard` (или другое)
+👁 Transcript View: нажми Ctrl+R после запуска claude для отслеживания tool-calls
+```
+
+**НЕ применяется** к промптам для Cowork-чатов, Claude.ai web, или других интерфейсов — там этих фич нет.

@@ -1,0 +1,29 @@
+fsm_blueprints/000_rootMachine.ts(28,36): error TS2367: This comparison appears to be unintentional because the types '"START_APP" | "PAYMENT_OK" | "RETRY"' and '"done.invoke.fetchProfile"' have no overlap.
+fsm_blueprints/000_rootMachine.ts(28,87): error TS2339: Property 'output' does not exist on type 'never'.
+fsm_blueprints/000_rootMachine.ts(28,112): error TS2339: Property 'output' does not exist on type 'never'.
+fsm_blueprints/000_rootMachine.ts(31,31): error TS2367: This comparison appears to be unintentional because the types '"START_APP" | "PAYMENT_OK" | "RETRY"' and '"done.invoke.fetchProfile"' have no overlap.
+fsm_blueprints/000_rootMachine.ts(31,83): error TS2339: Property 'output' does not exist on type 'never'.
+fsm_blueprints/000_rootMachine.ts(31,108): error TS2339: Property 'output' does not exist on type 'never'.
+fsm_blueprints/000_rootMachine.ts(55,9): error TS2353: Object literal may only specify known properties, and 'src' does not exist in type 'readonly never[]'.
+fsm_blueprints/000_rootMachine.ts(73,9): error TS2353: Object literal may only specify known properties, and 'src' does not exist in type 'readonly never[]'.
+fsm_blueprints/100_paymentMachine.ts(55,9): error TS2353: Object literal may only specify known properties, and 'src' does not exist in type 'readonly never[]'.
+fsm_blueprints/101_onboardingMachine.ts(101,9): error TS2353: Object literal may only specify known properties, and 'src' does not exist in type 'readonly never[]'.
+fsm_blueprints/101_onboardingMachine.ts(121,9): error TS2353: Object literal may only specify known properties, and 'src' does not exist in type 'readonly never[]'.
+fsm_blueprints/102_adminMachine.ts(62,9): error TS2353: Object literal may only specify known properties, and 'src' does not exist in type 'readonly never[]'.
+fsm_blueprints/102_adminMachine.ts(86,9): error TS2353: Object literal may only specify known properties, and 'src' does not exist in type 'readonly never[]'.
+fsm_blueprints/103_workoutGateMachine.ts(49,9): error TS2353: Object literal may only specify known properties, and 'src' does not exist in type 'readonly never[]'.
+fsm_blueprints/103_workoutGateMachine.ts(82,9): error TS2353: Object literal may only specify known properties, and 'src' does not exist in type 'readonly never[]'.
+fsm_blueprints/103_workoutGateMachine.ts(97,9): error TS2353: Object literal may only specify known properties, and 'src' does not exist in type 'readonly never[]'.
+fsm_blueprints/104_responsibleMachine.ts(33,47): error TS2339: Property 'stats' does not exist on type '{ type: "REFRESH_STATS"; stats: any; } | { type: "OPEN_SHOP"; } | { type: "BUY_DAY_BOOST"; } | { type: "BUY_WEEK_BOOST"; } | { type: "SEND_PING"; } | { type: "PAYMENT_SUCCESS"; boostType: "1_day" | "1_week"; } | { ...; } | { ...; }'.
+  Property 'stats' does not exist on type '{ type: "OPEN_SHOP"; }'.
+fsm_blueprints/104_responsibleMachine.ts(34,49): error TS2339: Property 'stats' does not exist on type '{ type: "REFRESH_STATS"; stats: any; } | { type: "OPEN_SHOP"; } | { type: "BUY_DAY_BOOST"; } | { type: "BUY_WEEK_BOOST"; } | { type: "SEND_PING"; } | { type: "PAYMENT_SUCCESS"; boostType: "1_day" | "1_week"; } | { ...; } | { ...; }'.
+  Property 'stats' does not exist on type '{ type: "OPEN_SHOP"; }'.
+fsm_blueprints/104_responsibleMachine.ts(35,41): error TS2339: Property 'stats' does not exist on type '{ type: "REFRESH_STATS"; stats: any; } | { type: "OPEN_SHOP"; } | { type: "BUY_DAY_BOOST"; } | { type: "BUY_WEEK_BOOST"; } | { type: "SEND_PING"; } | { type: "PAYMENT_SUCCESS"; boostType: "1_day" | "1_week"; } | { ...; } | { ...; }'.
+  Property 'stats' does not exist on type '{ type: "OPEN_SHOP"; }'.
+fsm_blueprints/104_responsibleMachine.ts(36,47): error TS2339: Property 'stats' does not exist on type '{ type: "REFRESH_STATS"; stats: any; } | { type: "OPEN_SHOP"; } | { type: "BUY_DAY_BOOST"; } | { type: "BUY_WEEK_BOOST"; } | { type: "SEND_PING"; } | { type: "PAYMENT_SUCCESS"; boostType: "1_day" | "1_week"; } | { ...; } | { ...; }'.
+  Property 'stats' does not exist on type '{ type: "OPEN_SHOP"; }'.
+fsm_blueprints/104_responsibleMachine.ts(71,9): error TS2353: Object literal may only specify known properties, and 'src' does not exist in type 'readonly never[]'.
+fsm_blueprints/104_responsibleMachine.ts(98,9): error TS2353: Object literal may only specify known properties, and 'src' does not exist in type 'readonly never[]'.
+fsm_blueprints/104_responsibleMachine.ts(123,9): error TS2353: Object literal may only specify known properties, and 'src' does not exist in type 'readonly never[]'.
+fsm_blueprints/105_playerShopMachine.ts(79,9): error TS2353: Object literal may only specify known properties, and 'src' does not exist in type 'readonly never[]'.
+fsm_blueprints/200_workoutSessionMachine.ts(76,9): error TS2353: Object literal may only specify known properties, and 'src' does not exist in type 'readonly never[]'.

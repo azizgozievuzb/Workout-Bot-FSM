@@ -1,34 +1,42 @@
 # SESSION STATUS — Session 23 handoff
 
-## ✅ Завершено в сессии 23 (этапы 1 → 2.5)
+## ✅ Завершено в сессии 23 (Backend — этапы 1 → 2.8)
 - Этап 1: migration 020_subscription_model_v2.sql → commit `dbf1a98`
 - Этап 2.1: admin.py (5 типов промо) → commit `83b87dd`
 - Этап 2.2: promo.py (apply-renewal/apply-bonus-pack, resurrect/delete_others) → commit `0c83f7b`
 - Этап 2.3: shop.py (per-player лоты, gift-freeze) → commit `c49769a`
 - Этап 2.4: partnerships.py (DELETE /{id}, my-players с TTL) → commit `4a2babd`
 - Этап 2.5: auth.py (TokenResponse v2) → commit `143c730`
+- Этап 2.6: notifications (bus + router + wire emit в shop/promo/partnerships) → commit `e9e2526`
+- Этап 2.6.1: POST /player/use-rest-day (female-only) → commit `bfcd16c`
+- Hotfix deps: python-multipart для workout /clip → commit `d9b3b00`
+- Этап 2.7: Scheduler Jobs E/F/G (subscription_lifecycle.py) → commit `1ed72bd`
+- Этап 2.8: TTL → partnerships.expires_at, снесены Jobs A/B/C, удалён renewal router → commit `ec1891a`
+
+**Backend v2 готов.** Дальше — Frontend refactor (этапы 3.1-3.9).
 
 ## 📦 Догнано попутно
 - Session 20 workout stack (router + vision + migrations 017/019 + frontend) → commit `e70ba4a`
 - Legacy cleanup → commit `7efb8a5`
 
 ## ▶️ Следующая точка входа (новый чат)
-**Этап 2.6 — Notification Center (backend)**
-- Новый `backend/services/notifications.py` → `emit_notification(db, user_id, type, title, message, payload)` — bus-хелпер
-- Новый `backend/api/routers/notifications.py`:
-  - `GET /notifications?limit=50&offset=0`
-  - `POST /notifications/{id}/read`
-  - `POST /notifications/read-all`
-  - `GET /notifications/unread-count`
-- Подключить router в `backend/api/main.py`
-- Точки emit'а (расставить в существующих роутерах, но физический emit сделаем в 2.6):
-  - shop.py → `gift_freeze_received` (уже вставлено в 2.3 как INSERT — перевести на сервис)
-  - promo.py → `partnership_renewed`, `bonus_pack_credited`
-  - partnerships.py → `partnership_deleted`
+**Этап 3.1 — Frontend Store refactor (`frontend/src/stores/authStore.ts`)**
+- Заменить `accessTier` на пару `ownAccessTier` + `playerViewTier`.
+- Добавить state: `shopFreezeBalance`, `giftFreezeBalance` (Responsible), `streakFreezeBalance`, `restDaysRemaining` (Player), `hasActivePartnerships` (Responsible), `unreadNotifications` (все), `daysLeft` (Player).
+- Геттер `effectiveTier = activeRoleView === 'player' ? playerViewTier : ownAccessTier`.
+- LocalStorage persistence для критичных полей (cache hit на старте).
+- Миграция всех использований `authStore.accessTier` → `effectiveTier` (в 3.9).
 
-## 🔜 Далее
-- 2.6.1 — POST /player/use-rest-day (женщины, manual)
-- 2.7 — Scheduler: Job E (streak_freeze auto), Job F (hard-delete старых workout_sessions), Job G (cleanup истёкших partnerships >90d)
+Далее по плану:
+- 3.2 API clients (admin/promo/partnerships/shop/notifications)
+- 3.3 AdminCube — CodeGeneratorPanel (4 таба)
+- 3.4 ResponsibleCube (ActionCube) — wallets, players list, RenewalModal, TierChangeModal, BonusPackModal, GiftFreezeModal
+- 3.5 MarketCube — раздельные магазины per player + streak-freeze лоты
+- 3.6 PlayerCube (ActionCube) — tier/days/freeze/rest-day UI + manual rest-day button
+- 3.7 TierMatrixScreen
+- 3.8 Notification Center в BondCube (NotificationList + NotificationRenderer registry)
+- 3.9 Global search-replace accessTier → effectiveTier
+- Этап 4 — Acceptance tests (из SESSION_23_PLAN.md)
 - 2.8 — Cleanup: `core/deps.py` TTL → partnerships.expires_at; снести Jobs A/B/C; удалить `renewal_requests`
 - 3.1–3.9 — Frontend refactor
 - 4 — Acceptance
