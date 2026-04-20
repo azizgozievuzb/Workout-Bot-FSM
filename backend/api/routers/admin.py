@@ -24,16 +24,6 @@ admin_bot_router = AiogramRouter(name="admin_promo")
 # Schemas
 # ---------------------------------------------------------------------------
 
-class CreatePromoRequest(BaseModel):
-    tier: str = "basic"       # basic | premium
-    count: int = 1
-    duration_days: int = 30   # 7 | 30 | 90
-
-
-class CreatePromoResponse(BaseModel):
-    codes: list[str]
-
-
 class PromoCodeInfo(BaseModel):
     id: str
     code: str
@@ -173,11 +163,6 @@ def _gen_bonus_pack(kind: str) -> str:
     return f"BD{letter}" + "".join(choices(alphabet, k=5))
 
 
-def _generate_responsible_code() -> str:
-    # Legacy basic-tier generator retained for back-compat (/admin/promo/create)
-    return _gen_prefixed("R", "standard")
-
-
 async def _require_admin(current_user: dict):
     db = await get_supabase()
     user_res = await (
@@ -189,45 +174,6 @@ async def _require_admin(current_user: dict):
     )
     if not user_res.data.get("is_admin"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
-
-
-# ---------------------------------------------------------------------------
-# POST /admin/promo/create
-# ---------------------------------------------------------------------------
-
-@router.post("/create", response_model=CreatePromoResponse)
-async def create_promo(
-    body: CreatePromoRequest,
-    current_user: dict = Depends(get_current_user),
-):
-    await _require_admin(current_user)
-
-    if body.tier not in ("basic", "premium"):
-        raise HTTPException(status_code=400, detail="tier must be 'basic' or 'premium'")
-    if body.count < 1 or body.count > 50:
-        raise HTTPException(status_code=400, detail="count must be 1-50")
-    if body.duration_days not in (7, 30, 90):
-        raise HTTPException(status_code=400, detail="duration_days must be 7, 30 or 90")
-
-    db = await get_supabase()
-    codes: list[str] = []
-
-    for _ in range(body.count):
-        code = _generate_responsible_code()
-        await (
-            db.table("promo_codes")
-            .insert({
-                "code": code,
-                "code_type": "responsible",
-                "tier": body.tier,
-                "is_used": False,
-                "duration_days": body.duration_days,
-            })
-            .execute()
-        )
-        codes.append(code)
-
-    return CreatePromoResponse(codes=codes)
 
 
 # ---------------------------------------------------------------------------

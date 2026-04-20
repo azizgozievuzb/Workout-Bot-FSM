@@ -138,7 +138,7 @@ GET /shop/items?player_id=<X> для Responsible-а НЕ проверяет, ч�
 
 ---
 
-### [ ] B5 — Rename resurrect_player_id → resurrect_partnership_id
+### [x] B5 — Rename resurrect_player_id → resurrect_partnership_id — commit `9876e68`
 
 **Meta (вне промпта):**
 - ⚙️ Effort: `think`
@@ -403,7 +403,7 @@ Task: При DELETE /partnerships/{id} отправлять Player-у прямо
 
 - [x] B3 — streak_freeze race fix (`8cf6abf`)
 - [x] B4 — shop/items privacy guard (`d13a954`)
-- [ ] B5 — resurrect_partnership_id rename
+- [x] B5 — resurrect_partnership_id rename (`9876e68`)
 - [ ] B6 — legacy /admin/promo/create remove
 - [ ] B7 — dual-role tiers split (миграция 021)
 - [ ] B8 — Telegram bot notify on partnership delete
