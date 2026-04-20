@@ -193,7 +193,7 @@ async def my_players(current_user: dict = Depends(get_current_user)) -> list[MyP
 
     users_res = await (
         db.table("users")
-        .select("id, telegram_id, first_name, profile_photo_url, access_tier, deactivated_at")
+        .select("id, telegram_id, first_name, profile_photo_url, player_access_tier, deactivated_at")
         .in_("id", player_ids)
         .execute()
     )
@@ -234,7 +234,7 @@ async def my_players(current_user: dict = Depends(get_current_user)) -> list[MyP
             telegram_id=u["telegram_id"],
             first_name=u.get("first_name"),
             profile_photo_url=u.get("profile_photo_url"),
-            access_tier=u.get("access_tier") or "standard",
+            access_tier=u.get("player_access_tier") or "standard",
             expires_at=exp_raw,
             is_expired=is_expired,
             days_left=days_left,
@@ -330,7 +330,7 @@ async def delete_partnership(
         else:
             await (
                 db.table("users")
-                .update({"has_player_access": False, "access_tier": None})
+                .update({"has_player_access": False, "player_access_tier": None})
                 .eq("id", player_id)
                 .execute()
             )

@@ -201,7 +201,7 @@ async def _activate_player_code(db, user_id: str, telegram_id: int, code_row: di
     # Fetch responsible: name + tier for slot-limit check
     resp_res = await (
         db.table("users")
-        .select("first_name, access_tier")
+        .select("first_name, responsible_access_tier")
         .eq("id", responsible_id)
         .maybe_single()
         .execute()
@@ -211,7 +211,7 @@ async def _activate_player_code(db, user_id: str, telegram_id: int, code_row: di
     responsible_name = resp_res.data.get("first_name", "Ответственный")
 
     # Enforce player slot limit based on responsible's tier
-    resp_tier = resp_res.data.get("access_tier") or "standard"
+    resp_tier = resp_res.data.get("responsible_access_tier") or "standard"
     slot_limit = TIER_PLAYER_LIMITS.get(resp_tier, 1)
     count_res = await (
         db.table("partnerships")
@@ -247,7 +247,7 @@ async def _activate_player_code(db, user_id: str, telegram_id: int, code_row: di
 
     user_update: dict = {
         "has_player_access": True,
-        "access_tier": code_tier,
+        "player_access_tier": code_tier,
         "deactivated_at": None,
         "scheduled_deletion_at": None,
     }
@@ -352,7 +352,7 @@ async def activate_promo(
                 "has_player_access": False,
                 "has_responsible_access": True,
                 "primary_role": "responsible",
-                "access_tier": "elite",
+                "responsible_access_tier": "elite",
                 "onboarding_done": True,
             })
             .eq("telegram_id", telegram_id)
@@ -425,7 +425,7 @@ async def activate_promo(
         # Fetch user's current state for dual-role preservation
         state_res = await (
             db.table("users")
-            .select("is_admin, has_responsible_access, access_tier")
+            .select("is_admin, has_responsible_access")
             .eq("id", user_id)
             .maybe_single()
             .execute()
@@ -480,7 +480,7 @@ async def activate_promo(
         # Always: update user role fields
         user_update: dict = {
             "has_responsible_access": True,
-            "access_tier": r_access_tier,
+            "responsible_access_tier": r_access_tier,
             "subscription_tier": code_row.get("tier", "basic"),
         }
         if not is_dual:
@@ -662,17 +662,15 @@ async def new_player_code(
     )
     user_id = user_res.data["id"]
 
-    # Resolve tier: inherit from Responsible's own activated R-code
+    # Resolve tier: inherit from Responsible's own stored tier
     tier_res = await (
-        db.table("promo_codes")
-        .select("access_tier")
-        .eq("responsible_id", user_id)
-        .eq("code_type", "responsible")
-        .eq("is_used", True)
+        db.table("users")
+        .select("responsible_access_tier")
+        .eq("id", user_id)
         .maybe_single()
         .execute()
     )
-    inherited_tier = (tier_res.data.get("access_tier") if tier_res and tier_res.data else None) or "standard"
+    inherited_tier = (tier_res.data.get("responsible_access_tier") if tier_res and tier_res.data else None) or "standard"
 
     # Expire all existing unused player codes for this responsible
     await (

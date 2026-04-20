@@ -182,7 +182,7 @@ Task: Переименовать поле `resurrect_player_id` → `resurrect_p
 
 ---
 
-### [ ] B6 — Remove legacy POST /admin/promo/create
+### [x] B6 — Remove legacy POST /admin/promo/create — commit `05788b7`
 
 **Meta (вне промпта):**
 - ⚙️ Effort: `think`
@@ -404,7 +404,7 @@ Task: При DELETE /partnerships/{id} отправлять Player-у прямо
 - [x] B3 — streak_freeze race fix (`8cf6abf`)
 - [x] B4 — shop/items privacy guard (`d13a954`)
 - [x] B5 — resurrect_partnership_id rename (`9876e68`)
-- [ ] B6 — legacy /admin/promo/create remove
+- [x] B6 — legacy /admin/promo/create remove (`05788b7`)
 - [ ] B7 — dual-role tiers split (миграция 021)
 - [ ] B8 — Telegram bot notify on partnership delete
 - [ ] Full E2E re-run TEST_PLAN_SESSION_23.md
