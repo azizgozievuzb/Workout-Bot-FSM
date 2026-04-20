@@ -3,7 +3,9 @@ import logging
 import time
 from datetime import datetime, timezone
 from functools import lru_cache
+from typing import Optional
 
+from aiogram import Bot
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
@@ -11,6 +13,22 @@ from .security import decode_access_token
 
 logger = logging.getLogger(__name__)
 bearer_scheme = HTTPBearer()
+
+# ---------------------------------------------------------------------------
+# Bot singleton (set once at startup by main.py)
+# ---------------------------------------------------------------------------
+_bot: Optional[Bot] = None
+
+
+def set_bot(bot: Bot) -> None:
+    global _bot
+    _bot = bot
+
+
+def get_bot() -> Bot:
+    if _bot is None:
+        raise RuntimeError("Bot not initialised — call set_bot() in lifespan")
+    return _bot
 
 # ---------------------------------------------------------------------------
 # app_settings cache (30-second TTL)

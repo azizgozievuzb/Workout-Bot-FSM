@@ -9,8 +9,9 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from ...core.deps import get_current_user
+from ...core.deps import get_bot, get_current_user
 from ...db.client import get_supabase
+from ...services.bot_notify import send_bot_message
 from ...services.fsm.onboarding_fsm import OnboardingService
 from ...services.notifications import emit_notification
 
@@ -289,6 +290,20 @@ async def delete_partnership(
 
     player_id = pair["player_id"]
 
+    # Fetch player's telegram_id BEFORE any cascade deletion
+    player_tg_res = await (
+        db.table("users")
+        .select("telegram_id")
+        .eq("id", player_id)
+        .maybe_single()
+        .execute()
+    )
+    player_tg = (
+        player_tg_res.data.get("telegram_id")
+        if player_tg_res and player_tg_res.data
+        else None
+    )
+
     await emit_notification(
         db,
         user_id=player_id,
@@ -334,5 +349,12 @@ async def delete_partnership(
                 .eq("id", player_id)
                 .execute()
             )
+
+    if player_tg:
+        await send_bot_message(
+            get_bot(),
+            int(player_tg),
+            "🚪 Ваше партнёрство завершено. Вы теперь свободны. Новый Ответственный может пригласить вас по P-коду.",
+        )
 
     return DeletePartnershipResp(deleted=True, player_hard_deleted=player_hard_deleted)

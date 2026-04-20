@@ -67,7 +67,7 @@
 - 🧠 Model: `/model <alias>`  (opus = 4.7, sonnet = 4.6, haiku = 4.5)
 - ⚙️ Reasoning effort: low | medium | high | xhigh (только opus 4.7) | max
 - 💭 Ultrathink: да / нет  (если да — добавить слово `ultrathink` в конец промпта)
-- 👁 Transcript: Ctrl+O  (toggle детального tool-output — включать для задач с множеством file-edits)
+- 👁 Transcript: Ctrl+O → пикер с 4 режимами: `Normal` (дефолт) / `Thinking` (показывает reasoning) / `Verbose` (все tool-calls + diffs) / `Summary` (только итоги). Для сложных multi-file задач — `Verbose`; для задач с `ultrathink` — `Thinking`.
 ```
 
 **Правила подбора Model + Effort:**

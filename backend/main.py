@@ -26,6 +26,7 @@ from .api.routers.workout import router as workout_router
 from .api.routers.player import router as player_router
 from .api.routers.notifications import router as notifications_router
 from .core.config import settings
+from .core.deps import set_bot
 from .handlers.onboarding import onboarding_router
 from .schedulers.promo_lifecycle import create_scheduler
 
@@ -40,6 +41,7 @@ bot = Bot(
     token=settings.BOT_TOKEN,
     default=DefaultBotProperties(parse_mode=ParseMode.HTML),
 )
+set_bot(bot)
 dp = Dispatcher()
 dp.include_router(onboarding_router)
 dp.include_router(admin_bot_router)
