@@ -62,7 +62,7 @@ export async function createResponsibleCode(
     tier: AccessTier,
     duration: DurationDays,
 ): Promise<CreateResponsibleCodeResponse> {
-    const res = await api.post('/admin/promo/responsible', { access_tier: tier, duration_days: duration });
+    const res = await api.post('/admin/promo/tier', { access_tier: tier, duration_days: duration });
     return res.data;
 }
 
