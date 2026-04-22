@@ -326,7 +326,7 @@ async def get_connections(current_user: dict = Depends(get_current_user)):
 
     resp_res = await (
         db.table("users")
-        .select("id, telegram_id, display_name, username")
+        .select("id, telegram_id, first_name, telegram_username")
         .eq("has_responsible_access", True)
         .execute()
     )
@@ -354,7 +354,7 @@ async def get_connections(current_user: dict = Depends(get_current_user)):
     if all_player_ids:
         pl_res = await (
             db.table("users")
-            .select("id, telegram_id, display_name, username, deactivated_at, ban_until, created_at")
+            .select("id, telegram_id, first_name, telegram_username, deactivated_at, ban_until, created_at")
             .in_("id", all_player_ids)
             .execute()
         )
@@ -424,8 +424,8 @@ async def get_connections(current_user: dict = Depends(get_current_user)):
                 players.append(PlayerInPair(
                     id=pl["id"],
                     telegram_id=pl["telegram_id"],
-                    display_name=pl.get("display_name"),
-                    username=pl.get("username"),
+                    display_name=pl.get("first_name"),
+                    username=pl.get("telegram_username"),
                     is_deactivated=bool(pl.get("deactivated_at")),
                     is_banned=is_banned,
                     ban_until=ban_until_raw if is_banned else None,
@@ -440,8 +440,8 @@ async def get_connections(current_user: dict = Depends(get_current_user)):
 
         groups.append(ResponsibleGroup(
             telegram_id=r["telegram_id"],
-            display_name=r.get("display_name"),
-            username=r.get("username"),
+            display_name=r.get("first_name"),
+            username=r.get("telegram_username"),
             players=players,
             stats=ResponsibleStats(
                 total_workouts=total_workouts,
@@ -546,7 +546,7 @@ async def get_ban_history(admin: dict = Depends(require_admin)):
     if user_ids:
         u_res = await (
             db.table("users")
-            .select("id, telegram_id, display_name")
+            .select("id, telegram_id, first_name")
             .in_("id", user_ids)
             .execute()
         )
@@ -568,7 +568,7 @@ async def get_ban_history(admin: dict = Depends(require_admin)):
         entries.append(BanHistoryEntry(
             id=r["id"],
             user_id=uid,
-            display_name=u.get("display_name"),
+            display_name=u.get("first_name"),
             telegram_id=u.get("telegram_id", 0),
             banned_at=r["banned_at"],
             ban_until=ban_until_raw,
