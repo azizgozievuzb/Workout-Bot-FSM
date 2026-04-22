@@ -511,6 +511,7 @@ async def process_text_input(message: types.Message) -> None:
                     "status": "active",
                     "pairing_code": _pc,
                     "pair_code": _pc,
+                    "expires_at": expires_at,
                 })
                 .execute()
             )
