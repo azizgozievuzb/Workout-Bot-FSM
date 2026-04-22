@@ -100,7 +100,7 @@ export function useAuth() {
             photoDarkUrl: data.photo_dark_url,
             photoLightUrl: data.photo_light_url,
           });
-          if (data.access_tier) setAccessTier(data.access_tier);
+          if (data.own_access_tier) setAccessTier(data.own_access_tier);
           // Show BanScreen immediately if user is banned (without waiting for a 403)
           if (data.ban_until) {
             setBanInfo({ until: data.ban_until, reason: data.ban_reason ?? null, missed: data.ban_missed ?? 0 });
