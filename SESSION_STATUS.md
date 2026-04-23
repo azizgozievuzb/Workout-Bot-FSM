@@ -1,6 +1,6 @@
 # SESSION STATUS — Session 26 (2026-04-23) — Этап 4: E2E Acceptance
 
-## ▶️ Следующая точка входа (новый чат) — §10 Ban + Maintenance
+## ▶️ Следующая точка входа (новый чат) — §11 Notifications
 
 **Состояние БД после §9 (2026-04-24):**
 - Admin (tg=32267272): is_admin=true, responsible_access_tier='elite', shop_freeze=10, gift_freeze=3
@@ -46,7 +46,8 @@
 - §7 Partnership DELETE ✅ 4/4 (все зелёные, 2026-04-23)
 - §8 Scheduler Jobs F/G ✅ 3/3 (все зелёные, 2026-04-23)
 - §9 Auth v2 TokenResponse ✅ 3/3 (9.4 skip — manual; 2026-04-24)
-- §10 Ban + Maintenance → **СЛЕДУЮЩИЙ**
+- §10 Ban + Maintenance ✅ 4/4 (2026-04-24)
+- §11 Notifications → **СЛЕДУЮЩИЙ**
 - §11 Notifications
 - §12 Legacy cleanup
 - §13 Edge Cases

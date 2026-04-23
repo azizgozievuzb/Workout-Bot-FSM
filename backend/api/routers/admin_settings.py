@@ -5,7 +5,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from ...core.config import settings
 from ...core.deps import require_admin, _invalidate_settings_cache
 from ...db.client import get_supabase
 
@@ -187,20 +186,3 @@ async def unban_user(user_id: UUID, user=Depends(require_admin)):
         .execute()
     )
     return {"banned": False}
-
-
-class _GenTokenReq(BaseModel):
-    secret: str
-    telegram_id: int
-    role: str = "player"
-
-
-@router.post("/debug/gen-test-token")
-async def debug_gen_test_token(body: _GenTokenReq):
-    """E2E bootstrap: validate SUPABASE_SERVICE_KEY, return JWT for given telegram_id+role."""
-    svc_key = settings.SUPABASE_SERVICE_KEY
-    if not svc_key or body.secret != svc_key:
-        raise HTTPException(status_code=401, detail="Invalid secret")
-    from ...core.security import create_access_token
-    token = create_access_token(body.telegram_id, body.role)
-    return {"access_token": token, "token_type": "bearer", "telegram_id": body.telegram_id, "role": body.role}
