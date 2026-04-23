@@ -1,0 +1,180 @@
+/* TierMatrixScreen — fullscreen tier comparison overlay */
+
+.tier-matrix-screen {
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+    background: var(--tg-theme-bg-color, #1a1714);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Header */
+
+.tier-matrix-header {
+    display: flex;
+    align-items: center;
+    padding: 16px 16px 12px;
+    gap: 12px;
+    flex-shrink: 0;
+    border-bottom: 1px solid rgba(128, 128, 128, 0.15);
+}
+
+.tier-matrix-back {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 22px;
+    color: var(--tg-theme-text-color, #fff);
+    padding: 4px 8px 4px 0;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.tier-matrix-title {
+    flex: 1;
+    text-align: center;
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--tg-theme-text-color, #fff);
+    margin: 0;
+    /* optical center — account for back button width */
+    margin-right: 40px;
+}
+
+/* Scrollable body */
+
+.tier-matrix-body {
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 20px 16px 0;
+}
+
+/* Grid: 4 cols (label + std + prm + elite) */
+
+.tier-matrix-table {
+    display: grid;
+    grid-template-columns: 1fr 72px 72px 72px;
+    gap: 0;
+    border-radius: 14px;
+    overflow: hidden;
+    border: 1px solid rgba(128, 128, 128, 0.15);
+}
+
+/* Column header row */
+
+.tier-matrix-col-header {
+    display: contents;
+}
+
+.tier-matrix-col-header-label {
+    background: rgba(128, 128, 128, 0.08);
+    padding: 10px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--tg-theme-hint-color, rgba(255,255,255,0.4));
+}
+
+.tier-matrix-col-header-cell {
+    background: rgba(128, 128, 128, 0.08);
+    padding: 10px 4px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    border-left: 1px solid rgba(128, 128, 128, 0.12);
+}
+
+.tier-matrix-col-header-cell--active {
+    background: rgba(124, 77, 255, 0.12);
+    border-top: 2px solid var(--tg-theme-button-color, #7c4dff);
+}
+
+.tier-matrix-col-name {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--tg-theme-hint-color, rgba(255,255,255,0.5));
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Data rows */
+
+.tier-matrix-row {
+    display: contents;
+}
+
+.tier-matrix-row:nth-child(odd) .tier-matrix-cell,
+.tier-matrix-row:nth-child(odd) .tier-matrix-cell--check,
+.tier-matrix-row:nth-child(odd) .tier-matrix-cell--cross {
+    background: rgba(128, 128, 128, 0.04);
+}
+
+.tier-matrix-cell-label {
+    padding: 12px 8px;
+    font-size: 13px;
+    color: var(--tg-theme-text-color, #fff);
+    display: flex;
+    align-items: center;
+    border-top: 1px solid rgba(128, 128, 128, 0.08);
+}
+
+.tier-matrix-cell {
+    padding: 12px 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--tg-theme-text-color, #fff);
+    border-left: 1px solid rgba(128, 128, 128, 0.12);
+    border-top: 1px solid rgba(128, 128, 128, 0.08);
+}
+
+.tier-matrix-cell--active-col {
+    background: rgba(124, 77, 255, 0.07) !important;
+    border-left: 1px solid rgba(124, 77, 255, 0.25);
+}
+
+.tier-matrix-cell--check {
+    color: #4caf50;
+}
+
+.tier-matrix-cell--cross {
+    color: var(--tg-theme-hint-color, rgba(255,255,255,0.35));
+}
+
+/* Footer */
+
+.tier-matrix-footer {
+    padding: 20px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+    flex-shrink: 0;
+}
+
+.tier-matrix-change-btn {
+    width: 100%;
+    padding: 15px;
+    border-radius: 14px;
+    border: none;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    background: var(--tg-theme-button-color, #7c4dff);
+    color: var(--tg-theme-button-text-color, #fff);
+}
+
+.tier-matrix-change-btn:active {
+    opacity: 0.8;
+}
+
+.tier-matrix-toast {
+    margin-top: 10px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--tg-theme-hint-color, rgba(255,255,255,0.5));
+    padding: 0 8px;
+}

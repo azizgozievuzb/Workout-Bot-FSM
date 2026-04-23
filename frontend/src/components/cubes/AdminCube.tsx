@@ -1,20 +1,19 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { hapticImpact, hapticNotification } from '../../utils/haptic';
 import {
-    listPromoCodes, getConnections, toggleMaintenance, unbanUser,
-    getMaintenanceStatus, getBanHistory,
+    getConnections, toggleMaintenance, unbanUser,
+    getMaintenanceStatus, getBanHistory, batchBuyCodes,
+    createResponsibleCode, createRenewalCode,
 } from '../../api/admin';
-import type { MaintenanceStatus, ResponsibleGroup, BanHistoryEntry } from '../../api/admin';
-import { createResponsibleCode, createRenewalCode } from '../../api/promo';
-import type { AccessTier, DurationDays } from '../../api/promo';
-import type { PromoCodeInfo } from '../../api/admin';
+import type { MaintenanceStatus, ResponsibleGroup, BanHistoryEntry, BatchCodeType } from '../../api/admin';
+import { getPromoList } from '../../api/promo';
+import type { AccessTier, DurationDays, PromoListItem } from '../../api/promo';
 import TierBadge from '../common/TierBadge';
 import BanUserModal from '../shared/BanUserModal';
-import BuyCodesModal from '../shared/BuyCodesModal';
 import '../../styles/cubes.css';
 
 type AdminTab = 'promos' | 'connections' | 'settings' | 'bans';
-type GeneratorMode = 'responsible' | 'renewal';
+type GeneratorMode = 'responsible' | 'renewal' | 'batch' | 'list';
 
 // ---------------------------------------------------------------------------
 // SettingsPanel
@@ -488,202 +487,275 @@ const BanHistoryPanel: React.FC = () => {
 };
 
 // ---------------------------------------------------------------------------
-// CodeGeneratorPanel
+// CodeGeneratorPanel — helpers
 // ---------------------------------------------------------------------------
 
 const TIER_OPTIONS: AccessTier[] = ['standard', 'premium', 'elite'];
-const TIER_LABELS: Record<AccessTier, string> = {
-    standard: 'Standard',
-    premium: 'Premium',
-    elite: 'Elite VIP',
-};
+const TIER_LABELS: Record<AccessTier, string> = { standard: 'Standard', premium: 'Premium', elite: 'Elite VIP' };
 const DURATION_OPTIONS: DurationDays[] = [7, 30, 90, 180];
+const COUNT_OPTIONS = [5, 10, 20, 50] as const;
+
+const TierSelector: React.FC<{ tier: AccessTier; onChange: (t: AccessTier) => void }> = ({ tier, onChange }) => (
+    <select
+        className="admin-generator-select"
+        value={tier}
+        onChange={(e) => { e.stopPropagation(); onChange(e.target.value as AccessTier); }}
+        onClick={(e) => e.stopPropagation()}
+    >
+        {TIER_OPTIONS.map(t => <option key={t} value={t}>{TIER_LABELS[t]}</option>)}
+    </select>
+);
+
+const DurationSelector: React.FC<{ duration: DurationDays; onChange: (d: DurationDays) => void }> = ({ duration, onChange }) => (
+    <select
+        className="admin-generator-select"
+        value={duration}
+        onChange={(e) => { e.stopPropagation(); onChange(Number(e.target.value) as DurationDays); }}
+        onClick={(e) => e.stopPropagation()}
+    >
+        {DURATION_OPTIONS.map(d => <option key={d} value={d}>{d} дней</option>)}
+    </select>
+);
+
+const CountSelector: React.FC<{ count: number; onChange: (n: number) => void }> = ({ count, onChange }) => (
+    <div className="count-selector">
+        {COUNT_OPTIONS.map(n => (
+            <button
+                key={n}
+                className={`count-selector-btn${count === n ? ' active' : ''}`}
+                onClick={(e) => { e.stopPropagation(); onChange(n); hapticImpact('light'); }}
+            >{n}</button>
+        ))}
+    </div>
+);
+
+// ---------------------------------------------------------------------------
+// CodeGeneratorPanel
+// ---------------------------------------------------------------------------
 
 const CodeGeneratorPanel: React.FC = () => {
     const [mode, setMode] = useState<GeneratorMode>('responsible');
+
+    // Single-code tabs state
     const [tier, setTier] = useState<AccessTier>('standard');
     const [duration, setDuration] = useState<DurationDays>(30);
     const [generating, setGenerating] = useState(false);
     const [generatedCode, setGeneratedCode] = useState<string | null>(null);
+
+    // Batch tab state
+    const [batchType, setBatchType] = useState<BatchCodeType>('responsible');
+    const [batchTier, setBatchTier] = useState<AccessTier>('standard');
+    const [batchDuration, setBatchDuration] = useState<DurationDays>(30);
+    const [batchCount, setBatchCount] = useState(10);
+    const [batchCodes, setBatchCodes] = useState<string[]>([]);
+    const [batchLoading, setBatchLoading] = useState(false);
+
+    // List tab state
+    const [listItems, setListItems] = useState<PromoListItem[]>([]);
+    const [listLoading, setListLoading] = useState(false);
+    const [listFilter, setListFilter] = useState<'all' | 'unused' | 'used'>('all');
+
     const [toast, setToast] = useState('');
+
+    const showToast = (msg: string, ms = 2000) => { setToast(msg); setTimeout(() => setToast(''), ms); };
+
+    const fetchList = useCallback(async () => {
+        setListLoading(true);
+        try {
+            const data = await getPromoList();
+            setListItems(data.codes);
+        } catch { /* ignore */ } finally {
+            setListLoading(false);
+        }
+    }, []);
+
+    useEffect(() => { if (mode === 'list') fetchList(); }, [mode, fetchList]);
 
     const handleGenerate = useCallback(async (e: React.MouseEvent) => {
         e.stopPropagation();
         setGenerating(true);
         try {
-            let code: string;
-            if (mode === 'responsible') {
-                const res = await createResponsibleCode(tier, duration);
-                code = res.code;
-            } else {
-                const res = await createRenewalCode(tier, duration);
-                code = res.code;
-            }
-            setGeneratedCode(code);
+            const res = mode === 'responsible'
+                ? await createResponsibleCode(tier, duration)
+                : await createRenewalCode(tier, duration);
+            setGeneratedCode(res.code);
             hapticImpact('medium');
         } catch {
-            setToast('Ошибка создания кода');
-            setTimeout(() => setToast(''), 2500);
+            showToast('Ошибка создания кода', 2500);
         } finally {
             setGenerating(false);
         }
     }, [mode, tier, duration]);
 
-    const copyToClipboard = useCallback((e: React.MouseEvent) => {
+    const handleBatch = useCallback(async (e: React.MouseEvent) => {
         e.stopPropagation();
-        if (!generatedCode) return;
-        navigator.clipboard.writeText(generatedCode);
+        setBatchLoading(true);
+        try {
+            const res = await batchBuyCodes({ code_type: batchType, tier: batchTier, duration: batchDuration, count: batchCount });
+            setBatchCodes(res.codes);
+            hapticNotification('success');
+        } catch {
+            showToast('Ошибка создания пачки', 2500);
+        } finally {
+            setBatchLoading(false);
+        }
+    }, [batchType, batchTier, batchDuration, batchCount]);
+
+    const copyCode = (code: string) => {
+        navigator.clipboard.writeText(code);
         hapticImpact('light');
-        setToast('Скопировано!');
-        setTimeout(() => setToast(''), 2000);
-    }, [generatedCode]);
+        showToast('Скопировано!', 1500);
+    };
+
+    const filteredList = listItems.filter(item => {
+        if (listFilter === 'unused') return !item.is_used;
+        if (listFilter === 'used') return item.is_used;
+        return true;
+    });
+
+    const switchMode = (m: GeneratorMode) => (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setMode(m);
+        setGeneratedCode(null);
+        setBatchCodes([]);
+        hapticImpact('light');
+    };
 
     return (
         <div className="admin-generator-form">
             <div className="tab-selector">
-                <button
-                    className={`tab-selector-btn${mode === 'responsible' ? ' active' : ''}`}
-                    onClick={(e) => { e.stopPropagation(); setMode('responsible'); setGeneratedCode(null); hapticImpact('light'); }}
-                >
-                    R-код
-                </button>
-                <button
-                    className={`tab-selector-btn${mode === 'renewal' ? ' active' : ''}`}
-                    onClick={(e) => { e.stopPropagation(); setMode('renewal'); setGeneratedCode(null); hapticImpact('light'); }}
-                >
-                    Renewal-код
-                </button>
+                {(['responsible', 'renewal', 'batch', 'list'] as GeneratorMode[]).map(m => (
+                    <button key={m} className={`tab-selector-btn${mode === m ? ' active' : ''}`} onClick={switchMode(m)}>
+                        {m === 'responsible' ? 'R-код' : m === 'renewal' ? 'Renewal' : m === 'batch' ? 'Пачка' : 'Список'}
+                    </button>
+                ))}
             </div>
-            <div className="admin-generator-hint">
-                {mode === 'responsible' ? 'Новый Ответственный' : 'Продление для Игрока'}
-            </div>
+
+            {/* Tab 1 — R-код */}
             {mode === 'responsible' && (
-                <select
-                    className="admin-generator-select"
-                    value={tier}
-                    onChange={(e) => { e.stopPropagation(); setTier(e.target.value as AccessTier); }}
-                    onClick={(e) => e.stopPropagation()}
-                >
-                    {TIER_OPTIONS.map(t => <option key={t} value={t}>{TIER_LABELS[t]}</option>)}
-                </select>
+                <>
+                    <TierSelector tier={tier} onChange={setTier} />
+                    <DurationSelector duration={duration} onChange={setDuration} />
+                    <button className="cube-btn-primary" onClick={handleGenerate} disabled={generating}>
+                        {generating ? 'Создаём...' : 'Создать'}
+                    </button>
+                    {generatedCode && (
+                        <div className="code-display">
+                            <TierBadge tier={tier} />
+                            <code className="code-display-text">{generatedCode}</code>
+                            <button className="cube-btn-sm" onClick={(e) => { e.stopPropagation(); copyCode(generatedCode); }}>📋</button>
+                        </div>
+                    )}
+                </>
             )}
-            <select
-                className="admin-generator-select"
-                value={duration}
-                onChange={(e) => { e.stopPropagation(); setDuration(Number(e.target.value) as DurationDays); }}
-                onClick={(e) => e.stopPropagation()}
-            >
-                {DURATION_OPTIONS.map(d => <option key={d} value={d}>{d} дней</option>)}
-            </select>
-            <button className="cube-btn-primary" onClick={handleGenerate} disabled={generating}>
-                {generating ? 'Создаём...' : 'Создать код'}
-            </button>
-            {generatedCode && (
-                <div className="code-display">
-                    <code className="code-display-text">{generatedCode}</code>
-                    <button className="cube-btn-sm" onClick={copyToClipboard}>📋</button>
-                    {mode === 'responsible' && <TierBadge tier={tier} />}
-                    <span className="code-display-meta">{duration} дн.</span>
-                </div>
+
+            {/* Tab 2 — Renewal-код (tier hidden, sent internally) */}
+            {mode === 'renewal' && (
+                <>
+                    <DurationSelector duration={duration} onChange={setDuration} />
+                    <button className="cube-btn-primary" onClick={handleGenerate} disabled={generating}>
+                        {generating ? 'Создаём...' : 'Создать'}
+                    </button>
+                    {generatedCode && (
+                        <div className="code-display">
+                            <code className="code-display-text">{generatedCode}</code>
+                            <button className="cube-btn-sm" onClick={(e) => { e.stopPropagation(); copyCode(generatedCode); }}>📋</button>
+                        </div>
+                    )}
+                </>
             )}
+
+            {/* Tab 3 — Пачка */}
+            {mode === 'batch' && (
+                <>
+                    <div className="tab-selector">
+                        {(['responsible', 'player', 'renewal'] as BatchCodeType[]).map(t => (
+                            <button
+                                key={t}
+                                className={`tab-selector-btn${batchType === t ? ' active' : ''}`}
+                                onClick={(e) => { e.stopPropagation(); setBatchType(t); setBatchCodes([]); hapticImpact('light'); }}
+                            >
+                                {t === 'responsible' ? 'R-коды' : t === 'player' ? 'P-коды' : 'Renewal'}
+                            </button>
+                        ))}
+                    </div>
+                    <TierSelector tier={batchTier} onChange={setBatchTier} />
+                    <DurationSelector duration={batchDuration} onChange={setBatchDuration} />
+                    <CountSelector count={batchCount} onChange={setBatchCount} />
+                    <button className="cube-btn-primary" onClick={handleBatch} disabled={batchLoading}>
+                        {batchLoading ? 'Создаём...' : `Создать пачку (${batchCount})`}
+                    </button>
+                    {batchCodes.length > 0 && (
+                        <>
+                            <button className="batch-copy-all-btn" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(batchCodes.join('\n')); hapticImpact('medium'); showToast('Все скопированы!', 1500); }}>
+                                Копировать все ({batchCodes.length})
+                            </button>
+                            <div className="batch-result-list">
+                                {batchCodes.map((c, i) => (
+                                    <div key={i} className="batch-result-item">
+                                        <code>{c}</code>
+                                        <button className="cube-btn-sm" onClick={(e) => { e.stopPropagation(); copyCode(c); }}>📋</button>
+                                    </div>
+                                ))}
+                            </div>
+                        </>
+                    )}
+                </>
+            )}
+
+            {/* Tab 4 — Список */}
+            {mode === 'list' && (
+                <>
+                    <div className="promo-filter-row">
+                        {(['all', 'unused', 'used'] as const).map(f => (
+                            <button
+                                key={f}
+                                className={`tab-selector-btn${listFilter === f ? ' active' : ''}`}
+                                onClick={(e) => { e.stopPropagation(); setListFilter(f); hapticImpact('light'); }}
+                            >
+                                {f === 'all' ? 'Все' : f === 'unused' ? 'Свободные' : 'Использованные'}
+                            </button>
+                        ))}
+                        <button className="cube-btn-sm" style={{ marginLeft: 'auto' }} onClick={(e) => { e.stopPropagation(); fetchList(); hapticImpact('light'); }}>↻</button>
+                    </div>
+                    {listLoading ? (
+                        <div className="code-display-skeleton">
+                            <div className="skeleton-row" /><div className="skeleton-row" /><div className="skeleton-row" />
+                        </div>
+                    ) : filteredList.length === 0 ? (
+                        <div className="cube-locked"><div className="cube-locked-text">Нет кодов</div></div>
+                    ) : (
+                        <div className="promo-list-table">
+                            {filteredList.map(item => (
+                                <div key={item.id} className="promo-list-row">
+                                    <span className={`promo-type-badge promo-type-badge--${item.code_type}`}>
+                                        {item.code_type === 'responsible' ? 'R' : item.code_type === 'renewal' ? 'RN' : 'P'}
+                                    </span>
+                                    <TierBadge tier={item.tier as AccessTier} />
+                                    <code className="code-display-text" style={{ fontSize: 12, flex: 1 }}>{item.code}</code>
+                                    <span className={`promo-type-badge${item.is_used ? ' promo-type-badge--used' : ' promo-type-badge--free'}`}>
+                                        {item.is_used ? 'Исп.' : 'Своб.'}
+                                    </span>
+                                    {!item.is_used && (
+                                        <button className="cube-btn-sm" onClick={(e) => { e.stopPropagation(); copyCode(item.code); }}>📋</button>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </>
+            )}
+
             {toast && <div className="admin-toast">{toast}</div>}
         </div>
     );
 };
 
 // ---------------------------------------------------------------------------
-// PromoListPanel
+// PromosPanel
 // ---------------------------------------------------------------------------
 
-const PromoListPanel: React.FC = () => {
-    const [codes, setCodes] = useState<PromoCodeInfo[]>([]);
-    const [loading, setLoading] = useState(false);
-    const [filterUsed, setFilterUsed] = useState<boolean | undefined>(undefined);
-
-    const fetchCodes = useCallback(async () => {
-        setLoading(true);
-        try {
-            const data = await listPromoCodes(filterUsed !== undefined ? { is_used: filterUsed } : undefined);
-            setCodes(data.codes);
-        } catch { /* ignore */ }
-        setLoading(false);
-    }, [filterUsed]);
-
-    useEffect(() => { fetchCodes(); }, [fetchCodes]);
-
-    return (
-        <>
-            <div className="cube-tabs">
-                {([undefined, false, true] as (boolean | undefined)[]).map((v, i) => (
-                    <button
-                        key={i}
-                        className={`cube-tab${filterUsed === v ? ' active' : ''}`}
-                        onClick={(e) => { e.stopPropagation(); setFilterUsed(v); }}
-                    >
-                        {v === undefined ? 'Все' : v === false ? 'Свободные' : 'Использованные'}
-                    </button>
-                ))}
-            </div>
-            {loading ? (
-                <div className="cube-section-title" style={{ textAlign: 'center' }}>Загрузка...</div>
-            ) : codes.length === 0 ? (
-                <div className="cube-locked"><div className="cube-locked-text">Промокодов пока нет</div></div>
-            ) : (
-                <div className="cube-card">
-                    {codes.map(c => (
-                        <div className="cube-player-row" key={c.id}>
-                            <div className="cube-avatar" style={{ fontSize: 14, fontFamily: 'monospace' }}>
-                                {c.code_type === 'responsible' ? 'R' : c.code_type === 'player' ? 'P' : 'A'}
-                            </div>
-                            <div className="cube-player-info">
-                                <div className="cube-player-name" style={{ fontFamily: 'monospace', letterSpacing: 1 }}>{c.code}</div>
-                                <div className="cube-player-meta">
-                                    {c.tier} · {c.is_used ? 'Использован' : 'Свободен'}
-                                    {c.created_at && ` · ${new Date(c.created_at).toLocaleDateString()}`}
-                                </div>
-                            </div>
-                            <div className="cube-player-actions">
-                                {!c.is_used && (
-                                    <button className="cube-btn-sm" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(c.code); }}>📋</button>
-                                )}
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            )}
-        </>
-    );
-};
-
-// ---------------------------------------------------------------------------
-// PromosPanel (generator + list combined)
-// ---------------------------------------------------------------------------
-
-const PromosPanel: React.FC = () => {
-    const [showGenerator, setShowGenerator] = useState(true);
-    const [buyModalOpen, setBuyModalOpen] = useState(false);
-    return (
-        <>
-            <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                    className={`cube-btn-secondary ${showGenerator ? 'active' : ''}`}
-                    style={{ flex: 1 }}
-                    onClick={(e) => { e.stopPropagation(); setShowGenerator(v => !v); }}
-                >
-                    {showGenerator ? 'Список кодов' : 'Создать код'}
-                </button>
-                <button
-                    className="cube-btn-secondary"
-                    onClick={(e) => { e.stopPropagation(); setBuyModalOpen(true); hapticImpact('light'); }}
-                >
-                    Купить пачку
-                </button>
-            </div>
-            {showGenerator ? <CodeGeneratorPanel /> : <PromoListPanel />}
-            {buyModalOpen && <BuyCodesModal onClose={() => setBuyModalOpen(false)} />}
-        </>
-    );
-};
+const PromosPanel: React.FC = () => <CodeGeneratorPanel />;
 
 // ---------------------------------------------------------------------------
 // AdminCube

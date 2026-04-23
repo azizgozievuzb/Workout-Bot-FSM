@@ -77,3 +77,49 @@ export async function createRenewalCode(
     const res = await api.post('/admin/promo/renewal', { access_tier: tier, duration_days: duration });
     return res.data;
 }
+
+export interface ApplyRenewalPlayerResponse {
+    renewed: boolean;
+    added_days: number;
+    new_expires_at: string;
+}
+
+export async function applyRenewalPlayer(
+    partnershipId: string,
+    code: string,
+): Promise<ApplyRenewalPlayerResponse> {
+    const res = await api.post('/promo/apply-renewal-player', { code, partnership_id: partnershipId });
+    return res.data;
+}
+
+export interface ApplyBonusPackResponse {
+    kind: string;
+    added: number;
+    new_balance: number;
+}
+
+export async function applyBonusPack(code: string): Promise<ApplyBonusPackResponse> {
+    const res = await api.post('/promo/apply-bonus-pack', { code });
+    return res.data;
+}
+
+export interface PromoListItem {
+    id: string;
+    code: string;
+    code_type: string;
+    tier: string;
+    is_used: boolean;
+    used_by: string | null;
+    responsible_id: string | null;
+    created_at: string | null;
+    duration_days: number | null;
+}
+
+export async function getPromoList(params?: {
+    code_type?: string;
+    is_used?: boolean;
+    tier?: string;
+}): Promise<{ codes: PromoListItem[] }> {
+    const res = await api.get('/admin/promo/list', { params });
+    return res.data;
+}

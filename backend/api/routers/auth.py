@@ -16,7 +16,7 @@ USER_SELECT_COLS = (
     "primary_role, has_player_access, has_responsible_access, is_admin, "
     "ban_until, ban_reason, ban_missed_workouts, "
     "responsible_access_tier, player_access_tier, "
-    "shop_freeze_balance, gift_freeze_balance"
+    "shop_freeze_balance, gift_freeze_balance, gender"
 )
 
 
@@ -50,6 +50,7 @@ class TokenResponse(BaseModel):
     has_active_partnerships: bool = False
     days_left: int | None = None
     unread_notifications: int = 0
+    gender: str | None = None
 
 
 async def _build_full_token_response(db, telegram_id: int, user_data: dict) -> TokenResponse:
@@ -193,6 +194,7 @@ async def _build_full_token_response(db, telegram_id: int, user_data: dict) -> T
         has_active_partnerships=has_active_partnerships,
         days_left=days_left,
         unread_notifications=unread_notifications,
+        gender=user_data.get("gender"),
     )
 
 

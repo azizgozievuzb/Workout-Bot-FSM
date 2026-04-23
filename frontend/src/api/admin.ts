@@ -132,3 +132,28 @@ export async function getBanHistory(): Promise<{ bans: BanHistoryEntry[] }> {
     const res = await api.get('/admin/bans/history');
     return res.data;
 }
+
+export interface CreateResponsibleCodeResponse {
+    code: string;
+    expires_at: string | null;
+}
+
+export async function createResponsibleCode(
+    tier: AccessTier,
+    durationDays: DurationDays,
+): Promise<CreateResponsibleCodeResponse> {
+    const res = await api.post('/admin/promo/tier', { access_tier: tier, duration_days: durationDays });
+    return res.data;
+}
+
+export interface CreateRenewalCodeResponse {
+    code: string;
+}
+
+export async function createRenewalCode(
+    _tier: AccessTier,
+    durationDays: DurationDays,
+): Promise<CreateRenewalCodeResponse> {
+    const res = await api.post('/admin/promo/renewal', { duration_days: durationDays });
+    return res.data;
+}

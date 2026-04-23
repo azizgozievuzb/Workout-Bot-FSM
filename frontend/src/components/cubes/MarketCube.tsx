@@ -4,14 +4,18 @@ import type { DualRoleUser } from '../../stores/authStore';
 import { canPlay, canMonitor, isDualRole } from '../../utils/roles';
 import { getShopItems, purchaseItem } from '../../api/shop';
 import type { ShopItem } from '../../api/shop';
-import { getMyStats } from '../../api/stats';
-import { getPartnerStats } from '../../api/stats';
-import type { PartnerStats } from '../../api/stats';
+import { getMyPlayers } from '../../api/partnerships';
+import type { MyPlayer } from '../../api/partnerships';
+import GiftFreezeModal from './GiftFreezeModal';
+import { hapticNotification } from '../../utils/haptic';
 import RoleTransition from '../shared/RoleTransition';
 import '../../styles/cubes.css';
 
 type ActiveView = 'player' | 'responsible';
 
+/* ============================================================
+   ROOT
+   ============================================================ */
 const MarketCube: React.FC = () => {
     const { primary_role, has_player_access, has_responsible_access, is_admin, activeRoleView, setActiveRoleView } = useAuthStore();
     const user: DualRoleUser = {
@@ -22,8 +26,8 @@ const MarketCube: React.FC = () => {
     };
 
     const defaultView: ActiveView = canPlay(user) ? 'player' : 'responsible';
-    const persistedAllowed = activeRoleView
-        && (activeRoleView === 'player' ? canPlay(user) : canMonitor(user));
+    const persistedAllowed = activeRoleView &&
+        (activeRoleView === 'player' ? canPlay(user) : canMonitor(user));
     const view: ActiveView = persistedAllowed ? (activeRoleView as ActiveView) : defaultView;
     const dual = isDualRole(user);
 
@@ -49,48 +53,132 @@ const MarketCube: React.FC = () => {
     );
 };
 
-/* ---------- PLAYER SHOP ---------- */
+/* ============================================================
+   SHARED — ShopItemCard
+   ============================================================ */
+interface CardProps {
+    item: ShopItem;
+    buyingId: string | null;
+    onBuy?: (item: ShopItem) => void;
+    onGift?: (item: ShopItem) => void;
+    dimmed?: boolean;
+}
 
+const ShopItemCard: React.FC<CardProps> = ({ item, buyingId, onBuy, onGift, dimmed }) => {
+    const isFreeze = item.item_type === 'streak_freeze';
+    const isBuying = buyingId === item.id;
+    const showQty = item.freeze_count > 1;
+
+    return (
+        <div className={
+            'shop-item-card' +
+            (isFreeze ? ' shop-item-card--freeze' : '') +
+            (dimmed ? ' shop-item-card--dimmed' : '')
+        }>
+            <div className="shop-item-name">
+                {isFreeze ? '❄️ ' : ''}{item.name}
+            </div>
+            {item.description && (
+                <div className="shop-item-desc">{item.description}</div>
+            )}
+            <div className="shop-item-price-row">
+                <span className="shop-item-price">⭐ {item.price_stars}</span>
+                {showQty && <span className="shop-item-qty">×{item.freeze_count}</span>}
+            </div>
+            {onBuy && (
+                <button
+                    className="cube-btn-sm"
+                    onClick={(e) => { e.stopPropagation(); onBuy(item); }}
+                    disabled={isBuying}
+                >
+                    {isBuying ? '…' : 'Купить'}
+                </button>
+            )}
+            {onGift && (
+                <button
+                    className="cube-btn-sm"
+                    onClick={(e) => { e.stopPropagation(); onGift(item); }}
+                >
+                    Подарить ❄️
+                </button>
+            )}
+        </div>
+    );
+};
+
+/* ============================================================
+   SHARED — Skeleton (3 cards)
+   ============================================================ */
+const ShopSkeleton: React.FC = () => (
+    <div className="shop-item-grid">
+        {[0, 1, 2].map(i => <div key={i} className="shop-skeleton-card" />)}
+    </div>
+);
+
+/* ============================================================
+   PLAYER SHOP
+   ============================================================ */
 const PlayerShop: React.FC = () => {
-    const { accessTier } = useAuthStore();
+    const { streakFreezeBalance, setStreakFreezeBalance } = useAuthStore();
     const [items, setItems] = useState<ShopItem[]>([]);
-    const [balance, setBalance] = useState<number>(0);
     const [loading, setLoading] = useState(true);
+    const [fetchError, setFetchError] = useState(false);
     const [toast, setToast] = useState('');
+    const [buyingId, setBuyingId] = useState<string | null>(null);
 
-    useEffect(() => {
-        let done = 0;
-        const check = () => { if (++done >= 2) setLoading(false); };
-        getShopItems()
-            .then(setItems)
-            .catch((err) => {
-                console.error('[MarketCube] getShopItems FAILED:', err?.response?.status, err?.response?.data, err?.message);
-            })
-            .finally(check);
-        getMyStats()
-            .then(s => setBalance(s.star_balance))
-            .catch((err) => {
-                console.error('[MarketCube] getMyStats FAILED:', err?.response?.status, err?.response?.data, err?.message);
-            })
-            .finally(check);
-    }, []);
-
-    const handleBuy = useCallback(async (e: React.MouseEvent, itemId: string) => {
-        e.stopPropagation();
-        try {
-            const res = await purchaseItem(itemId);
-            setBalance(res.new_balance);
-            setToast(res.message);
-        } catch (err: any) {
-            setToast(err?.response?.data?.detail || 'Ошибка покупки');
-        }
+    const showToast = useCallback((msg: string) => {
+        setToast(msg);
         setTimeout(() => setToast(''), 3000);
     }, []);
 
-    if (loading) return <div className="cube-section-title" style={{ textAlign: 'center' }}>Загрузка...</div>;
+    const load = useCallback(() => {
+        setLoading(true);
+        setFetchError(false);
+        getShopItems()
+            .then(setItems)
+            .catch(() => setFetchError(true))
+            .finally(() => setLoading(false));
+    }, []);
+
+    useEffect(() => { load(); }, [load]);
+
+    const showFreezeChip = streakFreezeBalance > 0 ||
+        (!loading && items.some(i => i.item_type === 'streak_freeze'));
+
+    const handleBuy = async (item: ShopItem) => {
+        if (buyingId) return;
+        setBuyingId(item.id);
+        try {
+            await purchaseItem(item.id);
+            hapticNotification('success');
+            showToast('Куплено!');
+            if (item.item_type === 'streak_freeze') {
+                setStreakFreezeBalance(streakFreezeBalance + item.freeze_count);
+                setItems(prev => prev.filter(i => i.id !== item.id));
+            }
+        } catch (err: any) {
+            const detail = err?.response?.data?.detail;
+            const code = typeof detail === 'object' ? detail?.code : '';
+            if (code === 'NOT_YOUR_ITEM') {
+                showToast('Недоступно');
+            } else if (typeof detail === 'string' && detail.includes('Недостаточно')) {
+                showToast('Недостаточно звёзд');
+            } else {
+                showToast('Ошибка покупки');
+            }
+            hapticNotification('error');
+        } finally {
+            setBuyingId(null);
+        }
+    };
 
     return (
         <>
+            {showFreezeChip && (
+                <div className="freeze-balance-chip">❄️ Заморозок: {streakFreezeBalance}</div>
+            )}
+
+            {/* Coming Soon stubs — session 16, keep as-is */}
             <div className="market-payment-hint">
                 <div className="market-payment-hint-row">
                     <span className="payment-method-icon">⭐</span>
@@ -108,133 +196,140 @@ const PlayerShop: React.FC = () => {
                 </div>
             </div>
 
-            <div className="cube-balance">{balance}</div>
-
             {toast && <div className="admin-toast">{toast}</div>}
 
-            <div className="cube-shop-grid">
-                {items.slice(0, 5).map(item => (
-                    <div className="cube-shop-item" key={item.id}>
-                        <div className="cube-shop-icon">{item.emoji}</div>
-                        <div className="cube-shop-name">{item.name}</div>
-                        <div className="cube-shop-price">{item.price_stars}</div>
-                        <button
-                            className="cube-btn-sm"
-                            onClick={(e) => handleBuy(e, item.id)}
-                            disabled={balance < item.price_stars}
-                        >
-                            {balance < item.price_stars ? 'Мало ⭐' : 'Купить'}
-                        </button>
-                    </div>
-                ))}
-                {/* 6th slot: unlocked for elite tier */}
-                {accessTier === 'elite' && items[5] ? (
-                    <div className="cube-shop-item" key={items[5].id}>
-                        <div className="cube-shop-icon">{items[5].emoji}</div>
-                        <div className="cube-shop-name">{items[5].name}</div>
-                        <div className="cube-shop-price">{items[5].price_stars}</div>
-                        <button
-                            className="cube-btn-sm"
-                            onClick={(e) => handleBuy(e, items[5].id)}
-                            disabled={balance < items[5].price_stars}
-                        >
-                            {balance < items[5].price_stars ? 'Мало ⭐' : 'Купить'}
-                        </button>
-                    </div>
-                ) : (
-                    <div className="cube-shop-item cube-shop-item-locked">
-                        <div className="cube-shop-icon">🔒</div>
-                        <div className="cube-shop-name">6-й слот</div>
-                        <div className="cube-shop-price" style={{ fontSize: '10px' }}>Elite</div>
-                        <button className="cube-btn-sm" disabled>ELT</button>
-                    </div>
-                )}
-            </div>
+            {loading ? (
+                <ShopSkeleton />
+            ) : fetchError ? (
+                <div className="cube-locked">
+                    <div className="cube-locked-text">Не удалось загрузить</div>
+                    <button
+                        className="cube-btn-sm"
+                        onClick={(e) => { e.stopPropagation(); load(); }}
+                    >
+                        Повторить
+                    </button>
+                </div>
+            ) : items.length === 0 ? (
+                <div className="cube-locked">
+                    <div className="cube-locked-text">Магазин пуст</div>
+                </div>
+            ) : (
+                <div className="shop-item-grid">
+                    {items.map(item => (
+                        <ShopItemCard
+                            key={item.id}
+                            item={item}
+                            buyingId={buyingId}
+                            onBuy={handleBuy}
+                        />
+                    ))}
+                </div>
+            )}
         </>
     );
 };
 
-/* ---------- RESPONSIBLE SHOP ---------- */
-
+/* ============================================================
+   RESPONSIBLE SHOP
+   ============================================================ */
 const ResponsibleShop: React.FC = () => {
-    const { accessTier } = useAuthStore();
-    const [players, setPlayers] = useState<PartnerStats[]>([]);
+    const [players, setPlayers] = useState<MyPlayer[]>([]);
+    const [selectedPlayer, setSelectedPlayer] = useState<MyPlayer | null>(null);
     const [items, setItems] = useState<ShopItem[]>([]);
-    const [activeTab, setActiveTab] = useState(0);
-    const [loading, setLoading] = useState(true);
+    const [loadingPlayers, setLoadingPlayers] = useState(true);
+    const [loadingItems, setLoadingItems] = useState(false);
+    const [toast, setToast] = useState('');
+    const [giftTarget, setGiftTarget] = useState<ShopItem | null>(null);
 
-    useEffect(() => {
-        Promise.all([getPartnerStats(), getShopItems()])
-            .then(([p, s]) => { setPlayers(p); setItems(s); })
-            .catch(() => {})
-            .finally(() => setLoading(false));
+    const showToast = useCallback((msg: string) => {
+        setToast(msg);
+        setTimeout(() => setToast(''), 3000);
     }, []);
 
-    if (loading) return <div className="cube-section-title" style={{ textAlign: 'center' }}>Загрузка...</div>;
+    useEffect(() => {
+        getMyPlayers()
+            .then(ps => {
+                const active = ps.filter(p => !p.is_expired && !p.is_deactivated);
+                setPlayers(active);
+                if (active.length > 0) setSelectedPlayer(active[0]);
+            })
+            .catch(() => {})
+            .finally(() => setLoadingPlayers(false));
+    }, []);
+
+    useEffect(() => {
+        if (!selectedPlayer) { setItems([]); return; }
+        setLoadingItems(true);
+        getShopItems(selectedPlayer.id)
+            .then(setItems)
+            .catch(() => setItems([]))
+            .finally(() => setLoadingItems(false));
+    }, [selectedPlayer]);
+
+    if (loadingPlayers) return (
+        <div className="cube-section-title" style={{ textAlign: 'center' }}>Загрузка...</div>
+    );
+
     if (players.length === 0) return (
         <div className="cube-locked">
-            <div className="cube-locked-text">Нет привязанных игроков</div>
+            <div className="cube-locked-text">Нет активных игроков</div>
         </div>
     );
 
-    const player = players[activeTab] || players[0];
-
     return (
         <>
-            <div className="cube-tabs">
-                {players.map((p, i) => (
+            {toast && <div className="admin-toast">{toast}</div>}
+
+            <div className="market-player-selector">
+                {players.map(p => (
                     <button
-                        key={p.player_id}
-                        className={`cube-tab ${i === activeTab ? 'active' : ''}`}
-                        onClick={(e) => { e.stopPropagation(); setActiveTab(i); }}
+                        key={p.id}
+                        className={`market-player-chip${selectedPlayer?.id === p.id ? ' active' : ''}`}
+                        onClick={(e) => { e.stopPropagation(); setSelectedPlayer(p); }}
                     >
-                        {p.first_name}
+                        {p.first_name || 'Игрок'}
                     </button>
                 ))}
             </div>
 
-            <div className="cube-balance">{player.star_balance}</div>
+            {loadingItems ? (
+                <ShopSkeleton />
+            ) : items.length === 0 ? (
+                <div className="cube-locked">
+                    <div className="cube-locked-text">У игрока нет лотов в магазине</div>
+                </div>
+            ) : (
+                <div className="shop-item-grid">
+                    {items.map(item => (
+                        <ShopItemCard
+                            key={item.id}
+                            item={item}
+                            buyingId={null}
+                            onGift={item.item_type === 'streak_freeze'
+                                ? (i) => setGiftTarget(i)
+                                : undefined}
+                            dimmed={item.item_type !== 'streak_freeze'}
+                        />
+                    ))}
+                </div>
+            )}
 
-            <button className="cube-btn-secondary" onClick={(e) => e.stopPropagation()}>
-                Пополнить
-            </button>
-
-            <div className="cube-shop-grid">
-                {items.slice(0, 5).map(item => (
-                    <div className="cube-shop-item" key={item.id}>
-                        <div className="cube-shop-icon">{item.emoji}</div>
-                        <div className="cube-shop-name">{item.name}</div>
-                        <div className="cube-shop-price">{item.price_stars}</div>
-                        <button className="cube-btn-sm" onClick={(e) => e.stopPropagation()}>
-                            Подарить
-                        </button>
-                    </div>
-                ))}
-                {/* 6th slot: unlocked for elite Responsible (their players inherit ELT too) */}
-                {accessTier === 'elite' && items[5] ? (
-                    <div className="cube-shop-item" key={items[5].id}>
-                        <div className="cube-shop-icon">{items[5].emoji}</div>
-                        <div className="cube-shop-name">{items[5].name}</div>
-                        <div className="cube-shop-price">{items[5].price_stars}</div>
-                        <button className="cube-btn-sm" onClick={(e) => e.stopPropagation()}>
-                            Подарить
-                        </button>
-                    </div>
-                ) : (
-                    <div className="cube-shop-item cube-shop-item-locked">
-                        <div className="cube-shop-icon">🔒</div>
-                        <div className="cube-shop-name">6-й слот</div>
-                        <div className="cube-shop-price" style={{ fontSize: '10px' }}>Elite</div>
-                        <button className="cube-btn-sm" disabled>ELT</button>
-                    </div>
-                )}
-            </div>
+            {giftTarget && selectedPlayer && (
+                <GiftFreezeModal
+                    targetUserId={selectedPlayer.id}
+                    playerName={selectedPlayer.first_name}
+                    onClose={() => setGiftTarget(null)}
+                    onSuccess={(msg) => { showToast(msg); setGiftTarget(null); }}
+                />
+            )}
         </>
     );
 };
 
-/* ---------- LOCKED ---------- */
-
+/* ============================================================
+   LOCKED SCREENS
+   ============================================================ */
 const LockedPlayer: React.FC = () => (
     <div className="cube-locked">
         <div className="cube-locked-icon">P</div>

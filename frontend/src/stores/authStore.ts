@@ -2,7 +2,16 @@ import { create } from 'zustand';
 
 export type PrimaryRole = 'player' | 'responsible';
 
-const CACHE_KEYS = { photo: 'wb_photo', dark: 'wb_photo_dark', light: 'wb_photo_light' } as const;
+const CACHE_KEYS = {
+  photo: 'wb_photo',
+  dark: 'wb_photo_dark',
+  light: 'wb_photo_light',
+  ownTier: 'wb_own_tier',
+  playerTier: 'wb_player_tier',
+  streakFreeze: 'wb_streak_freeze',
+  unreadNotifs: 'wb_unread_notifs',
+  gender: 'wb_gender',
+} as const;
 export type LegacyRole = 'player' | 'responsible' | 'admin' | 'new';
 export type AccessTier = 'standard' | 'premium' | 'elite';
 
@@ -38,12 +47,35 @@ interface AuthState {
   accessRevoked: boolean;
   maintenanceMode: boolean;
   banInfo: BanInfo | null;
-  accessTier: AccessTier;
+  // --- Tier (3.1) ---
+  ownAccessTier: AccessTier | null;
+  playerViewTier: AccessTier | null;
+  // --- Wallet / balance fields (3.1) ---
+  shopFreezeBalance: number;
+  giftFreezeBalance: number;
+  streakFreezeBalance: number;
+  restDaysRemaining: number;
+  hasActivePartnerships: boolean;
+  unreadNotifications: number;
+  daysLeft: number | null;
+  gender: string | null;
+  // --- Computed ---
+  effectiveTier: () => AccessTier | null;
+  // --- Setters ---
   setActiveRoleView: (view: ActiveRoleView) => void;
   setAccessRevoked: (revoked: boolean) => void;
   setMaintenanceMode: (on: boolean) => void;
   setBanInfo: (info: BanInfo | null) => void;
-  setAccessTier: (tier: AccessTier) => void;
+  setOwnAccessTier: (tier: AccessTier | null) => void;
+  setPlayerViewTier: (tier: AccessTier | null) => void;
+  setShopFreezeBalance: (v: number) => void;
+  setGiftFreezeBalance: (v: number) => void;
+  setStreakFreezeBalance: (v: number) => void;
+  setRestDaysRemaining: (v: number) => void;
+  setHasActivePartnerships: (v: boolean) => void;
+  setUnreadNotifications: (v: number) => void;
+  setDaysLeft: (v: number | null) => void;
+  setGender: (g: string | null) => void;
   setAuth: (data: {
     token: string;
     role: string;
@@ -55,6 +87,16 @@ interface AuthState {
     photoUrl?: string | null;
     photoDarkUrl?: string | null;
     photoLightUrl?: string | null;
+    own_access_tier?: AccessTier | null;
+    player_view_tier?: AccessTier | null;
+    shop_freeze_balance?: number;
+    gift_freeze_balance?: number;
+    streak_freeze_balance?: number;
+    rest_days_remaining?: number;
+    has_active_partnerships?: boolean;
+    days_left?: number | null;
+    unread_notifications?: number;
+    gender?: string | null;
   }) => void;
   setPhotoUrl: (url: string) => void;
   setStyledPhotos: (darkUrl: string | null, lightUrl: string | null) => void;
@@ -63,7 +105,12 @@ interface AuthState {
   clearAuth: () => void;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+const _parseTier = (raw: string | null): AccessTier | null => {
+  if (raw === 'standard' || raw === 'premium' || raw === 'elite') return raw;
+  return null;
+};
+
+export const useAuthStore = create<AuthState>((set, get) => ({
   token: null,
   role: null,
   primary_role: null,
@@ -80,11 +127,51 @@ export const useAuthStore = create<AuthState>((set) => ({
   accessRevoked: localStorage.getItem('access_revoked') === '1',
   maintenanceMode: false,
   banInfo: null,
-  accessTier: 'standard',
+  ownAccessTier: _parseTier(localStorage.getItem(CACHE_KEYS.ownTier)),
+  playerViewTier: _parseTier(localStorage.getItem(CACHE_KEYS.playerTier)),
+  shopFreezeBalance: 0,
+  giftFreezeBalance: 0,
+  streakFreezeBalance: Number(localStorage.getItem(CACHE_KEYS.streakFreeze) ?? 0),
+  restDaysRemaining: 0,
+  hasActivePartnerships: false,
+  unreadNotifications: Number(localStorage.getItem(CACHE_KEYS.unreadNotifs) ?? 0),
+  daysLeft: null,
+  gender: localStorage.getItem(CACHE_KEYS.gender),
+  effectiveTier: () => {
+    const s = get();
+    return s.activeRoleView === 'player' ? s.playerViewTier : s.ownAccessTier;
+  },
   setActiveRoleView: (view) => set({ activeRoleView: view }),
   setMaintenanceMode: (on) => set({ maintenanceMode: on }),
   setBanInfo: (info) => set({ banInfo: info }),
-  setAccessTier: (tier) => set({ accessTier: tier }),
+  setOwnAccessTier: (tier) => {
+    if (tier) localStorage.setItem(CACHE_KEYS.ownTier, tier);
+    else localStorage.removeItem(CACHE_KEYS.ownTier);
+    set({ ownAccessTier: tier });
+  },
+  setPlayerViewTier: (tier) => {
+    if (tier) localStorage.setItem(CACHE_KEYS.playerTier, tier);
+    else localStorage.removeItem(CACHE_KEYS.playerTier);
+    set({ playerViewTier: tier });
+  },
+  setShopFreezeBalance: (v) => set({ shopFreezeBalance: v }),
+  setGiftFreezeBalance: (v) => set({ giftFreezeBalance: v }),
+  setStreakFreezeBalance: (v) => {
+    localStorage.setItem(CACHE_KEYS.streakFreeze, String(v));
+    set({ streakFreezeBalance: v });
+  },
+  setRestDaysRemaining: (v) => set({ restDaysRemaining: v }),
+  setHasActivePartnerships: (v) => set({ hasActivePartnerships: v }),
+  setUnreadNotifications: (v) => {
+    localStorage.setItem(CACHE_KEYS.unreadNotifs, String(v));
+    set({ unreadNotifications: v });
+  },
+  setDaysLeft: (v) => set({ daysLeft: v }),
+  setGender: (g) => {
+    if (g) localStorage.setItem(CACHE_KEYS.gender, g);
+    else localStorage.removeItem(CACHE_KEYS.gender);
+    set({ gender: g });
+  },
   setAccessRevoked: (revoked) => {
     if (revoked) {
       localStorage.setItem('access_revoked', '1');
@@ -102,6 +189,19 @@ export const useAuthStore = create<AuthState>((set) => ({
     else if (data.photoDarkUrl === null) localStorage.removeItem(CACHE_KEYS.dark);
     if (data.photoLightUrl) localStorage.setItem(CACHE_KEYS.light, data.photoLightUrl);
     else if (data.photoLightUrl === null) localStorage.removeItem(CACHE_KEYS.light);
+    const ownTier = data.own_access_tier ?? null;
+    if (ownTier) localStorage.setItem(CACHE_KEYS.ownTier, ownTier);
+    else localStorage.removeItem(CACHE_KEYS.ownTier);
+    const playerTier = data.player_view_tier ?? null;
+    if (playerTier) localStorage.setItem(CACHE_KEYS.playerTier, playerTier);
+    else localStorage.removeItem(CACHE_KEYS.playerTier);
+    const streakFreeze = data.streak_freeze_balance ?? 0;
+    localStorage.setItem(CACHE_KEYS.streakFreeze, String(streakFreeze));
+    const unread = data.unread_notifications ?? 0;
+    localStorage.setItem(CACHE_KEYS.unreadNotifs, String(unread));
+    const gender = data.gender ?? null;
+    if (gender) localStorage.setItem(CACHE_KEYS.gender, gender);
+    else localStorage.removeItem(CACHE_KEYS.gender);
     return set({
       token: data.token,
       role: data.role as LegacyRole,
@@ -114,6 +214,16 @@ export const useAuthStore = create<AuthState>((set) => ({
       photoDarkUrl: data.photoDarkUrl || null,
       photoLightUrl: data.photoLightUrl || null,
       isAuthenticated: true,
+      ownAccessTier: ownTier,
+      playerViewTier: playerTier,
+      shopFreezeBalance: data.shop_freeze_balance ?? 0,
+      giftFreezeBalance: data.gift_freeze_balance ?? 0,
+      streakFreezeBalance: streakFreeze,
+      restDaysRemaining: data.rest_days_remaining ?? 0,
+      hasActivePartnerships: data.has_active_partnerships ?? false,
+      daysLeft: data.days_left ?? null,
+      unreadNotifications: unread,
+      gender,
     });
   },
   setPhotoUrl: (url) => { localStorage.setItem(CACHE_KEYS.photo, url); set({ photoUrl: url }); },
@@ -134,6 +244,11 @@ export const useAuthStore = create<AuthState>((set) => ({
     localStorage.removeItem(CACHE_KEYS.photo);
     localStorage.removeItem(CACHE_KEYS.dark);
     localStorage.removeItem(CACHE_KEYS.light);
+    localStorage.removeItem(CACHE_KEYS.ownTier);
+    localStorage.removeItem(CACHE_KEYS.playerTier);
+    localStorage.removeItem(CACHE_KEYS.streakFreeze);
+    localStorage.removeItem(CACHE_KEYS.unreadNotifs);
+    localStorage.removeItem(CACHE_KEYS.gender);
     set({
       token: null,
       role: null,
@@ -151,7 +266,16 @@ export const useAuthStore = create<AuthState>((set) => ({
       accessRevoked: false,
       maintenanceMode: false,
       banInfo: null,
-      accessTier: 'standard',
+      ownAccessTier: null,
+      playerViewTier: null,
+      shopFreezeBalance: 0,
+      giftFreezeBalance: 0,
+      streakFreezeBalance: 0,
+      restDaysRemaining: 0,
+      hasActivePartnerships: false,
+      unreadNotifications: 0,
+      daysLeft: null,
+      gender: null,
     });
   },
 }));

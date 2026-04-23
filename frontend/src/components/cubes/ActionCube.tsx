@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import type { DualRoleUser } from '../../stores/authStore';
 import { canPlay, canMonitor, isDualRole } from '../../utils/roles';
-import { getMyPlayerCode, getPlayerStatus } from '../../api/promo';
+import api from '../../api/client';
+import { getMyPlayerCode } from '../../api/promo';
 import type { AccessTier } from '../../api/promo';
 import TierBadge from '../common/TierBadge';
 import { getMyStats } from '../../api/stats';
@@ -13,13 +14,18 @@ import type { ActiveBoost } from '../../api/boosts';
 import {
     createRenewalRequest,
     listMyRenewalRequests,
-    listMyPlayers,
 } from '../../api/renewal';
-import type { RenewalRequest, MyPlayer } from '../../api/renewal';
+import type { RenewalRequest } from '../../api/renewal';
+import { getMyPlayers } from '../../api/partnerships';
+import type { MyPlayer } from '../../api/partnerships';
 import { hapticImpact, hapticNotification } from '../../utils/haptic';
 import RoleTransition from '../shared/RoleTransition';
-import RenewalModal from '../renewal/RenewalModal';
+import RenewalModal from './RenewalModal';
+import BonusPackModal from './BonusPackModal';
+import GiftFreezeModal from './GiftFreezeModal';
+import TierChangeModal from './TierChangeModal';
 import WorkoutScreen from '../workout/WorkoutScreen';
+import TierMatrixScreen from '../shared/TierMatrixScreen';
 import '../../styles/cubes.css';
 
 const RENEWAL_PENDING_KEY = 'wb_renewal_pending_until';
@@ -69,24 +75,28 @@ const ActionCube: React.FC = () => {
 
 /* ---------- PLAYER ---------- */
 
-interface PlayerStatus {
-    is_active: boolean;
-    expires_at: string | null;
-    days_left: number | null;
-    duration_days: number | null;
-}
+const TIER_LABELS: Record<string, string> = { standard: 'STD', premium: 'PRM', elite: 'ELT' };
 
 const PlayerView: React.FC = () => {
+    const effectiveTier = useAuthStore((s) => s.effectiveTier());
+    const daysLeft = useAuthStore((s) => s.daysLeft);
+    const streakFreezeBalance = useAuthStore((s) => s.streakFreezeBalance);
+    const restDaysRemaining = useAuthStore((s) => s.restDaysRemaining);
+    const gender = useAuthStore((s) => s.gender);
+    const setRestDaysRemaining = useAuthStore((s) => s.setRestDaysRemaining);
+
     const [stats, setStats] = useState<PlayerStats | null>(null);
     const [boost, setBoost] = useState<ActiveBoost | null>(null);
-    const [promoStatus, setPromoStatus] = useState<PlayerStatus | null>(null);
     const [loading, setLoading] = useState(true);
     const [requestPending, setRequestPending] = useState<boolean>(() => {
         const until = parseInt(localStorage.getItem(RENEWAL_PENDING_KEY) || '0', 10);
         return Number.isFinite(until) && until > Date.now();
     });
     const [cooldownError, setCooldownError] = useState<string>('');
+    const [restDayInFlight, setRestDayInFlight] = useState(false);
+    const [restDayToast, setRestDayToast] = useState('');
     const [workoutOpen, setWorkoutOpen] = useState(false);
+    const [tierMatrixOpen, setTierMatrixOpen] = useState(false);
 
     const handleStartWorkout = useCallback((e: React.MouseEvent) => {
         e.stopPropagation();
@@ -96,10 +106,9 @@ const PlayerView: React.FC = () => {
 
     useEffect(() => {
         let done = 0;
-        const check = () => { if (++done >= 3) setLoading(false); };
+        const check = () => { if (++done >= 2) setLoading(false); };
         getMyStats().then(setStats).catch(() => {}).finally(check);
         getActiveBoost().then(setBoost).catch(() => {}).finally(check);
-        getPlayerStatus().then(setPromoStatus).catch(() => {}).finally(check);
     }, []);
 
     const handleAskRenewal = useCallback(async (e: React.MouseEvent) => {
@@ -133,35 +142,90 @@ const PlayerView: React.FC = () => {
         }
     }, [requestPending]);
 
+    const handleUseRestDay = useCallback(async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (restDayInFlight) return;
+        hapticImpact('medium');
+        setRestDayInFlight(true);
+        try {
+            await api.post('/player/use-rest-day');
+            setRestDaysRemaining(restDaysRemaining - 1);
+            hapticNotification('success');
+            setRestDayToast('День отдыха использован');
+        } catch (err: any) {
+            const code = err?.response?.data?.detail?.code;
+            if (code === 'NO_REST_DAYS_LEFT' || code === 'REST_DAY_NOT_AVAILABLE') {
+                setRestDayToast('Нет доступных дней отдыха');
+            } else if (code === 'NOT_ELIGIBLE') {
+                // gender guard fired server-side — hide button locally
+                setRestDaysRemaining(0);
+            } else {
+                setRestDayToast('Не удалось использовать день отдыха');
+            }
+            hapticNotification('error');
+        } finally {
+            setRestDayInFlight(false);
+            setTimeout(() => setRestDayToast(''), 3000);
+        }
+    }, [restDayInFlight, restDaysRemaining, setRestDaysRemaining]);
+
     if (loading) return <div className="cube-section-title" style={{ textAlign: 'center' }}>Загрузка...</div>;
     if (!stats) return <div className="cube-section-title" style={{ textAlign: 'center' }}>Не удалось загрузить</div>;
 
-    const daysLeft = promoStatus?.days_left ?? null;
-    const showExpiryBanner = promoStatus?.is_active === true && daysLeft !== null && daysLeft <= 1;
-    const showRenewalPrompt =
-        promoStatus?.is_active === true
-        && daysLeft !== null
-        && daysLeft <= RENEWAL_PROMPT_THRESHOLD_DAYS;
+    const showRenewalPrompt = daysLeft !== null && daysLeft <= RENEWAL_PROMPT_THRESHOLD_DAYS;
+
+    const daysChipVariant = (() => {
+        if (daysLeft === null) return null;
+        if (daysLeft <= 0) return 'red';
+        if (daysLeft <= 7) return 'red pulse';
+        if (daysLeft <= 14) return 'yellow';
+        return 'green';
+    })();
 
     return (
         <>
-            {showExpiryBanner && (
-                <div className="player-expiry-banner">
-                    ⚠️ Доступ истекает через {daysLeft === 0 ? 'менее суток' : `${daysLeft} д.`}
-                </div>
-            )}
-
-            {promoStatus?.expires_at && (
-                <div className="promo-invite-chip-row" style={{ justifyContent: 'flex-end' }}>
-                    <div className="promo-invite-chip" title="Срок действия доступа">
-                        <span className="promo-invite-chip-label">До</span>
-                        <span className="promo-invite-chip-code">
-                            {new Date(promoStatus.expires_at).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })}
-                        </span>
+            {/* A. Status row */}
+            <div className="player-status-row">
+                {effectiveTier && (
+                    <div className={`player-tier-chip player-tier-chip--${effectiveTier}`}>
+                        {TIER_LABELS[effectiveTier] ?? effectiveTier.toUpperCase()}
                     </div>
-                </div>
-            )}
+                )}
+                {daysLeft !== null && daysChipVariant && (
+                    <div className={`player-days-chip${daysChipVariant.includes('pulse') ? ' player-days-chip--pulse' : ''} player-days-chip--${daysChipVariant.replace(' pulse', '')}`}>
+                        {daysLeft <= 0 ? 'Истёк' : `📅 ${daysLeft} дн.`}
+                    </div>
+                )}
+                {streakFreezeBalance > 0 && (
+                    <div className="player-freeze-chip">
+                        ❄️ {streakFreezeBalance}
+                    </div>
+                )}
+            </div>
+            <button
+                className="tier-matrix-link"
+                onClick={(e) => { e.stopPropagation(); hapticImpact('light'); setTierMatrixOpen(true); }}
+            >
+                ℹ️ Тарифы
+            </button>
 
+            {tierMatrixOpen && <TierMatrixScreen onClose={() => setTierMatrixOpen(false)} />}
+
+            {/* B. Rest-day button */}
+            {restDaysRemaining > 0 && gender === 'female' && (
+                <button
+                    className="rest-day-btn"
+                    onClick={handleUseRestDay}
+                    disabled={restDayInFlight}
+                >
+                    {restDayInFlight
+                        ? '...'
+                        : `Использовать день отдыха (осталось: ${restDaysRemaining})`}
+                </button>
+            )}
+            {restDayToast && <div className="admin-toast">{restDayToast}</div>}
+
+            {/* C. Renewal prompt */}
             {showRenewalPrompt && (
                 <div className="renewal-prompt">
                     <p className="renewal-prompt__text">
@@ -180,6 +244,7 @@ const PlayerView: React.FC = () => {
                 </div>
             )}
 
+            {/* D. Workout entry point */}
             <button className="cube-btn-primary" onClick={handleStartWorkout}>
                 Приступим
             </button>
@@ -209,12 +274,6 @@ const PlayerView: React.FC = () => {
             <div className="cube-funfact">
                 Знаешь ли ты, что регулярные тренировки улучшают качество сна на 65%? Твоё тело скажет спасибо!
             </div>
-
-            {stats.rest_days_remaining > 0 && (
-                <button className="cube-rest-btn" onClick={(e) => e.stopPropagation()}>
-                    День отдыха (осталось {stats.rest_days_remaining}/3)
-                </button>
-            )}
         </>
     );
 };
@@ -245,14 +304,28 @@ function relativeTime(iso: string): string {
 
 const TIER_PLAYER_LIMITS: Record<string, number> = { standard: 1, premium: 2, elite: 3 };
 
+type ModalKind = 'renewal' | 'bonus' | 'gift' | 'tier';
+
+const daysChipClass = (p: MyPlayer): string => {
+    if (p.is_expired || p.is_deactivated) return 'days-chip days-chip--grey';
+    const d = p.days_left ?? 0;
+    if (d <= 7) return 'days-chip days-chip--red';
+    if (d <= 14) return 'days-chip days-chip--yellow';
+    return 'days-chip days-chip--green';
+};
+
 const ResponsibleView: React.FC = () => {
-    const { accessTier } = useAuthStore();
+    const ownAccessTier = useAuthStore((s) => s.ownAccessTier);
+    const shopFreezeBalance = useAuthStore((s) => s.shopFreezeBalance);
+    const giftFreezeBalance = useAuthStore((s) => s.giftFreezeBalance);
     const [playerCodeData, setPlayerCodeData] = useState<PlayerCodeData | null>(null);
     const [players, setPlayers] = useState<MyPlayer[]>([]);
     const [requests, setRequests] = useState<RenewalRequest[]>([]);
     const [loading, setLoading] = useState(true);
     const [toast, setToast] = useState('');
-    const [renewalModalPlayerId, setRenewalModalPlayerId] = useState<string | null>(null);
+    const [openMenuFor, setOpenMenuFor] = useState<string | null>(null);
+    const [modal, setModal] = useState<{ kind: ModalKind; partnershipId?: string; targetUserId?: string; playerName?: string | null } | null>(null);
+    const menuRef = useRef<HTMLDivElement | null>(null);
 
     const fetchCode = useCallback(() => {
         getMyPlayerCode()
@@ -261,7 +334,7 @@ const ResponsibleView: React.FC = () => {
     }, []);
 
     const fetchPlayers = useCallback(() => {
-        listMyPlayers()
+        getMyPlayers()
             .then(setPlayers)
             .catch(() => {});
     }, []);
@@ -278,12 +351,11 @@ const ResponsibleView: React.FC = () => {
 
     useEffect(() => {
         Promise.all([
-            listMyPlayers().then(setPlayers).catch(() => {}),
+            getMyPlayers().then(setPlayers).catch(() => {}),
             listMyRenewalRequests().then(setRequests).catch(() => {}),
         ]).finally(() => setLoading(false));
     }, []);
 
-    // Polling renewal-requests every 60s + on visibility
     useEffect(() => {
         const tick = () => {
             if (document.visibilityState !== 'visible') return;
@@ -298,10 +370,26 @@ const ResponsibleView: React.FC = () => {
     }, [fetchRequests]);
 
     useEffect(() => {
-        const onVisible = () => { if (document.visibilityState === 'visible') fetchCode(); };
+        const onVisible = () => {
+            if (document.visibilityState === 'visible') {
+                fetchCode();
+                fetchPlayers();
+            }
+        };
         document.addEventListener('visibilitychange', onVisible);
         return () => document.removeEventListener('visibilitychange', onVisible);
-    }, [fetchCode]);
+    }, [fetchCode, fetchPlayers]);
+
+    useEffect(() => {
+        if (!openMenuFor) return;
+        const onDocClick = (e: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+                setOpenMenuFor(null);
+            }
+        };
+        document.addEventListener('mousedown', onDocClick);
+        return () => document.removeEventListener('mousedown', onDocClick);
+    }, [openMenuFor]);
 
     const requestsByPlayer = useMemo(() => {
         const map: Record<string, RenewalRequest> = {};
@@ -331,27 +419,58 @@ const ResponsibleView: React.FC = () => {
         setTimeout(() => setToast(''), 3000);
     }, []);
 
-    const openRenewalModal = useCallback((e: React.MouseEvent, partnershipId: string) => {
-        e.stopPropagation();
+    const openModal = useCallback((kind: ModalKind, p: MyPlayer) => {
         hapticImpact('light');
-        setRenewalModalPlayerId(partnershipId);
+        setOpenMenuFor(null);
+        setModal({
+            kind,
+            partnershipId: p.partnership_id,
+            targetUserId: p.id,
+            playerName: p.first_name,
+        });
     }, []);
 
+    const closeModal = useCallback(() => setModal(null), []);
+
     const handleRenewalSuccess = useCallback((addedDays: number) => {
-        setRenewalModalPlayerId(null);
+        setModal(null);
         setToast(`Продлено на ${addedDays} дн.`);
         setTimeout(() => setToast(''), 3000);
         fetchPlayers();
         fetchRequests();
     }, [fetchPlayers, fetchRequests]);
 
-    const selectedPlayer = players.find(p => p.partnership_id === renewalModalPlayerId) || null;
-    const slotLimit = TIER_PLAYER_LIMITS[accessTier] ?? 1;
+    const handleBonusSuccess = useCallback((msg: string) => {
+        setModal(null);
+        setToast(msg);
+        setTimeout(() => setToast(''), 3000);
+    }, []);
+
+    const handleGiftSuccess = useCallback((msg: string) => {
+        setModal(null);
+        setToast(msg);
+        setTimeout(() => setToast(''), 3000);
+    }, []);
+
+    const slotLimit = TIER_PLAYER_LIMITS[ownAccessTier ?? 'standard'] ?? 1;
     const slotsUsed = players.length;
     const slotsLeft = slotLimit - slotsUsed;
 
     return (
         <>
+            <div className="responsible-wallet-row">
+                <div className="wallet-chip">
+                    <span className="wallet-chip-icon">🧊</span>
+                    <span className="wallet-chip-label">Магазин</span>
+                    <span className="wallet-chip-value">{shopFreezeBalance}</span>
+                </div>
+                <div className="wallet-chip">
+                    <span className="wallet-chip-icon">🎁</span>
+                    <span className="wallet-chip-label">Подарки</span>
+                    <span className="wallet-chip-value">{giftFreezeBalance}</span>
+                </div>
+            </div>
+
             <div className="promo-invite-chip-row">
                 {slotsLeft > 0 && playerCodeData && playerCodeData.code && !playerCodeData.is_used ? (
                     <>
@@ -402,26 +521,29 @@ const ResponsibleView: React.FC = () => {
                         const rowClass = [
                             'player-row',
                             req ? 'player-row--has-request' : '',
-                            p.is_deactivated ? 'player-row--deactivated' : '',
+                            (p.is_expired || p.is_deactivated) ? 'player-row--deactivated' : '',
                         ].filter(Boolean).join(' ');
                         const name = p.first_name || '—';
+                        const isExpired = p.is_expired || p.is_deactivated;
+                        const daysLabel = isExpired
+                            ? 'Истёк'
+                            : p.days_left !== null
+                                ? `${p.days_left} дн.`
+                                : '—';
                         return (
                             <div className={rowClass} key={p.id}>
-                                <div className="cube-avatar">{name.charAt(0)}</div>
+                                <div className="cube-avatar">
+                                    {p.profile_photo_url
+                                        ? <img src={p.profile_photo_url} alt={name} />
+                                        : name.charAt(0)}
+                                </div>
                                 <div className="cube-player-info">
                                     <div className="cube-player-name" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                         {name}
                                         <TierBadge tier={p.access_tier} />
-                                        {p.is_deactivated && (
-                                            <span className="cube-player-badge-expired">Истёк</span>
-                                        )}
                                     </div>
                                     <div className="cube-player-meta">
-                                        {p.is_deactivated
-                                            ? 'Доступ неактивен'
-                                            : p.days_left !== null
-                                                ? `${p.days_left} дн. осталось`
-                                                : 'Срок не задан'}
+                                        <span className={daysChipClass(p)}>{daysLabel}</span>
                                     </div>
                                     {req && (
                                         <div className="player-row__request">
@@ -429,18 +551,51 @@ const ResponsibleView: React.FC = () => {
                                         </div>
                                     )}
                                 </div>
-                                <div className="cube-player-actions">
-                                    {!p.is_deactivated && (
+                                <div className="cube-player-actions" style={{ position: 'relative' }}>
+                                    {!isExpired && (
                                         <button className="cube-btn-sm" onClick={(e) => handleBoost(e, p.id)}>
                                             ⚡X2
                                         </button>
                                     )}
                                     <button
-                                        className="cube-btn-sm accent"
-                                        onClick={(e) => openRenewalModal(e, p.partnership_id)}
+                                        className="player-row-menu-btn"
+                                        aria-label="Действия"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            hapticImpact('light');
+                                            setOpenMenuFor(openMenuFor === p.id ? null : p.id);
+                                        }}
                                     >
-                                        Продлить
+                                        ⋮
                                     </button>
+                                    {openMenuFor === p.id && (
+                                        <div ref={menuRef} className="player-context-menu">
+                                            <button
+                                                className="player-context-menu-item"
+                                                onClick={(e) => { e.stopPropagation(); openModal('renewal', p); }}
+                                            >
+                                                Продлить
+                                            </button>
+                                            <button
+                                                className="player-context-menu-item"
+                                                onClick={(e) => { e.stopPropagation(); openModal('bonus', p); }}
+                                            >
+                                                Бонус-пак
+                                            </button>
+                                            <button
+                                                className="player-context-menu-item"
+                                                onClick={(e) => { e.stopPropagation(); openModal('gift', p); }}
+                                            >
+                                                Подарить заморозку
+                                            </button>
+                                            <button
+                                                className="player-context-menu-item"
+                                                onClick={(e) => { e.stopPropagation(); openModal('tier', p); }}
+                                            >
+                                                Сменить тир
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         );
@@ -448,13 +603,30 @@ const ResponsibleView: React.FC = () => {
                 </div>
             )}
 
-            {renewalModalPlayerId && (
+            {modal?.kind === 'renewal' && modal.partnershipId && (
                 <RenewalModal
-                    playerId={renewalModalPlayerId}
-                    playerName={selectedPlayer?.first_name ?? null}
-                    onClose={() => setRenewalModalPlayerId(null)}
+                    partnershipId={modal.partnershipId}
+                    playerName={modal.playerName ?? null}
+                    onClose={closeModal}
                     onSuccess={handleRenewalSuccess}
                 />
+            )}
+            {modal?.kind === 'bonus' && (
+                <BonusPackModal
+                    onClose={closeModal}
+                    onSuccess={handleBonusSuccess}
+                />
+            )}
+            {modal?.kind === 'gift' && modal.targetUserId && (
+                <GiftFreezeModal
+                    targetUserId={modal.targetUserId}
+                    playerName={modal.playerName ?? null}
+                    onClose={closeModal}
+                    onSuccess={handleGiftSuccess}
+                />
+            )}
+            {modal?.kind === 'tier' && (
+                <TierChangeModal onClose={closeModal} />
             )}
         </>
     );

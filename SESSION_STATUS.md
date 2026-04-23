@@ -1,10 +1,25 @@
-# SESSION STATUS — Session 26 (2026-04-23) — Этап 4: E2E Acceptance
+# SESSION STATUS — Session 27 (2026-04-24) — Этап 3: Frontend refactor ✅ COMPLETE
 
-## ▶️ Следующая точка входа (новый чат) — §14 Final Checklist
+## 🎉 Acceptance: COMPLETE ✅ (2026-04-24)
+Все §§ 0–14 пройдены. Скипы: 2.3, 2.4, 3.3, 3.5, 4.1, 4.3–4.5, 9.4 — намеренные (race/manual).
 
-**Состояние БД после §13 (2026-04-24):**
+## ▶️ Следующая точка входа (новый чат) — Этап 5 — Production prep
+(git push, Railway/Vercel deploy check, smoke test on real Telegram)
+
+### Этап 3 — Frontend refactor ✅ COMPLETE
+- [x] 3.1 authStore.ts — ownAccessTier/playerViewTier, wallet fields, effectiveTier getter, localStorage persistence ✅ (2026-04-24)
+- [x] 3.2 API clients — admin/promo/partnerships/shop/notifications ✅ (2026-04-24)
+- [x] 3.3 AdminCube CodeGeneratorPanel — 4 tabs (R-код, Renewal, Пачка, Список) ✅ (2026-04-24)
+- [x] 3.4 ResponsibleView в ActionCube — wallet-row, getMyPlayers, ⋮ context menu; Renewal/BonusPack/GiftFreeze/TierChange modals; useAuth/setAuth расширены wallet-полями TokenResponse v2 ✅ (2026-04-24)
+- [x] 3.5 MarketCube — live API getShopItems, ShopItemCard с freeze-highlight, freeze-balance chip, ResponsibleShop с player selector + GiftFreezeModal, skeleton/empty/error states ✅ (2026-04-24)
+- [x] 3.6 PlayerView в ActionCube — status-row (tier/days/freeze chips), rest-day button (female+balance guard), renewal prompt от authStore.daysLeft, gender field в authStore + TokenResponse ✅ (2026-04-24)
+- [x] 3.7 TierMatrixScreen — fullscreen tier comparison overlay, «ℹ️ Тарифы» trigger in PlayerView, static matrix 3×6, active-tier highlight, admin-contact toast ✅ (2026-04-24)
+- [x] 3.8 Notification Center в BondCube — NotificationRenderer (6 types registry), NotificationList (skeleton/empty/mark-read/mark-all), NotificationsSection collapsible in BondCube, CSS, tsc exit 0 ✅ (2026-04-24)
+- [x] 3.9 Global accessTier → effectiveTier audit — 0 legacy hits found (already migrated in 3.1–3.8); tsc exit 0 ✅ (2026-04-24)
+
+**Состояние БД после Acceptance (2026-04-24):**
 - Admin (tg=32267272): is_admin=true, has_responsible_access=true; responsible для Aziz (1 активное партнёрство)
-- Aziz (tg=156453252): dual-role, has_responsible_access=true; player у Admin; responsible для P_F
+- Aziz (tg=156453252): dual-role, has_responsible_access=true; player у Admin; responsible для P_F — 2 активных партнёрства
 - P3/oil (tg=8580720783): **УДАЛЁН** в Test 13.8 (hard-delete, single partnership с Admin)
 - P_F (tg=300099): player, partnership с Aziz (~15d)
 
@@ -49,7 +64,8 @@
 - §11 Notifications ✅ 4/4 (2026-04-24)
 - §12 Legacy cleanup ✅ 5/5 (2026-04-24)
 - §13 Edge Cases ✅ 6/6 (13.3/13.5/13.7 skip; 13.6 Step 4 note: P3 male→gender guard before stats check; 2026-04-24)
-- §14 Final Checklist
+  - **Архитектурная заметка 13.6:** rest-day STATS_NOT_FOUND reachable only via female player — gender guard fires first for male (correct behavior)
+- §14 Final Checklist ✅ (46 PASS, 9 SKIP, 0 FAIL; 2026-04-24)
 
 **Баги §5 — ЗАФИКШЕНЫ (commit `1d78583`):**
 

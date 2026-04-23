@@ -42,7 +42,7 @@ function getInitData(): string {
 export function useAuth() {
   const {
     isAuthenticated, role, primary_role, has_player_access, has_responsible_access, is_admin,
-    onboardingDone, photoUrl, photoDarkUrl, photoLightUrl, setAuth, setStyledPhotos, clearAuth, setBanInfo, setAccessTier,
+    onboardingDone, photoUrl, photoDarkUrl, photoLightUrl, setAuth, setStyledPhotos, clearAuth, setBanInfo,
   } = useAuthStore();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -99,8 +99,17 @@ export function useAuth() {
             photoUrl: data.profile_photo_url,
             photoDarkUrl: data.photo_dark_url,
             photoLightUrl: data.photo_light_url,
+            own_access_tier: data.own_access_tier ?? null,
+            player_view_tier: data.player_view_tier ?? null,
+            shop_freeze_balance: data.shop_freeze_balance ?? 0,
+            gift_freeze_balance: data.gift_freeze_balance ?? 0,
+            streak_freeze_balance: data.streak_freeze_balance ?? 0,
+            rest_days_remaining: data.rest_days_remaining ?? 0,
+            has_active_partnerships: data.has_active_partnerships ?? false,
+            days_left: data.days_left ?? null,
+            unread_notifications: data.unread_notifications ?? 0,
+            gender: data.gender ?? null,
           });
-          if (data.own_access_tier) setAccessTier(data.own_access_tier);
           // Show BanScreen immediately if user is banned (without waiting for a 403)
           if (data.ban_until) {
             setBanInfo({ until: data.ban_until, reason: data.ban_reason ?? null, missed: data.ban_missed ?? 0 });

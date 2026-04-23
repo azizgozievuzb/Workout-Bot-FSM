@@ -4,6 +4,8 @@ import type { DualRoleUser } from '../../stores/authStore';
 import { canPlay, canMonitor, isDualRole } from '../../utils/roles';
 import { getFeed, markAsRead } from '../../api/activityFeed';
 import type { FeedItem } from '../../api/activityFeed';
+import { getUnreadCount } from '../../api/notifications';
+import { NotificationList } from '../bond/NotificationList';
 import RoleTransition from '../shared/RoleTransition';
 import '../../styles/cubes.css';
 
@@ -43,6 +45,41 @@ function timeAgo(dateStr: string): string {
     return `${days} дн назад`;
 }
 
+/* ---------- NOTIFICATIONS SECTION ---------- */
+
+const NotificationsSection: React.FC = () => {
+    const { unreadNotifications, setUnreadNotifications } = useAuthStore();
+    const [open, setOpen] = useState(false);
+
+    useEffect(() => {
+        const refresh = () => {
+            getUnreadCount().then(setUnreadNotifications).catch(() => {});
+        };
+        refresh();
+        const handler = () => { if (document.visibilityState === 'visible') refresh(); };
+        document.addEventListener('visibilitychange', handler);
+        return () => document.removeEventListener('visibilitychange', handler);
+    }, [setUnreadNotifications]);
+
+    return (
+        <div className="notif-section">
+            <button
+                className="notif-section-header"
+                onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
+            >
+                <span>🔔 Уведомления</span>
+                {unreadNotifications > 0 && (
+                    <span className="notif-badge">
+                        {unreadNotifications > 99 ? '99+' : unreadNotifications}
+                    </span>
+                )}
+                <span className="notif-section-chevron">{open ? '▲' : '▼'}</span>
+            </button>
+            {open && <NotificationList />}
+        </div>
+    );
+};
+
 const BondCube: React.FC = () => {
     const { primary_role, has_player_access, has_responsible_access, is_admin, activeRoleView, setActiveRoleView } = useAuthStore();
     const user: DualRoleUser = {
@@ -62,6 +99,7 @@ const BondCube: React.FC = () => {
 
     return (
         <div className="cube-module">
+            <NotificationsSection />
             <RoleTransition
                 view={view}
                 dual={dual}
