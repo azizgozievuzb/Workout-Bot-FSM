@@ -272,6 +272,17 @@ async def _activate_player_code(db, user_id: str, telegram_id: int, code_row: di
         .execute()
     )
 
+    # Auto-cleanup: delete player's own expired partnerships with OTHER responsibles
+    now_iso = now.isoformat()
+    await (
+        db.table("partnerships")
+        .delete()
+        .eq("player_id", user_id)
+        .neq("responsible_id", responsible_id)
+        .lt("expires_at", now_iso)
+        .execute()
+    )
+
     # Create partnership with dual-write expires_at
     _pc = "".join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(8))
     await (
