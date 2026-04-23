@@ -89,6 +89,17 @@ class ApplyRenewalResp(BaseModel):
     added_days: int
 
 
+class ApplyRenewalPlayerReq(BaseModel):
+    code: str = Field(min_length=8, max_length=32)
+    partnership_id: uuid.UUID
+
+
+class ApplyRenewalPlayerResp(BaseModel):
+    renewed: bool
+    added_days: int
+    new_expires_at: str
+
+
 class ApplyBonusPackReq(BaseModel):
     code: str = Field(min_length=8, max_length=32)
 
@@ -852,6 +863,100 @@ async def apply_renewal(req: ApplyRenewalReq, current_user: dict = Depends(get_c
             )
 
     return ApplyRenewalResp(renewed_count=len(pairs), added_days=duration_days)
+
+
+# ---------------------------------------------------------------------------
+# POST /promo/apply-renewal-player  — продление одного конкретного партнёрства
+# ---------------------------------------------------------------------------
+
+@router.post("/apply-renewal-player", response_model=ApplyRenewalPlayerResp)
+async def apply_renewal_player(req: ApplyRenewalPlayerReq, current_user: dict = Depends(get_current_user)):
+    role = current_user.get("role", "")
+    if role not in ("responsible", "admin"):
+        raise HTTPException(status_code=403, detail="Только для Ответственного или Админа")
+
+    db = await get_supabase()
+    telegram_id = current_user["telegram_id"]
+
+    user_res = await (
+        db.table("users").select("id").eq("telegram_id", telegram_id).single().execute()
+    )
+    user_id = user_res.data["id"]
+
+    # Validate code
+    code = req.code.strip()
+    code_res = await (
+        db.table("promo_codes")
+        .select("id, duration_days, code_type, is_used")
+        .eq("code", code)
+        .maybe_single()
+        .execute()
+    )
+    if not code_res or not code_res.data:
+        raise HTTPException(status_code=404, detail={"code": "CODE_INVALID"})
+    code_row = code_res.data
+    if code_row.get("code_type") != "renewal" or code_row.get("is_used"):
+        raise HTTPException(status_code=404, detail={"code": "CODE_INVALID"})
+
+    # Validate partnership belongs to this Responsible
+    pair_res = await (
+        db.table("partnerships")
+        .select("id, player_id, expires_at")
+        .eq("id", str(req.partnership_id))
+        .eq("responsible_id", user_id)
+        .maybe_single()
+        .execute()
+    )
+    if not pair_res or not pair_res.data:
+        raise HTTPException(status_code=403, detail={"code": "NOT_YOUR_PARTNERSHIP"})
+
+    # Atomic mark used
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
+    mark_res = await (
+        db.table("promo_codes")
+        .update({"is_used": True, "used_by": user_id, "used_at": now_iso})
+        .eq("id", code_row["id"])
+        .eq("is_used", False)
+        .execute()
+    )
+    if not mark_res.data:
+        raise HTTPException(status_code=409, detail={"code": "RACE"})
+
+    duration_days = int(code_row.get("duration_days") or 30)
+    pair = pair_res.data
+    exp_raw = pair.get("expires_at")
+    base = now
+    if exp_raw:
+        try:
+            exp_dt = datetime.fromisoformat(exp_raw)
+            if exp_dt.tzinfo is None:
+                exp_dt = exp_dt.replace(tzinfo=timezone.utc)
+            if exp_dt > now:
+                base = exp_dt
+        except (ValueError, TypeError):
+            pass
+    new_expires = (base + timedelta(days=duration_days)).isoformat()
+
+    await (
+        db.table("partnerships")
+        .update({"expires_at": new_expires})
+        .eq("id", pair["id"])
+        .execute()
+    )
+
+    player_id = pair.get("player_id")
+    if player_id:
+        await emit_notification(
+            db,
+            user_id=player_id,
+            type="partnership_renewed",
+            title="✨ Доступ продлён",
+            message=f"Ответственный продлил твой доступ на {duration_days} дн.",
+            payload={"duration_days": duration_days, "new_expires_at": new_expires},
+        )
+
+    return ApplyRenewalPlayerResp(renewed=True, added_days=duration_days, new_expires_at=new_expires)
 
 
 # ---------------------------------------------------------------------------

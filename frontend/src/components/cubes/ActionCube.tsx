@@ -331,10 +331,10 @@ const ResponsibleView: React.FC = () => {
         setTimeout(() => setToast(''), 3000);
     }, []);
 
-    const openRenewalModal = useCallback((e: React.MouseEvent, playerId: string) => {
+    const openRenewalModal = useCallback((e: React.MouseEvent, partnershipId: string) => {
         e.stopPropagation();
         hapticImpact('light');
-        setRenewalModalPlayerId(playerId);
+        setRenewalModalPlayerId(partnershipId);
     }, []);
 
     const handleRenewalSuccess = useCallback((addedDays: number) => {
@@ -345,7 +345,7 @@ const ResponsibleView: React.FC = () => {
         fetchRequests();
     }, [fetchPlayers, fetchRequests]);
 
-    const selectedPlayer = players.find(p => p.id === renewalModalPlayerId) || null;
+    const selectedPlayer = players.find(p => p.partnership_id === renewalModalPlayerId) || null;
     const slotLimit = TIER_PLAYER_LIMITS[accessTier] ?? 1;
     const slotsUsed = players.length;
     const slotsLeft = slotLimit - slotsUsed;
@@ -437,7 +437,7 @@ const ResponsibleView: React.FC = () => {
                                     )}
                                     <button
                                         className="cube-btn-sm accent"
-                                        onClick={(e) => openRenewalModal(e, p.id)}
+                                        onClick={(e) => openRenewalModal(e, p.partnership_id)}
                                     >
                                         Продлить
                                     </button>

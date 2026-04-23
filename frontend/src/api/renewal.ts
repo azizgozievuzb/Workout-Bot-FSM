@@ -10,6 +10,7 @@ export interface RenewalRequest {
 
 export interface MyPlayer {
     id: string;
+    partnership_id: string;
     telegram_id: number;
     first_name: string | null;
     profile_photo_url: string | null;
@@ -34,9 +35,9 @@ export async function listMyPlayers(): Promise<MyPlayer[]> {
 }
 
 export async function renewPlayer(
-    _player_id: string,
+    partnership_id: string,
     code: string,
-): Promise<{ renewed_count: number; added_days: number }> {
-    const res = await api.post('/promo/apply-renewal', { code });
+): Promise<{ renewed: boolean; added_days: number; new_expires_at: string }> {
+    const res = await api.post('/promo/apply-renewal-player', { code, partnership_id });
     return res.data;
 }
