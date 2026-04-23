@@ -5,7 +5,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from ...core.config import settings
 from ...core.deps import require_admin, _invalidate_settings_cache
 from ...db.client import get_supabase
 
@@ -187,30 +186,3 @@ async def unban_user(user_id: UUID, user=Depends(require_admin)):
         .execute()
     )
     return {"banned": False}
-
-
-class _GenTokenReq(BaseModel):
-    secret: str
-    telegram_id: int
-
-
-@router.post("/debug/gen-test-token")
-async def debug_gen_test_token(body: _GenTokenReq):
-    if not settings.SUPABASE_SERVICE_KEY or body.secret != settings.SUPABASE_SERVICE_KEY:
-        raise HTTPException(status_code=401, detail="Invalid secret")
-    db = await get_supabase()
-    res = (
-        await db.table("users")
-        .select("telegram_id, role, is_admin, primary_role")
-        .eq("telegram_id", body.telegram_id)
-        .maybe_single()
-        .execute()
-    )
-    user_data = res.data if res is not None else None
-    if user_data is None:
-        raise HTTPException(status_code=404, detail="User not found")
-    is_admin = bool(user_data.get("is_admin", False))
-    role = "admin" if is_admin else (user_data.get("primary_role") or user_data.get("role") or "player")
-    from ...core.security import create_access_token
-    token = create_access_token(body.telegram_id, role)
-    return {"access_token": token, "token_type": "bearer", "telegram_id": body.telegram_id, "role": role}
