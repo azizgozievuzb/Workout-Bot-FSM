@@ -158,20 +158,6 @@ async def ban_user(user_id: UUID, req: BanUserReq, user=Depends(require_admin)):
     return {"banned": True, "ban_until": ban_until}
 
 
-@router.post("/debug/trigger-job-f")
-async def debug_trigger_job_f(user=Depends(require_admin)):
-    from ...schedulers.subscription_lifecycle import purge_old_workout_data
-    await purge_old_workout_data()
-    return {"triggered": True}
-
-
-@router.post("/debug/trigger-job-g")
-async def debug_trigger_job_g(user=Depends(require_admin)):
-    from ...schedulers.subscription_lifecycle import cleanup_dead_partnerships
-    await cleanup_dead_partnerships()
-    return {"triggered": True}
-
-
 @router.post("/users/{user_id}/unban")
 async def unban_user(user_id: UUID, user=Depends(require_admin)):
     db = await get_supabase()
