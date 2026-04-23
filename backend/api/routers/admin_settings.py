@@ -114,13 +114,6 @@ async def toggle_maintenance(user=Depends(require_admin)):
         return ToggleMaintenanceResp(maintenance_mode=False, frozen_seconds=frozen_seconds)
 
 
-@router.post("/debug/trigger-job-e")
-async def debug_trigger_job_e(user=Depends(require_admin)):
-    from ...schedulers.subscription_lifecycle import consume_streak_freezes
-    await consume_streak_freezes()
-    return {"triggered": True}
-
-
 @router.post("/users/{user_id}/ban")
 async def ban_user(user_id: UUID, req: BanUserReq, user=Depends(require_admin)):
     from datetime import timedelta
