@@ -59,6 +59,33 @@ async def get_svc() -> OnboardingService:
 
 
 # ---------------------------------------------------------------------------
+# /upgrade — Responsible вводит новый R-код для смены тира
+# ---------------------------------------------------------------------------
+
+@onboarding_router.message(Command("upgrade"))
+async def cmd_upgrade(message: types.Message) -> None:
+    db = await get_supabase()
+    res = await (
+        db.table("users")
+        .select("has_responsible_access")
+        .eq("telegram_id", message.from_user.id)
+        .maybe_single()
+        .execute()
+    )
+    if not res or not res.data or not res.data.get("has_responsible_access"):
+        await message.answer("Команда доступна только для Ответственного.")
+        return
+    # Temporarily reset onboarding_state so text handler accepts promo code
+    await (
+        db.table("users")
+        .update({"onboarding_state": "resp_promo"})
+        .eq("telegram_id", message.from_user.id)
+        .execute()
+    )
+    await message.answer("Введите новый R-код для смены тира:")
+
+
+# ---------------------------------------------------------------------------
 # /start
 # ---------------------------------------------------------------------------
 
