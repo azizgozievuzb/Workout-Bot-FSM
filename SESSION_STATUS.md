@@ -1,4 +1,100 @@
-# SESSION STATUS — Session 23 handoff
+# SESSION STATUS — Session 25 (2026-04-23) — Этап 4: E2E Acceptance
+
+## ▶️ Следующая точка входа (новый чат) — §5 BonusPack
+
+**Состояние БД:**
+- Admin (tg=32267272, elite)
+- Mr. = Responsible (tg=7278081310, **premium** после /upgrade)
+- Dol = Player P1 (tg=7458599391), Aziz = P2 (tg=156453252), oil = P3 (tg=8580720783)
+- Все 3 партнёрства **истекли** (expires_at вчера). UI показывает 3/2 красным.
+- Mr. новый PP-код: `PPZ0YAJ4`
+
+**Хотфиксы сессии 25 (все закоммичены):**
+- `83be9b0` — fix(admin): createResponsibleCode → /admin/promo/tier (URL mismatch)
+- `1b61ab2` — fix(bot): expires_at отсутствовал в INSERT partnerships через бот
+- `(commit)` — fix(auth): own_access_tier вместо legacy access_tier → слот-лимит 1→3
+- `db1d6db` — fix(admin): скрыт tier-селектор для Renewal-code генератора
+- `8802d05` — fix(renewal): /promo/apply-renewal-player вместо удалённого endpoint
+- `5eb61a0` — feat(renewal): per-player renewal + partnership_id в MyPlayer
+- `ae8324b` — feat(bot): /upgrade команда для смены тира Ответственного
+- `dae7cc2` — feat(promo): авто-удаление истёкших партнёрств при переходе к новому Ответственному
+- `4a96a14` — docs: tier downgrade + player re-registration TODOs в SESSION_23_PLAN
+
+**Архитектурные решения принятые в сессии 25:**
+- Renewal — per-player (POST /promo/apply-renewal-player). Кнопка "Продлить" у каждого игрока ✅
+- Tier change — через /upgrade в боте (Ответственный вводит новый R-код) ✅
+- Авто-очистка старых партнёрств при смене Ответственного — реализована ✅
+- Tier downgrade (удаление лишних игроков) — TODO в SESSION_23_PLAN §14/15
+
+**Статус TEST_PLAN_SESSION_23.md:**
+- §0 TRUNCATE ✅
+- §1 Bootstrap (1.1, 1.2, 1.3) ✅
+- §2 Slot-limit (2.1, 2.2, 2.5) ✅ | 2.3/2.4 skip
+- §3 Renewal (3.1, 3.2, 3.4) ✅ | 3.3/3.5 skip
+- §4 Tier change (4.2) ✅ | 4.1/4.3/4.4/4.5 skip
+- §5 BonusPack → **СЛЕДУЮЩИЙ**
+- §6 Streak-freeze Jobs
+- §7 Partnership DELETE
+- §8 Scheduler Jobs F/G
+- §9 Auth v2 TokenResponse
+- §10 Ban + Maintenance
+- §11 Notifications
+- §12 Legacy cleanup
+- §13 Edge Cases
+- §14 Final Checklist
+
+**Перед стартом §5:** продлить партнёрства Dol обратно (нужен активный игрок для теста shop):
+```bash
+supabase db execute --project-ref dlpdwmmfpzfxcelxqvlq --sql "
+UPDATE partnerships SET expires_at = now() + interval '30 days'
+WHERE responsible_id = (SELECT id FROM users WHERE telegram_id = 7278081310);
+"
+```
+
+**Известный шум в логах:** `/renewal/my-requests` 404 — убрать в Этапе 3.
+
+---
+
+## ✅ Завершено в сессии 24 (2026-04-23) — Багфикс-волна поверх Backend v2
+
+Закрыты все 7 багов из `SESSION_23_BUGFIX.md` (ревью-архитектор нашёл поверх Backend v2):
+
+- B3 (race на `streak_freeze_balance` в purchase) → commit `8cf6abf`
+- B4 (privacy guard на GET /shop/items) → commit `d13a954`
+- B5 (rename `resurrect_player_id` → `resurrect_partnership_id`) → commit `9876e68`
+- B6 (удалён legacy POST /admin/promo/create) → commit `05788b7`
+- B7 (миграция 021: разделение `access_tier` на `responsible_access_tier` + `player_access_tier` в users) → commit `3606397`
+- B7b (onboarding.py bot-flow переведён на новые колонки) → commit `4f884b1`
+- B8 (Telegram bot push при DELETE /partnerships/{id} + `services/bot_notify.py` + bot singleton через `core/deps.py::get_bot/set_bot`) → commit `2930bcf`
+- B9 (admin.py SELECT несуществующих колонок `display_name, username` → SELECT `first_name, telegram_username` с алиасом в Python; API-контракт сохранён для FE) → commit `04910d9`
+
+**Пост-фикс статический ревью** (независимый агент): ГОТОВ К PROD, регрессий нет.
+
+## ▶️ Следующая точка входа (новый чат)
+
+**Этап 4 — Acceptance (ручной E2E прогон через `TEST_PLAN_SESSION_23.md`)**
+
+Backend v2 + багфиксы закрыты. Frontend (Этап 3) НЕ начат, но НЕ требуется для Acceptance — все 15 сценариев Этапа 4 тестируются backend-only:
+- Telegram bot flow (реальный `/start` + код)
+- Mini App endpoints (curl/HTTPie с JWT)
+- DB state — через Supabase MCP
+- Scheduler Jobs E/F/G — ручной trigger через Railway shell `python -c "..."`
+
+**Порядок запуска нового чата:**
+1. Прочесть `CLAUDE.md` → этот `SESSION_STATUS.md` → `TEST_PLAN_SESSION_23.md` (секции 1–14 + финальный чек-лист §14).
+2. TRUNCATE тестовых таблиц в Supabase: `workout_exercises, workout_sessions, ban_history, activity_feed, purchases, boosts, notifications, shop_items, player_stats, partnerships, subscriptions, promo_codes_archive, promo_codes, users` с `RESTART IDENTITY CASCADE`. (Storage-buckets `avatars`/`workout-clips` при необходимости чистить через Dashboard UI.)
+3. Пойти по секциям TEST_PLAN последовательно. Для каждой: агент выдаёт SQL precondition → пользователь копирует curl в терминал/Postman → агент подтверждает через Supabase MCP SQL-проверку → ставит `[x]` в финальном чек-листе §14.
+4. При регрессии: остановиться → фикс → коммит → перепрогон блока.
+5. После всех зелёных → удалить `SESSION_23_BUGFIX.md` и `TEST_PLAN_SESSION_23.md`, оставить только `SESSION_23_PLAN.md` (Этап 3 открыт) и этот STATUS.
+
+**После Acceptance:** переход к Этапу 3 (Frontend refactor 3.1–3.9).
+
+### Техническое состояние DB на точке отключения
+- Миграция 021 применена через Supabase MCP, backfill выполнен корректно (dual-role юзеры получили обе колонки).
+- Колонка `users.access_tier` оставлена как legacy, будет дропнута в миграции 022 уже после Frontend.
+- Railway/Vercel автодеплой активен.
+
+---
 
 ## ✅ Завершено в сессии 23 (Backend — этапы 1 → 2.8)
 - Этап 1: migration 020_subscription_model_v2.sql → commit `dbf1a98`
@@ -13,7 +109,7 @@
 - Этап 2.7: Scheduler Jobs E/F/G (subscription_lifecycle.py) → commit `1ed72bd`
 - Этап 2.8: TTL → partnerships.expires_at, снесены Jobs A/B/C, удалён renewal router → commit `ec1891a`
 
-**Backend v2 готов.** Дальше — Frontend refactor (этапы 3.1-3.9).
+**Backend v2 готов.** После сессии 24 (багфикс-волна) — переход к Этапу 4 (Acceptance).
 
 ## 📦 Догнано попутно
 - Session 20 workout stack (router + vision + migrations 017/019 + frontend) → commit `e70ba4a`
