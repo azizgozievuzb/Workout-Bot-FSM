@@ -1,10 +1,14 @@
-# SESSION STATUS — Session 27 (2026-04-24) — Этап 3: Frontend refactor ✅ COMPLETE
+# SESSION STATUS — Session 27 (2026-04-24) — Этап 5: Production prep ✅ COMMITTED, awaiting deploy + smoke test
 
 ## 🎉 Acceptance: COMPLETE ✅ (2026-04-24)
 Все §§ 0–14 пройдены. Скипы: 2.3, 2.4, 3.3, 3.5, 4.1, 4.3–4.5, 9.4 — намеренные (race/manual).
 
-## ▶️ Следующая точка входа (новый чат) — Этап 5 — Production prep
-(git push, Railway/Vercel deploy check, smoke test on real Telegram)
+## ✅ Этап 5 — Production prep (2026-04-24)
+- Commit `bd6bde1` — feat(frontend): Этап 3 complete (22 files, 2789 ins / 380 del)
+- Статус: **awaiting git push + deploy + smoke test on real Telegram**
+
+## ▶️ Следующая точка входа (новый чат) — Этап 6
+Определить с пользователем: Архитектура Админа, Маркет-рефакторинг или новая фича.
 
 ### Этап 3 — Frontend refactor ✅ COMPLETE
 - [x] 3.1 authStore.ts — ownAccessTier/playerViewTier, wallet fields, effectiveTier getter, localStorage persistence ✅ (2026-04-24)
