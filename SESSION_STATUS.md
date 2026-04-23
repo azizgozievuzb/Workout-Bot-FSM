@@ -1,6 +1,13 @@
 # SESSION STATUS — Session 26 (2026-04-23) — Этап 4: E2E Acceptance
 
-## ▶️ Следующая точка входа (новый чат) — §9 Auth v2 TokenResponse
+## ▶️ Следующая точка входа (новый чат) — §10 Ban + Maintenance
+
+**Состояние БД после §9 (2026-04-24):**
+- Admin (tg=32267272): is_admin=true, responsible_access_tier='elite', shop_freeze=10, gift_freeze=3
+- Admin — responsible для P3/oil + Aziz (2 активных партнёрства, ~30d + ~15d)
+- Aziz (tg=156453252): dual-role, has_player_access=true, player_access_tier='standard', responsible_access_tier='elite'; player у Admin (15d), responsible для P_F
+- P3/oil (tg=8580720783): player, player_access_tier='elite', partnership с Admin (~30d), streak_freeze=2, rest_days=3
+- P_F (tg=300099): player, player_access_tier='standard', partnership с Aziz (~15d)
 
 **Состояние БД после §7 (2026-04-23):**
 - Admin (tg=32267272, id=d67bdb2c-...): существует, has_responsible_access=true
@@ -38,8 +45,8 @@
 - §6 Streak-freeze Jobs ✅ 7/7 (все зелёные, 2026-04-23)
 - §7 Partnership DELETE ✅ 4/4 (все зелёные, 2026-04-23)
 - §8 Scheduler Jobs F/G ✅ 3/3 (все зелёные, 2026-04-23)
-- §9 Auth v2 TokenResponse → **СЛЕДУЮЩИЙ**
-- §10 Ban + Maintenance
+- §9 Auth v2 TokenResponse ✅ 3/3 (9.4 skip — manual; 2026-04-24)
+- §10 Ban + Maintenance → **СЛЕДУЮЩИЙ**
 - §11 Notifications
 - §12 Legacy cleanup
 - §13 Edge Cases
