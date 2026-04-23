@@ -1,15 +1,14 @@
 # SESSION STATUS — Session 26 (2026-04-23) — Этап 4: E2E Acceptance
 
-## ▶️ Следующая точка входа (новый чат) — §7 Partnership DELETE
+## ▶️ Следующая точка входа (новый чат) — §9 Auth v2 TokenResponse
 
-**Состояние БД:**
-- Admin (tg=32267272, elite)
-- Mr. = Responsible (tg=7278081310, **premium** после /upgrade), shop_freeze_balance=2, gift_freeze_balance=1
-- Dol = P1 (tg=7458599391): streak_freeze=7, star_balance=400 (streak_freeze_balance=5 после §6 тестов)
-- Aziz = P2 (tg=156453252): streak_freeze=2, star_balance=450
-- oil = P3 (tg=8580720783): streak_freeze=0
-- P_F = TestFemale (tg=300099, female, standard, id=e115140b-8215-4f58-9d3e-28c16bfd2bfd): rest_days_remaining=0 (после §6.7)
-- Все партнёрства активны (expires_at 2026-05-23)
+**Состояние БД после §7 (2026-04-23):**
+- Admin (tg=32267272, id=d67bdb2c-...): существует, has_responsible_access=true
+- **Mr./R1 (tg=7278081310) — УДАЛЁН** в Test 7.4 (CASCADE)
+- **Dol/P1 (tg=7458599391) — УДАЛЁН** в Test 7.1 (hard-delete, single partnership)
+- Aziz/P2 (tg=156453252, id=db4ab877-...): exists, has_player_access=**false**, has_responsible_access=**true** (dual-role kept)
+- oil/P3 (tg=8580720783, id=7077c006-...): exists (partnership с R1 cascade-удалено)
+- P_F (tg=300099, id=e115140b-...): exists (partnership с R1 cascade-удалено)
 - Миграция 022 применена (duration_days=0 допустим для bonus_pack)
 
 **Хотфиксы сессии 25 (все закоммичены):**
@@ -37,9 +36,9 @@
 - §4 Tier change (4.2) ✅ | 4.1/4.3/4.4/4.5 skip
 - §5 BonusPack ✅ 10/10 (BUG-A + B2 зафикшены, commit `1d78583`)
 - §6 Streak-freeze Jobs ✅ 7/7 (все зелёные, 2026-04-23)
-- §7 Partnership DELETE → **СЛЕДУЮЩИЙ**
-- §8 Scheduler Jobs F/G
-- §9 Auth v2 TokenResponse
+- §7 Partnership DELETE ✅ 4/4 (все зелёные, 2026-04-23)
+- §8 Scheduler Jobs F/G ✅ 3/3 (все зелёные, 2026-04-23)
+- §9 Auth v2 TokenResponse → **СЛЕДУЮЩИЙ**
 - §10 Ban + Maintenance
 - §11 Notifications
 - §12 Legacy cleanup
