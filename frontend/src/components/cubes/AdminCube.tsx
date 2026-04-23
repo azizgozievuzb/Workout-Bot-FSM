@@ -557,14 +557,16 @@ const CodeGeneratorPanel: React.FC = () => {
             <div className="admin-generator-hint">
                 {mode === 'responsible' ? 'Новый Ответственный' : 'Продление для Игрока'}
             </div>
-            <select
-                className="admin-generator-select"
-                value={tier}
-                onChange={(e) => { e.stopPropagation(); setTier(e.target.value as AccessTier); }}
-                onClick={(e) => e.stopPropagation()}
-            >
-                {TIER_OPTIONS.map(t => <option key={t} value={t}>{TIER_LABELS[t]}</option>)}
-            </select>
+            {mode === 'responsible' && (
+                <select
+                    className="admin-generator-select"
+                    value={tier}
+                    onChange={(e) => { e.stopPropagation(); setTier(e.target.value as AccessTier); }}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    {TIER_OPTIONS.map(t => <option key={t} value={t}>{TIER_LABELS[t]}</option>)}
+                </select>
+            )}
             <select
                 className="admin-generator-select"
                 value={duration}
@@ -580,7 +582,7 @@ const CodeGeneratorPanel: React.FC = () => {
                 <div className="code-display">
                     <code className="code-display-text">{generatedCode}</code>
                     <button className="cube-btn-sm" onClick={copyToClipboard}>📋</button>
-                    <TierBadge tier={tier} />
+                    {mode === 'responsible' && <TierBadge tier={tier} />}
                     <span className="code-display-meta">{duration} дн.</span>
                 </div>
             )}
