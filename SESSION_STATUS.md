@@ -1,13 +1,12 @@
 # SESSION STATUS — Session 26 (2026-04-23) — Этап 4: E2E Acceptance
 
-## ▶️ Следующая точка входа (новый чат) — §12 Legacy cleanup
+## ▶️ Следующая точка входа (новый чат) — §14 Final Checklist
 
-**Состояние БД после §9 (2026-04-24):**
-- Admin (tg=32267272): is_admin=true, responsible_access_tier='elite', shop_freeze=10, gift_freeze=3
-- Admin — responsible для P3/oil + Aziz (2 активных партнёрства, ~30d + ~15d)
-- Aziz (tg=156453252): dual-role, has_player_access=true, player_access_tier='standard', responsible_access_tier='elite'; player у Admin (15d), responsible для P_F
-- P3/oil (tg=8580720783): player, player_access_tier='elite', partnership с Admin (~30d), streak_freeze=2, rest_days=3
-- P_F (tg=300099): player, player_access_tier='standard', partnership с Aziz (~15d)
+**Состояние БД после §13 (2026-04-24):**
+- Admin (tg=32267272): is_admin=true, has_responsible_access=true; responsible для Aziz (1 активное партнёрство)
+- Aziz (tg=156453252): dual-role, has_responsible_access=true; player у Admin; responsible для P_F
+- P3/oil (tg=8580720783): **УДАЛЁН** в Test 13.8 (hard-delete, single partnership с Admin)
+- P_F (tg=300099): player, partnership с Aziz (~15d)
 
 **Состояние БД после §7 (2026-04-23):**
 - Admin (tg=32267272, id=d67bdb2c-...): существует, has_responsible_access=true
@@ -48,8 +47,8 @@
 - §9 Auth v2 TokenResponse ✅ 3/3 (9.4 skip — manual; 2026-04-24)
 - §10 Ban + Maintenance ✅ 4/4 (2026-04-24)
 - §11 Notifications ✅ 4/4 (2026-04-24)
-- §12 Legacy cleanup → **СЛЕДУЮЩИЙ**
-- §13 Edge Cases
+- §12 Legacy cleanup ✅ 5/5 (2026-04-24)
+- §13 Edge Cases ✅ 6/6 (13.3/13.5/13.7 skip; 13.6 Step 4 note: P3 male→gender guard before stats check; 2026-04-24)
 - §14 Final Checklist
 
 **Баги §5 — ЗАФИКШЕНЫ (commit `1d78583`):**
