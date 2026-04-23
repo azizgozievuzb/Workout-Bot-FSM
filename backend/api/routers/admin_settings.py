@@ -2,11 +2,10 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ...core.deps import require_admin, _invalidate_settings_cache
-from ...core.config import settings
 from ...db.client import get_supabase
 
 router = APIRouter(prefix="/admin", tags=["admin-settings"])
@@ -187,52 +186,3 @@ async def unban_user(user_id: UUID, user=Depends(require_admin)):
         .execute()
     )
     return {"banned": False}
-
-
-class _GenTokenReq(BaseModel):
-    secret: str
-
-
-@router.post("/debug/gen-admin-token")
-async def debug_gen_admin_token(body: _GenTokenReq):
-    """Bootstrap: validates ADMIN_PROMO_CODE or SUPABASE_SERVICE_KEY (in body) and returns admin JWT."""
-    valid = (settings.ADMIN_PROMO_CODE and body.secret == settings.ADMIN_PROMO_CODE) or (
-        settings.SUPABASE_SERVICE_KEY and body.secret == settings.SUPABASE_SERVICE_KEY
-    )
-    if not valid:
-        raise HTTPException(status_code=401, detail="Invalid secret")
-    db = await get_supabase()
-    res = (
-        await db.table("users")
-        .select("telegram_id")
-        .eq("is_admin", True)
-        .limit(1)
-        .execute()
-    )
-    if not res.data:
-        raise HTTPException(status_code=404, detail="Admin not found")
-    telegram_id = res.data[0]["telegram_id"]
-    from ...core.security import create_access_token
-    token = create_access_token(telegram_id, "admin")
-    return {"access_token": token, "token_type": "bearer", "telegram_id": telegram_id}
-
-
-@router.post("/debug/auth-payload")
-async def debug_auth_payload(
-    telegram_id: int = Query(...),
-    user=Depends(require_admin),
-):
-    """Returns the same TokenResponse that /auth/telegram would return, without initData."""
-    from ...api.routers.auth import _build_full_token_response, USER_SELECT_COLS
-    db = await get_supabase()
-    res = (
-        await db.table("users")
-        .select(USER_SELECT_COLS)
-        .eq("telegram_id", telegram_id)
-        .maybe_single()
-        .execute()
-    )
-    user_data = res.data if res is not None else None
-    if user_data is None:
-        raise HTTPException(status_code=404, detail="User not found")
-    return await _build_full_token_response(db, telegram_id, user_data)
