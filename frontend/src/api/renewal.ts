@@ -34,9 +34,9 @@ export async function listMyPlayers(): Promise<MyPlayer[]> {
 }
 
 export async function renewPlayer(
-    player_id: string,
+    _player_id: string,
     code: string,
-): Promise<{ new_expires_at: string; added_days: number }> {
-    const res = await api.post('/promo/renew-player', { player_id, code });
+): Promise<{ renewed_count: number; added_days: number }> {
+    const res = await api.post('/promo/apply-renewal', { code });
     return res.data;
 }
