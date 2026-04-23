@@ -1,14 +1,15 @@
 # SESSION STATUS — Session 26 (2026-04-23) — Этап 4: E2E Acceptance
 
-## ▶️ Следующая точка входа (новый чат) — §6 Streak-freeze Jobs
+## ▶️ Следующая точка входа (новый чат) — §7 Partnership DELETE
 
 **Состояние БД:**
 - Admin (tg=32267272, elite)
 - Mr. = Responsible (tg=7278081310, **premium** после /upgrade), shop_freeze_balance=2, gift_freeze_balance=1
-- Dol = P1 (tg=7458599391): streak_freeze=7, star_balance=400
+- Dol = P1 (tg=7458599391): streak_freeze=7, star_balance=400 (streak_freeze_balance=5 после §6 тестов)
 - Aziz = P2 (tg=156453252): streak_freeze=2, star_balance=450
 - oil = P3 (tg=8580720783): streak_freeze=0
-- Все 3 партнёрства активны (expires_at 2026-05-23)
+- P_F = TestFemale (tg=300099, female, standard, id=e115140b-8215-4f58-9d3e-28c16bfd2bfd): rest_days_remaining=0 (после §6.7)
+- Все партнёрства активны (expires_at 2026-05-23)
 - Миграция 022 применена (duration_days=0 допустим для bonus_pack)
 
 **Хотфиксы сессии 25 (все закоммичены):**
@@ -34,9 +35,9 @@
 - §2 Slot-limit (2.1, 2.2, 2.5) ✅ | 2.3/2.4 skip
 - §3 Renewal (3.1, 3.2, 3.4) ✅ | 3.3/3.5 skip
 - §4 Tier change (4.2) ✅ | 4.1/4.3/4.4/4.5 skip
-- §5 BonusPack ⚠️ 8✅ 2❌ (5.4 FAIL, 5.5 FAIL — см. баги ниже)
-- §6 Streak-freeze Jobs → **СЛЕДУЮЩИЙ**
-- §7 Partnership DELETE
+- §5 BonusPack ✅ 10/10 (BUG-A + B2 зафикшены, commit `1d78583`)
+- §6 Streak-freeze Jobs ✅ 7/7 (все зелёные, 2026-04-23)
+- §7 Partnership DELETE → **СЛЕДУЮЩИЙ**
 - §8 Scheduler Jobs F/G
 - §9 Auth v2 TokenResponse
 - §10 Ban + Maintenance
@@ -45,18 +46,10 @@
 - §13 Edge Cases
 - §14 Final Checklist
 
-**Баги найдены в §5 (не зафикшены):**
+**Баги §5 — ЗАФИКШЕНЫ (commit `1d78583`):**
 
-**BUG-A: `purchases` FK violation → 500 при покупке** (критичный)
-- `shop.py::purchase_item`: DELETE shop_item (строка ~479) происходит ДО INSERT purchases (~487)
-- `purchases.item_id` имеет FK → `shop_items(id)`, поэтому INSERT падает с FK violation → 500
-- При этом item удалён, star_balance списан, streak_freeze начислен — потеря транзакционности
-- Фикс: переставить INSERT purchases ДО DELETE shop_item
-
-**BUG-B2 (из плана): нет guard по player_id в `/shop/purchase`**
-- Любой Player может купить лот, адресованный другому Player
-- Подтверждено: P2 купила лот P1, получила freezes, списала баланс
-- Фикс: проверить `item["player_id"] == user_id` перед списанием
+- **BUG-A**: INSERT purchases перемещён ДО DELETE shop_items → FK violation устранён
+- **B2**: guard `item.get("player_id") != user_id` → 403 NOT_YOUR_ITEM добавлен
 
 **Уже исправлено (B4):** B4 (GET /shop/items privacy guard) — работает корректно (403)
 
