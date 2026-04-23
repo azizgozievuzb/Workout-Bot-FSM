@@ -381,6 +381,10 @@ async def purchase_item(
         raise HTTPException(status_code=404, detail="Item not found")
 
     item = item_res.data
+
+    if item.get("player_id") and str(item["player_id"]) != str(user_id):
+        raise HTTPException(status_code=403, detail={"code": "NOT_YOUR_ITEM"})
+
     price = int(item["price_stars"])
     item_type = item.get("item_type") or "generic"
     freeze_count = int(item.get("freeze_count") or 0)
@@ -477,6 +481,15 @@ async def purchase_item(
             raise HTTPException(status_code=409, detail={"code": "RACE"})
 
         await (
+            db.table("purchases")
+            .insert({
+                "player_id": user_id,
+                "item_id": str(item["id"]),
+                "price_paid": price,
+            })
+            .execute()
+        )
+        await (
             db.table("shop_items")
             .delete()
             .eq("id", item["id"])
@@ -484,15 +497,16 @@ async def purchase_item(
         )
         message = f"+{freeze_count} заморозок"
 
-    await (
-        db.table("purchases")
-        .insert({
-            "player_id": user_id,
-            "item_id": str(item["id"]),
-            "price_paid": price,
-        })
-        .execute()
-    )
+    else:
+        await (
+            db.table("purchases")
+            .insert({
+                "player_id": user_id,
+                "item_id": str(item["id"]),
+                "price_paid": price,
+            })
+            .execute()
+        )
 
     return PurchaseResponse(
         success=True,
