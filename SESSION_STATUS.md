@@ -1,13 +1,15 @@
-# SESSION STATUS — Session 25 (2026-04-23) — Этап 4: E2E Acceptance
+# SESSION STATUS — Session 26 (2026-04-23) — Этап 4: E2E Acceptance
 
-## ▶️ Следующая точка входа (новый чат) — §5 BonusPack
+## ▶️ Следующая точка входа (новый чат) — §6 Streak-freeze Jobs
 
 **Состояние БД:**
 - Admin (tg=32267272, elite)
-- Mr. = Responsible (tg=7278081310, **premium** после /upgrade)
-- Dol = Player P1 (tg=7458599391), Aziz = P2 (tg=156453252), oil = P3 (tg=8580720783)
-- Все 3 партнёрства **истекли** (expires_at вчера). UI показывает 3/2 красным.
-- Mr. новый PP-код: `PPZ0YAJ4`
+- Mr. = Responsible (tg=7278081310, **premium** после /upgrade), shop_freeze_balance=2, gift_freeze_balance=1
+- Dol = P1 (tg=7458599391): streak_freeze=7, star_balance=400
+- Aziz = P2 (tg=156453252): streak_freeze=2, star_balance=450
+- oil = P3 (tg=8580720783): streak_freeze=0
+- Все 3 партнёрства активны (expires_at 2026-05-23)
+- Миграция 022 применена (duration_days=0 допустим для bonus_pack)
 
 **Хотфиксы сессии 25 (все закоммичены):**
 - `83be9b0` — fix(admin): createResponsibleCode → /admin/promo/tier (URL mismatch)
@@ -32,8 +34,8 @@
 - §2 Slot-limit (2.1, 2.2, 2.5) ✅ | 2.3/2.4 skip
 - §3 Renewal (3.1, 3.2, 3.4) ✅ | 3.3/3.5 skip
 - §4 Tier change (4.2) ✅ | 4.1/4.3/4.4/4.5 skip
-- §5 BonusPack → **СЛЕДУЮЩИЙ**
-- §6 Streak-freeze Jobs
+- §5 BonusPack ⚠️ 8✅ 2❌ (5.4 FAIL, 5.5 FAIL — см. баги ниже)
+- §6 Streak-freeze Jobs → **СЛЕДУЮЩИЙ**
 - §7 Partnership DELETE
 - §8 Scheduler Jobs F/G
 - §9 Auth v2 TokenResponse
@@ -43,13 +45,22 @@
 - §13 Edge Cases
 - §14 Final Checklist
 
-**Перед стартом §5:** продлить партнёрства Dol обратно (нужен активный игрок для теста shop):
-```bash
-supabase db execute --project-ref dlpdwmmfpzfxcelxqvlq --sql "
-UPDATE partnerships SET expires_at = now() + interval '30 days'
-WHERE responsible_id = (SELECT id FROM users WHERE telegram_id = 7278081310);
-"
-```
+**Баги найдены в §5 (не зафикшены):**
+
+**BUG-A: `purchases` FK violation → 500 при покупке** (критичный)
+- `shop.py::purchase_item`: DELETE shop_item (строка ~479) происходит ДО INSERT purchases (~487)
+- `purchases.item_id` имеет FK → `shop_items(id)`, поэтому INSERT падает с FK violation → 500
+- При этом item удалён, star_balance списан, streak_freeze начислен — потеря транзакционности
+- Фикс: переставить INSERT purchases ДО DELETE shop_item
+
+**BUG-B2 (из плана): нет guard по player_id в `/shop/purchase`**
+- Любой Player может купить лот, адресованный другому Player
+- Подтверждено: P2 купила лот P1, получила freezes, списала баланс
+- Фикс: проверить `item["player_id"] == user_id` перед списанием
+
+**Уже исправлено (B4):** B4 (GET /shop/items privacy guard) — работает корректно (403)
+
+**Constraint fix:** миграция 022 применена (promo_duration_check теперь допускает 0)
 
 **Известный шум в логах:** `/renewal/my-requests` 404 — убрать в Этапе 3.
 
