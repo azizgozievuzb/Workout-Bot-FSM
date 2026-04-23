@@ -189,14 +189,18 @@ async def unban_user(user_id: UUID, user=Depends(require_admin)):
     return {"banned": False}
 
 
+class _GenTokenReq(BaseModel):
+    secret: str
+
+
 @router.post("/debug/gen-admin-token")
-async def debug_gen_admin_token(promo_code: str = Query(...)):
-    """Bootstrap: validates ADMIN_PROMO_CODE or SUPABASE_SERVICE_KEY and returns admin JWT for E2E tests."""
-    valid = (settings.ADMIN_PROMO_CODE and promo_code == settings.ADMIN_PROMO_CODE) or (
-        settings.SUPABASE_SERVICE_KEY and promo_code == settings.SUPABASE_SERVICE_KEY
+async def debug_gen_admin_token(body: _GenTokenReq):
+    """Bootstrap: validates ADMIN_PROMO_CODE or SUPABASE_SERVICE_KEY (in body) and returns admin JWT."""
+    valid = (settings.ADMIN_PROMO_CODE and body.secret == settings.ADMIN_PROMO_CODE) or (
+        settings.SUPABASE_SERVICE_KEY and body.secret == settings.SUPABASE_SERVICE_KEY
     )
     if not valid:
-        raise HTTPException(status_code=401, detail="Invalid promo code")
+        raise HTTPException(status_code=401, detail="Invalid secret")
     db = await get_supabase()
     res = (
         await db.table("users")
