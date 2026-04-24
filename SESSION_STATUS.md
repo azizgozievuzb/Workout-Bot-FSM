@@ -1,4 +1,4 @@
-# SESSION STATUS — Session 28 (2026-04-25) — Smoke test bugfix batch 1 ✅ COMMITTED
+# SESSION STATUS — Session 29 (2026-04-25) — Этап 6 задачи 1–4 ✅ COMMITTED
 
 ## 🎉 Acceptance: COMPLETE ✅ (2026-04-24)
 Все §§ 0–14 пройдены. Скипы: 2.3, 2.4, 3.3, 3.5, 4.1, 4.3–4.5, 9.4 — намеренные (race/manual).
@@ -16,16 +16,21 @@
 - Commit `bd6bde1` — feat(frontend): Этап 3 complete (22 files, 2789 ins / 380 del)
 - Статус: **deployed + smoke tested + bugfixed**
 
-## ▶️ Следующая точка входа (новый чат) — Этап 6
-Определить с пользователем: Архитектура Админа, Маркет-рефакторинг или новая фича.
+## ✅ Этап 6 — задачи 1–4 (2026-04-25)
 
-## Этап 6 — В процессе
-- [x] Задача 1: XP rename — `player_stats.star_balance` → `xp_balance` по всему стеку (миграция 023, backend 4 файла, frontend 5 файлов); tsc exit 0 ✅ (2026-04-25)
-- [x] Задача 2: Убран вызов удалённого эндпоинта `/renewal/my-requests` — удалена `listMyRenewalRequests()` из `renewal.ts`, убраны `fetchRequests` callback + вызов в Promise.all + polling useEffect в ActionCube; state `requests`/`requestsByPlayer` оставлен (badge «🔔 Просит продлить»); tsc exit 0 ✅ (2026-04-25)
-- [x] Задача 3: TierMatrixScreen рефакторинг — убрана таблица 3×6 с техническими деталями и кнопка «Сменить тариф»; добавлены три колонки (Standard/Premium/Elite) с 8 фичами-заглушками (пирамида: Standard 4, Premium 6, Elite 8 активных); кнопка «⬆️ Попросить повышение» для тиров выше активного (hapticNotification('warning') + toast); активный тир подсвечен акцент-рамкой; tsc exit 0 ✅ (2026-04-25)
-- [x] Задача 4: wallet chips в ResponsibleView — убраны «Магазин» и «Подарки» (всегда 0); добавлен один chip «❄️ Заморозок: N» где N = shopFreezeBalance + giftFreezeBalance (оба поля уже парсились из TokenResponse в setAuth); chip показывается всегда (даже при N=0); tsc exit 0 ✅ (2026-04-25)
+- [x] **Задача 1: XP rename** — `player_stats.star_balance` → `xp_balance` по всему стеку; миграция `023_rename_star_balance_to_xp.sql` применена в Supabase; backend: `workout.py`, `stats.py`, `admin.py`, `shop.py`; frontend: `api/stats.ts`, `api/admin.ts`, `DashboardSection.tsx`, `DashboardPanel.tsx`, `AdminCube.tsx`, `MarketCube.tsx`; tsc exit 0 — commit `(xp rename)`
+- [x] **Задача 2: Фикс 404 `/renewal/my-requests`** — удалена `listMyRenewalRequests()` из `renewal.ts`; убраны `fetchRequests`, вызов в `Promise.all`, polling `useEffect` в `ActionCube.tsx`; state `requestsByPlayer` оставлен (badge не сломан); tsc exit 0 — commit `a057ff8`
+- [x] **Задача 3: TierMatrixScreen рефакторинг** — убрана таблица 3×6 и кнопка «Сменить тариф»; добавлены 3 колонки (Standard/Premium/Elite) с фичами-заглушками (пирамида: 4/6/8); кнопка «⬆️ Попросить повышение» с haptic+toast; активный тир подсвечен рамкой; tsc exit 0 — commit `b39c8a7`
+- [x] **Задача 4: Wallet chips ResponsibleView** — убраны «Магазин»/«Подарки»; добавлен «❄️ Заморозок: N» (N = shopFreezeBalance + giftFreezeBalance, всегда виден); tsc exit 0 — commit `(freeze chip)`
 
-▶️ Следующая задача — Онбординг в боте (Задача 5, отдельный промпт)
+## ▶️ Следующая точка входа (новый чат) — Задача 5: Онбординг в боте
+
+Большая задача (отдельный промпт, Opus):
+- 4 вопроса после P-кода: пол (уже есть) → уровень подготовки → возраст → цель
+- Команда `/settings` для повторного прохождения
+- Повторный онбординг только каждые 120 дней активной подписки
+- При напоминании бот блокирует Mini App до ответа
+- Новые колонки БД: `fitness_level`, `age_range`, `goal`, `active_days_count`, `goal_update_required`, `goal_last_updated_at`
 
 ### Этап 3 — Frontend refactor ✅ COMPLETE
 - [x] 3.1 authStore.ts — ownAccessTier/playerViewTier, wallet fields, effectiveTier getter, localStorage persistence ✅ (2026-04-24)
