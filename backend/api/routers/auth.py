@@ -94,10 +94,12 @@ async def _build_full_token_response(db, telegram_id: int, user_data: dict) -> T
         except Exception:
             pass
 
-    # own_access_tier — Responsible/Admin only
+    # own_access_tier — tier for the user's primary capability
     own_access_tier: str | None = None
     if is_admin or has_responsible_access:
         own_access_tier = user_data.get("responsible_access_tier")
+    elif has_player_access:
+        own_access_tier = user_data.get("player_access_tier")
 
     # player_view_tier — inherited tier from Responsible (stored at P-code activation)
     player_view_tier: str | None = None

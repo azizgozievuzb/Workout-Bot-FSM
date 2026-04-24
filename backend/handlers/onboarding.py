@@ -281,6 +281,37 @@ async def process_language(callback: types.CallbackQuery) -> None:
 @onboarding_router.callback_query(F.data.startswith("gender_"))
 async def process_gender(callback: types.CallbackQuery) -> None:
     gender = callback.data.split("_")[1]
+    db = await get_supabase()
+
+    # P-code player registration: collect gender then finalize
+    state_res = (
+        await db.table("users")
+        .select("onboarding_state")
+        .eq("telegram_id", callback.from_user.id)
+        .maybe_single()
+        .execute()
+    )
+    db_state = (state_res.data or {}).get("onboarding_state") if state_res else None
+
+    if db_state == "player_gender_setup":
+        await (
+            db.table("users")
+            .update({
+                "gender": gender,
+                "onboarding_state": "onboardingComplete",
+                "onboarding_done": True,
+            })
+            .eq("telegram_id", callback.from_user.id)
+            .execute()
+        )
+        await callback.message.edit_text(
+            "✅ Вы зарегистрированы! Откройте приложение:",
+            reply_markup=get_miniapp_keyboard(),
+        )
+        await callback.answer()
+        return
+
+    # Original FSM flow (language → gender → survey or resp_player_name)
     svc = await get_svc()
     result = await svc.send_event(callback.from_user.id, {"type": "SET_GENDER", "gender": gender})
 
@@ -477,7 +508,7 @@ async def process_text_input(message: types.Message) -> None:
             now = datetime.now(timezone.utc)
             expires_at = (now + timedelta(days=duration_days)).isoformat()
 
-            # Upsert player user row
+            # Upsert player user row (gender collected separately)
             await (
                 db.table("users")
                 .upsert(
@@ -491,8 +522,8 @@ async def process_text_input(message: types.Message) -> None:
                         "player_access_tier": p_access_tier,
                         "deactivated_at": None,
                         "scheduled_deletion_at": None,
-                        "onboarding_state": "onboardingComplete",
-                        "onboarding_done": True,
+                        "onboarding_state": "player_gender_setup",
+                        "onboarding_done": False,
                     },
                     on_conflict="telegram_id",
                 )
@@ -557,9 +588,8 @@ async def process_text_input(message: types.Message) -> None:
             await db.table("users").update({"promo_attempts": 0, "promo_locked_until": None}).eq("telegram_id", tg.id).execute()
 
             await message.answer(
-                f"✅ Вы зарегистрированы как Игрок у {responsible_name}.\n\n"
-                f"Откройте приложение:",
-                reply_markup=get_miniapp_keyboard(),
+                f"Последний шаг! Укажите ваш пол:",
+                reply_markup=get_gender_keyboard(),
             )
             return
 
