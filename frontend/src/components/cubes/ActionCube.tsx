@@ -13,7 +13,6 @@ import { buyBoost } from '../../api/boosts';
 import type { ActiveBoost } from '../../api/boosts';
 import {
     createRenewalRequest,
-    listMyRenewalRequests,
 } from '../../api/renewal';
 import type { RenewalRequest } from '../../api/renewal';
 import { getMyPlayers } from '../../api/partnerships';
@@ -339,35 +338,14 @@ const ResponsibleView: React.FC = () => {
             .catch(() => {});
     }, []);
 
-    const fetchRequests = useCallback(() => {
-        listMyRenewalRequests()
-            .then(setRequests)
-            .catch(() => {});
-    }, []);
-
     useEffect(() => {
         fetchCode();
     }, [fetchCode]);
 
     useEffect(() => {
-        Promise.all([
-            getMyPlayers().then(setPlayers).catch(() => {}),
-            listMyRenewalRequests().then(setRequests).catch(() => {}),
-        ]).finally(() => setLoading(false));
+        getMyPlayers().then(setPlayers).catch(() => {});
+        setLoading(false);
     }, []);
-
-    useEffect(() => {
-        const tick = () => {
-            if (document.visibilityState !== 'visible') return;
-            fetchRequests();
-        };
-        const id = window.setInterval(tick, 60_000);
-        document.addEventListener('visibilitychange', tick);
-        return () => {
-            window.clearInterval(id);
-            document.removeEventListener('visibilitychange', tick);
-        };
-    }, [fetchRequests]);
 
     useEffect(() => {
         const onVisible = () => {

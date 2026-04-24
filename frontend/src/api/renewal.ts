@@ -24,10 +24,6 @@ export async function createRenewalRequest(): Promise<{ status: 'sent' }> {
     return res.data;
 }
 
-export async function listMyRenewalRequests(): Promise<RenewalRequest[]> {
-    const res = await api.get('/renewal/my-requests');
-    return res.data;
-}
 
 export async function listMyPlayers(): Promise<MyPlayer[]> {
     const res = await api.get('/partnerships/my-players');
