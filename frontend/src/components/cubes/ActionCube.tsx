@@ -438,14 +438,7 @@ const ResponsibleView: React.FC = () => {
         <>
             <div className="responsible-wallet-row">
                 <div className="wallet-chip">
-                    <span className="wallet-chip-icon">🧊</span>
-                    <span className="wallet-chip-label">Магазин</span>
-                    <span className="wallet-chip-value">{shopFreezeBalance}</span>
-                </div>
-                <div className="wallet-chip">
-                    <span className="wallet-chip-icon">🎁</span>
-                    <span className="wallet-chip-label">Подарки</span>
-                    <span className="wallet-chip-value">{giftFreezeBalance}</span>
+                    <span className="wallet-chip-label">❄️ Заморозок: {shopFreezeBalance + giftFreezeBalance}</span>
                 </div>
             </div>
 
