@@ -22,6 +22,7 @@
 ## Этап 6 — В процессе
 - [x] Задача 1: XP rename — `player_stats.star_balance` → `xp_balance` по всему стеку (миграция 023, backend 4 файла, frontend 5 файлов); tsc exit 0 ✅ (2026-04-25)
 - [x] Задача 2: Убран вызов удалённого эндпоинта `/renewal/my-requests` — удалена `listMyRenewalRequests()` из `renewal.ts`, убраны `fetchRequests` callback + вызов в Promise.all + polling useEffect в ActionCube; state `requests`/`requestsByPlayer` оставлен (badge «🔔 Просит продлить»); tsc exit 0 ✅ (2026-04-25)
+- [x] Задача 3: TierMatrixScreen рефакторинг — убрана таблица 3×6 с техническими деталями и кнопка «Сменить тариф»; добавлены три колонки (Standard/Premium/Elite) с 8 фичами-заглушками (пирамида: Standard 4, Premium 6, Elite 8 активных); кнопка «⬆️ Попросить повышение» для тиров выше активного (hapticNotification('warning') + toast); активный тир подсвечен акцент-рамкой; tsc exit 0 ✅ (2026-04-25)
 
 ### Этап 3 — Frontend refactor ✅ COMPLETE
 - [x] 3.1 authStore.ts — ownAccessTier/playerViewTier, wallet fields, effectiveTier getter, localStorage persistence ✅ (2026-04-24)

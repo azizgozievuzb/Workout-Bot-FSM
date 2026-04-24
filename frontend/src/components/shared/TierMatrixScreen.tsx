@@ -2,96 +2,98 @@ import React, { useState } from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import TierBadge from '../common/TierBadge';
 import type { AccessTier } from '../../stores/authStore';
+import { hapticNotification } from '../../utils/haptic';
 import './TierMatrixScreen.css';
 
 interface Props {
     onClose: () => void;
 }
 
-interface MatrixRow {
+interface Feature {
     label: string;
-    standard: string;
-    premium: string;
-    elite: string;
+    minTier: AccessTier;
 }
 
-const CHECK = '✓';
-const CROSS = '—';
-
-const ROWS: MatrixRow[] = [
-    { label: 'Игровых слотов',         standard: '1',     premium: '2',     elite: '3'    },
-    { label: 'Стрик-заморозки',         standard: CHECK,   premium: CHECK,   elite: CHECK  },
-    { label: 'Бонус-паки',              standard: CROSS,   premium: CHECK,   elite: CHECK  },
-    { label: 'Подарок заморозок',       standard: CROSS,   premium: CHECK,   elite: CHECK  },
-    { label: 'День отдыха (жен.)',       standard: CHECK,   premium: CHECK,   elite: CHECK  },
-    { label: 'Приоритетная поддержка',  standard: CROSS,   premium: CROSS,   elite: CHECK  },
-];
-
+const TIER_RANK: Record<AccessTier, number> = { standard: 0, premium: 1, elite: 2 };
+const TIER_LABEL: Record<AccessTier, string> = { standard: 'Стандарт', premium: 'Премиум', elite: 'Элит' };
 const TIERS: AccessTier[] = ['standard', 'premium', 'elite'];
+
+const FEATURES: Feature[] = [
+    { label: 'Фича 1', minTier: 'standard' },
+    { label: 'Фича 2', minTier: 'standard' },
+    { label: 'Фича 3', minTier: 'standard' },
+    { label: 'Фича 4', minTier: 'standard' },
+    { label: 'Фича 5', minTier: 'premium' },
+    { label: 'Фича 6', minTier: 'premium' },
+    { label: 'Фича 7', minTier: 'elite' },
+    { label: 'Фича 8', minTier: 'elite' },
+];
 
 const TierMatrixScreen: React.FC<Props> = ({ onClose }) => {
     const effectiveTier = useAuthStore((s) => s.effectiveTier());
     const [toast, setToast] = useState('');
 
-    const handleChangeTier = (e: React.MouseEvent) => {
+    const handleUpgrade = (e: React.MouseEvent) => {
         e.stopPropagation();
-        setToast('Обратитесь к администратору для смены тарифа');
+        hapticNotification('warning');
+        setToast('Скоро: трата XP за повышение тира');
         setTimeout(() => setToast(''), 3500);
-    };
-
-    const cellClass = (val: string, tier: AccessTier) => {
-        const active = tier === effectiveTier ? ' tier-matrix-cell--active-col' : '';
-        if (val === CHECK) return `tier-matrix-cell tier-matrix-cell--check${active}`;
-        if (val === CROSS) return `tier-matrix-cell tier-matrix-cell--cross${active}`;
-        return `tier-matrix-cell${active}`;
     };
 
     return (
         <div className="tier-matrix-screen" onClick={(e) => e.stopPropagation()}>
-            {/* Header */}
             <div className="tier-matrix-header">
                 <button className="tier-matrix-back" onClick={onClose}>←</button>
                 <h2 className="tier-matrix-title">Тарифы</h2>
             </div>
 
-            {/* Table */}
             <div className="tier-matrix-body">
-                <div className="tier-matrix-table">
-                    {/* Column headers */}
-                    <div className="tier-matrix-col-header-label" />
-                    {TIERS.map((tier) => (
-                        <div
-                            key={tier}
-                            className={`tier-matrix-col-header-cell${tier === effectiveTier ? ' tier-matrix-col-header-cell--active' : ''}`}
-                        >
-                            <TierBadge tier={tier} />
-                            <span className="tier-matrix-col-name">
-                                {tier === 'standard' ? 'Стандарт' : tier === 'premium' ? 'Премиум' : 'Элит'}
-                            </span>
-                        </div>
-                    ))}
-
-                    {/* Data rows */}
-                    {ROWS.map((row) => (
-                        <React.Fragment key={row.label}>
-                            <div className="tier-matrix-cell-label">{row.label}</div>
-                            {TIERS.map((tier) => (
-                                <div key={tier} className={cellClass(row[tier], tier)}>
-                                    {row[tier]}
+                <div className="tier-matrix-cols">
+                    {TIERS.map((tier) => {
+                        const isActive = tier === effectiveTier;
+                        const isUpgradeable = TIER_RANK[tier] > TIER_RANK[effectiveTier];
+                        return (
+                            <div
+                                key={tier}
+                                className={`tier-col${isActive ? ' tier-col--active' : ''}`}
+                            >
+                                <div className="tier-col-header">
+                                    <TierBadge tier={tier} />
+                                    <span className="tier-col-name">{TIER_LABEL[tier]}</span>
                                 </div>
-                            ))}
-                        </React.Fragment>
-                    ))}
+
+                                <ul className="tier-col-features">
+                                    {FEATURES.map((f) => {
+                                        const on = TIER_RANK[tier] >= TIER_RANK[f.minTier];
+                                        return (
+                                            <li
+                                                key={f.label}
+                                                className={`tier-col-feature${on ? ' tier-col-feature--on' : ' tier-col-feature--off'}`}
+                                            >
+                                                <span className="tier-col-feature-dot">{on ? '●' : '○'}</span>
+                                                {f.label}
+                                            </li>
+                                        );
+                                    })}
+                                </ul>
+
+                                <div className="tier-col-footer">
+                                    {isActive && (
+                                        <div className="tier-col-current">Текущий</div>
+                                    )}
+                                    {isUpgradeable && (
+                                        <button className="tier-col-upgrade-btn" onClick={handleUpgrade}>
+                                            ⬆️ Попросить повышение
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
 
-            {/* Footer */}
-            <div className="tier-matrix-footer">
-                <button className="tier-matrix-change-btn" onClick={handleChangeTier}>
-                    Сменить тариф
-                </button>
-                {toast && <div className="tier-matrix-toast">{toast}</div>}
-            </div>
+            {toast && <div className="tier-matrix-toast">{toast}</div>}
         </div>
     );
 };
