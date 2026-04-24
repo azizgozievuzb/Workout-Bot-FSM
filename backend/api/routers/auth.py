@@ -16,8 +16,33 @@ USER_SELECT_COLS = (
     "primary_role, has_player_access, has_responsible_access, is_admin, "
     "ban_until, ban_reason, ban_missed_workouts, "
     "responsible_access_tier, player_access_tier, "
-    "shop_freeze_balance, gift_freeze_balance, gender"
+    "shop_freeze_balance, gift_freeze_balance, gender, "
+    "goal, goal_update_required"
 )
+
+
+ONBOARDING_REQUIRED_MESSAGE = "Вернись в бот, ответь на 3 вопроса (/settings)."
+
+
+def _check_onboarding_gate(user_data: dict) -> None:
+    """
+    Раз player завершил P-код активацию и имеет role='player', но цель ещё
+    не проставлена (или сработал Job H → goal_update_required=TRUE) — блокируем
+    Mini App до ответа в боте.
+    """
+    if user_data.get("role") != "player":
+        return
+    goal = user_data.get("goal")
+    goal_update_required = bool(user_data.get("goal_update_required"))
+    if goal and not goal_update_required:
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail={
+            "code": "ONBOARDING_REQUIRED",
+            "message": ONBOARDING_REQUIRED_MESSAGE,
+        },
+    )
 
 
 class TelegramAuthRequest(BaseModel):
@@ -226,6 +251,7 @@ async def telegram_auth(body: TelegramAuthRequest) -> TokenResponse:
     if user_data is None:
         raise HTTPException(status_code=403, detail={"code": "NO_ACCESS"})
 
+    _check_onboarding_gate(user_data)
     return await _build_full_token_response(db, telegram_id, user_data)
 
 
@@ -255,6 +281,7 @@ async def register_user(body: TelegramAuthRequest) -> TokenResponse:
 
     # Уже зарегистрирован — возвращаем профиль v2
     if user_data is not None:
+        _check_onboarding_gate(user_data)
         return await _build_full_token_response(db, telegram_id, user_data)
 
     # Новый пользователь — создаём минимальную запись

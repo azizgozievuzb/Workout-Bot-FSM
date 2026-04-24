@@ -14,6 +14,7 @@ import { useAuthStore } from './stores/authStore';
 import AccessRevokedScreen from './components/shared/AccessRevokedScreen';
 import MaintenanceScreen from './components/shared/MaintenanceScreen';
 import BanScreen from './components/shared/BanScreen';
+import OnboardingBlockedScreen from './components/shared/OnboardingBlockedScreen';
 import './App.css';
 import DashboardPanel from './components/shared/DashboardPanel';
 import DashboardRoleSwitch from './components/shared/DashboardRoleSwitch';
@@ -37,7 +38,7 @@ const carouselVariants = {
 
 const App: React.FC = () => {
     const { isLoading, onboardingDone, photoUrl, error, role } = useAuth();
-    const { is_admin, accessRevoked, banInfo, maintenanceMode } = useAuthStore();
+    const { is_admin, accessRevoked, banInfo, maintenanceMode, onboardingBlocked, onboardingBlockedMessage } = useAuthStore();
     const [theme, setTheme] = useState<'dark' | 'light'>('dark');
     const [layoutMode, setLayoutMode] = useState<LayoutMode>('chaos');
     const [activeModule, setActiveModule] = useState<ModuleName | null>(null);
@@ -158,6 +159,9 @@ const App: React.FC = () => {
     if (maintenanceMode && !is_admin) return <MaintenanceScreen />;
     if (accessRevoked && !isLoading) {
         return <AccessRevokedScreen />;
+    }
+    if (onboardingBlocked) {
+        return <OnboardingBlockedScreen message={onboardingBlockedMessage} />;
     }
 
     return (

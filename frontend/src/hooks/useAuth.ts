@@ -43,6 +43,7 @@ export function useAuth() {
   const {
     isAuthenticated, role, primary_role, has_player_access, has_responsible_access, is_admin,
     onboardingDone, photoUrl, photoDarkUrl, photoLightUrl, setAuth, setStyledPhotos, clearAuth, setBanInfo,
+    setOnboardingBlocked,
   } = useAuthStore();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -119,8 +120,16 @@ export function useAuth() {
         if (!cancelled) {
           if ((err as any).__accessRevoked) return; // handled by interceptor; black screen shown
 
+          // 403 ONBOARDING_REQUIRED — игрок не ответил на fitness/age/goal
+          const detail = err.response?.data?.detail;
+          const code = detail?.code ?? detail;
+          if (err.response?.status === 403 && code === 'ONBOARDING_REQUIRED') {
+            setOnboardingBlocked(detail?.message ?? null);
+            setIsLoading(false);
+            return;
+          }
+
           // 403 NO_ACCESS — пользователь не в БД → авто-регистрация
-          const code = err.response?.data?.detail?.code ?? err.response?.data?.detail;
           if (err.response?.status === 403 && code === 'NO_ACCESS') {
             try {
               const initData = getInitData();

@@ -47,6 +47,8 @@ interface AuthState {
   accessRevoked: boolean;
   maintenanceMode: boolean;
   banInfo: BanInfo | null;
+  onboardingBlocked: boolean;
+  onboardingBlockedMessage: string | null;
   // --- Tier (3.1) ---
   ownAccessTier: AccessTier | null;
   playerViewTier: AccessTier | null;
@@ -66,6 +68,7 @@ interface AuthState {
   setAccessRevoked: (revoked: boolean) => void;
   setMaintenanceMode: (on: boolean) => void;
   setBanInfo: (info: BanInfo | null) => void;
+  setOnboardingBlocked: (message: string | null) => void;
   setOwnAccessTier: (tier: AccessTier | null) => void;
   setPlayerViewTier: (tier: AccessTier | null) => void;
   setShopFreezeBalance: (v: number) => void;
@@ -127,6 +130,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   accessRevoked: localStorage.getItem('access_revoked') === '1',
   maintenanceMode: false,
   banInfo: null,
+  onboardingBlocked: false,
+  onboardingBlockedMessage: null,
   ownAccessTier: _parseTier(localStorage.getItem(CACHE_KEYS.ownTier)),
   playerViewTier: _parseTier(localStorage.getItem(CACHE_KEYS.playerTier)),
   shopFreezeBalance: 0,
@@ -144,6 +149,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setActiveRoleView: (view) => set({ activeRoleView: view }),
   setMaintenanceMode: (on) => set({ maintenanceMode: on }),
   setBanInfo: (info) => set({ banInfo: info }),
+  setOnboardingBlocked: (message) =>
+    set({
+      onboardingBlocked: message !== null,
+      onboardingBlockedMessage: message,
+    }),
   setOwnAccessTier: (tier) => {
     if (tier) localStorage.setItem(CACHE_KEYS.ownTier, tier);
     else localStorage.removeItem(CACHE_KEYS.ownTier);
