@@ -39,3 +39,38 @@ def get_miniapp_keyboard() -> InlineKeyboardMarkup:
         )
     )
     return builder.as_markup()
+
+
+def get_fitness_keyboard() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="🟢 Новичок", callback_data="fitness_beginner"))
+    builder.row(InlineKeyboardButton(text="🟡 Средний", callback_data="fitness_intermediate"))
+    builder.row(InlineKeyboardButton(text="🔴 Продвинутый", callback_data="fitness_advanced"))
+    return builder.as_markup()
+
+
+def get_age_keyboard() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text="<18", callback_data="age_lt18"),
+        InlineKeyboardButton(text="18-25", callback_data="age_18-25"),
+    )
+    builder.row(
+        InlineKeyboardButton(text="26-35", callback_data="age_26-35"),
+        InlineKeyboardButton(text="36-45", callback_data="age_36-45"),
+    )
+    builder.row(
+        InlineKeyboardButton(text="46-55", callback_data="age_46-55"),
+        InlineKeyboardButton(text="55+", callback_data="age_55plus"),
+    )
+    return builder.as_markup()
+
+
+def get_goal_keyboard() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="⚖️ Похудеть", callback_data="goal_lose_weight"))
+    builder.row(InlineKeyboardButton(text="💪 Набрать массу", callback_data="goal_build_muscle"))
+    builder.row(InlineKeyboardButton(text="🏃 Выносливость", callback_data="goal_endurance"))
+    builder.row(InlineKeyboardButton(text="❤️ Здоровье", callback_data="goal_health"))
+    builder.row(InlineKeyboardButton(text="🧘 Гибкость", callback_data="goal_flexibility"))
+    return builder.as_markup()

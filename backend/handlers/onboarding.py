@@ -18,7 +18,10 @@ from aiogram.fsm.context import FSMContext
 from ..db.client import get_supabase
 from ..core.config import settings
 from ..keyboards.onboarding_keyboards import (
+    get_age_keyboard,
+    get_fitness_keyboard,
     get_gender_keyboard,
+    get_goal_keyboard,
     get_language_keyboard,
     get_miniapp_keyboard,
     get_survey_keyboard,
@@ -298,15 +301,14 @@ async def process_gender(callback: types.CallbackQuery) -> None:
             db.table("users")
             .update({
                 "gender": gender,
-                "onboarding_state": "onboardingComplete",
-                "onboarding_done": True,
+                "onboarding_state": "player_fitness_setup",
             })
             .eq("telegram_id", callback.from_user.id)
             .execute()
         )
         await callback.message.edit_text(
-            "✅ Вы зарегистрированы! Откройте приложение:",
-            reply_markup=get_miniapp_keyboard(),
+            "Какой у тебя уровень физической подготовки?",
+            reply_markup=get_fitness_keyboard(),
         )
         await callback.answer()
         return
@@ -328,6 +330,132 @@ async def process_gender(callback: types.CallbackQuery) -> None:
             "Небольшой опрос о физподготовке.\n\nСколько раз в неделю вы тренировались раньше?",
             reply_markup=get_survey_keyboard(),
         )
+    await callback.answer()
+
+
+# ---------------------------------------------------------------------------
+# Fitness / Age / Goal callbacks (extended player onboarding v3)
+# ---------------------------------------------------------------------------
+
+_AGE_MAP = {
+    "lt18": "<18",
+    "18-25": "18-25",
+    "26-35": "26-35",
+    "36-45": "36-45",
+    "46-55": "46-55",
+    "55plus": "55+",
+}
+
+
+@onboarding_router.callback_query(F.data.startswith("fitness_"))
+async def process_fitness(callback: types.CallbackQuery) -> None:
+    level = callback.data.split("_", 1)[1]
+    if level not in ("beginner", "intermediate", "advanced"):
+        await callback.answer("Некорректный выбор.")
+        return
+
+    db = await get_supabase()
+    state_res = (
+        await db.table("users")
+        .select("onboarding_state")
+        .eq("telegram_id", callback.from_user.id)
+        .maybe_single()
+        .execute()
+    )
+    db_state = (state_res.data or {}).get("onboarding_state") if state_res else None
+    if db_state != "player_fitness_setup":
+        await callback.answer("Сейчас этот шаг недоступен.")
+        return
+
+    await (
+        db.table("users")
+        .update({
+            "fitness_level": level,
+            "onboarding_state": "player_age_setup",
+        })
+        .eq("telegram_id", callback.from_user.id)
+        .execute()
+    )
+    await callback.message.edit_text(
+        "Сколько тебе лет?",
+        reply_markup=get_age_keyboard(),
+    )
+    await callback.answer()
+
+
+@onboarding_router.callback_query(F.data.startswith("age_"))
+async def process_age(callback: types.CallbackQuery) -> None:
+    raw = callback.data.split("_", 1)[1]
+    age_range = _AGE_MAP.get(raw)
+    if not age_range:
+        await callback.answer("Некорректный выбор.")
+        return
+
+    db = await get_supabase()
+    state_res = (
+        await db.table("users")
+        .select("onboarding_state")
+        .eq("telegram_id", callback.from_user.id)
+        .maybe_single()
+        .execute()
+    )
+    db_state = (state_res.data or {}).get("onboarding_state") if state_res else None
+    if db_state != "player_age_setup":
+        await callback.answer("Сейчас этот шаг недоступен.")
+        return
+
+    await (
+        db.table("users")
+        .update({
+            "age_range": age_range,
+            "onboarding_state": "player_goal_setup",
+        })
+        .eq("telegram_id", callback.from_user.id)
+        .execute()
+    )
+    await callback.message.edit_text(
+        "Какая у тебя цель тренировок?",
+        reply_markup=get_goal_keyboard(),
+    )
+    await callback.answer()
+
+
+@onboarding_router.callback_query(F.data.startswith("goal_"))
+async def process_goal(callback: types.CallbackQuery) -> None:
+    goal = callback.data.split("_", 1)[1]
+    if goal not in ("lose_weight", "build_muscle", "endurance", "health", "flexibility"):
+        await callback.answer("Некорректный выбор.")
+        return
+
+    db = await get_supabase()
+    state_res = (
+        await db.table("users")
+        .select("onboarding_state")
+        .eq("telegram_id", callback.from_user.id)
+        .maybe_single()
+        .execute()
+    )
+    db_state = (state_res.data or {}).get("onboarding_state") if state_res else None
+    if db_state != "player_goal_setup":
+        await callback.answer("Сейчас этот шаг недоступен.")
+        return
+
+    await (
+        db.table("users")
+        .update({
+            "goal": goal,
+            "goal_last_updated_at": datetime.now(timezone.utc).isoformat(),
+            "goal_update_required": False,
+            "onboarding_state": "onboardingComplete",
+            "onboarding_done": True,
+        })
+        .eq("telegram_id", callback.from_user.id)
+        .execute()
+    )
+    await callback.message.edit_text(
+        "✅ Готово! Откройте приложение:",
+        reply_markup=get_miniapp_keyboard(),
+    )
     await callback.answer()
 
 
