@@ -18,7 +18,7 @@ class PlayerStatsResponse(BaseModel):
     current_streak: int
     best_streak: int
     last_workout_date: str | None
-    star_balance: int
+    xp_balance: int
     level_window: list[int]
     rest_days_remaining: int
     rest_days_used_this_month: int
@@ -29,7 +29,7 @@ class PartnerStatsResponse(BaseModel):
     first_name: str
     current_streak: int
     best_streak: int
-    star_balance: int
+    xp_balance: int
     last_workout_date: str | None
     global_score: int
     is_deactivated: bool = False
@@ -92,7 +92,7 @@ async def get_my_stats(user: dict = Depends(get_current_user)):
             current_streak=d.get("current_streak", 0),
             best_streak=d.get("best_streak", 0),
             last_workout_date=d.get("last_workout_date"),
-            star_balance=d.get("star_balance", 0),
+            xp_balance=d.get("xp_balance", 0),
             level_window=d.get("level_window", [1, 2, 3]),
             rest_days_remaining=d.get("rest_days_remaining", 3),
             rest_days_used_this_month=d.get("rest_days_used_this_month", 0),
@@ -165,7 +165,7 @@ async def get_partner_stats(user: dict = Depends(get_current_user)):
             first_name=names.get(pid, ""),
             current_streak=s.get("current_streak", 0),
             best_streak=s.get("best_streak", 0),
-            star_balance=s.get("star_balance", 0),
+            xp_balance=s.get("xp_balance", 0),
             last_workout_date=s.get("last_workout_date"),
             global_score=s.get("global_score", 0),
             is_deactivated=bool(deactivated_at),

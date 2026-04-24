@@ -1,14 +1,26 @@
-# SESSION STATUS — Session 27 (2026-04-24) — Этап 5: Production prep ✅ COMMITTED, awaiting deploy + smoke test
+# SESSION STATUS — Session 28 (2026-04-25) — Smoke test bugfix batch 1 ✅ COMMITTED
 
 ## 🎉 Acceptance: COMPLETE ✅ (2026-04-24)
 Все §§ 0–14 пройдены. Скипы: 2.3, 2.4, 3.3, 3.5, 4.1, 4.3–4.5, 9.4 — намеренные (race/manual).
 
+## ✅ Smoke test bugfix batch 1 (2026-04-25) — commit `b223e1a`
+Найдено 5 багов после деплоя Этапа 3. Реально сломаны 2 из 5:
+
+- **Bug 2 FIXED (auth.py):** `own_access_tier` теперь возвращается для players (`player_access_tier`). Причина: `effectiveTier()` в authStore возвращает `ownAccessTier` когда `activeRoleView=null` (чистый player без toggle) — tier chip не показывался.
+- **Bug 3 FIXED (onboarding.py):** P-code activation теперь спрашивает пол перед Mini App-кнопкой. Новый state `player_gender_setup` → `process_gender` его обрабатывает → сохраняет gender, ставит `onboardingComplete`.
+- **Bug 1 (ActionCube gender guard):** Условие уже верное (`restDaysRemaining > 0 && gender === 'female'`). Изменений не требовалось.
+- **Bug 4 (BondCube NotificationsSection):** Уже рендерится unconditionally на строке 102. Изменений не требовалось.
+- **Bug 5 (MarketCube empty state):** «Магазин пуст» уже есть (строки 213-217). Изменений не требовалось.
+
 ## ✅ Этап 5 — Production prep (2026-04-24)
 - Commit `bd6bde1` — feat(frontend): Этап 3 complete (22 files, 2789 ins / 380 del)
-- Статус: **awaiting git push + deploy + smoke test on real Telegram**
+- Статус: **deployed + smoke tested + bugfixed**
 
 ## ▶️ Следующая точка входа (новый чат) — Этап 6
 Определить с пользователем: Архитектура Админа, Маркет-рефакторинг или новая фича.
+
+## Этап 6 — В процессе
+- [x] Задача 1: XP rename — `player_stats.star_balance` → `xp_balance` по всему стеку (миграция 023, backend 4 файла, frontend 5 файлов); tsc exit 0 ✅ (2026-04-25)
 
 ### Этап 3 — Frontend refactor ✅ COMPLETE
 - [x] 3.1 authStore.ts — ownAccessTier/playerViewTier, wallet fields, effectiveTier getter, localStorage persistence ✅ (2026-04-24)

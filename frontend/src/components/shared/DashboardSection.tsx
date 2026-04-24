@@ -7,7 +7,7 @@ export type DashboardView = 'player' | 'responsible' | 'admin';
 export interface DashboardData {
     // Player
     current_streak?: number;
-    star_balance?: number;
+    xp_balance?: number;
     rest_days_remaining?: number;
     // Responsible
     players_count?: number;
@@ -59,7 +59,7 @@ function buildPrimary(module: DashboardModule, view: DashboardView, d: Dashboard
 
     if (module === 'Market') {
         if (view === 'player') {
-            const bal = d.star_balance ?? null;
+            const bal = d.xp_balance ?? null;
             return [
                 { icon: '\u2B50', label: bal !== null ? `${bal}` : dash, key: 'balance' },
                 { icon: '\u{1F6D2}', label: 'Магазин', key: 'shop', accent: true },

@@ -391,7 +391,7 @@ async def purchase_item(
 
     stats_res = await (
         db.table("player_stats")
-        .select("star_balance, streak_freeze_balance")
+        .select("xp_balance, streak_freeze_balance")
         .eq("player_id", user_id)
         .maybe_single()
         .execute()
@@ -399,19 +399,19 @@ async def purchase_item(
     if not stats_res or not stats_res.data:
         raise HTTPException(status_code=404, detail="Player stats not found")
 
-    balance = int(stats_res.data["star_balance"])
+    balance = int(stats_res.data["xp_balance"])
     if balance < price:
         raise HTTPException(
             status_code=400,
-            detail=f"Недостаточно звёзд: {balance}/{price}",
+            detail=f"Недостаточно XP: {balance}/{price}",
         )
 
     new_balance = balance - price
     deduct_res = await (
         db.table("player_stats")
-        .update({"star_balance": new_balance})
+        .update({"xp_balance": new_balance})
         .eq("player_id", user_id)
-        .eq("star_balance", balance)
+        .eq("xp_balance", balance)
         .execute()
     )
     if not deduct_res.data:
@@ -448,16 +448,16 @@ async def purchase_item(
             new_freeze = cur_freeze + freeze_count
 
         if not bumped:
-            # Rollback star_balance (optimistic, max 3 attempts)
+            # Rollback xp_balance (optimistic, max 3 attempts)
             rolled_back = False
             cur_bal = new_balance
             target_bal = balance
             for _ in range(3):
                 rb_res = await (
                     db.table("player_stats")
-                    .update({"star_balance": target_bal})
+                    .update({"xp_balance": target_bal})
                     .eq("player_id", user_id)
-                    .eq("star_balance", cur_bal)
+                    .eq("xp_balance", cur_bal)
                     .execute()
                 )
                 if rb_res.data:
@@ -465,12 +465,12 @@ async def purchase_item(
                     break
                 fresh_bal_res = await (
                     db.table("player_stats")
-                    .select("star_balance")
+                    .select("xp_balance")
                     .eq("player_id", user_id)
                     .single()
                     .execute()
                 )
-                cur_bal = int(fresh_bal_res.data.get("star_balance") or 0)
+                cur_bal = int(fresh_bal_res.data.get("xp_balance") or 0)
                 target_bal = cur_bal + price
             if not rolled_back:
                 logger.critical(

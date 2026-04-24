@@ -295,7 +295,7 @@ const ConnectionsPanel: React.FC = () => {
                                 <th>Игроки</th>
                                 <th>Трен.</th>
                                 <th>Актив.</th>
-                                <th>⭐</th>
+                                <th>XP</th>
                                 <th>Avg %</th>
                                 <th></th>
                             </tr>
@@ -315,7 +315,7 @@ const ConnectionsPanel: React.FC = () => {
                                             <td>{g.players.length}</td>
                                             <td>{s?.total_workouts ?? '—'}</td>
                                             <td>{s?.active_players ?? '—'}</td>
-                                            <td>{s?.total_stars_earned ?? '—'}</td>
+                                            <td>{s?.total_xp_earned ?? '—'}</td>
                                             <td>{s ? <CompletionBar rate={s.avg_completion_rate} /> : '—'}</td>
                                             <td></td>
                                         </tr>
@@ -328,7 +328,7 @@ const ConnectionsPanel: React.FC = () => {
                                                     <td>{p.is_banned ? '🚫 ' : ''}{pName}</td>
                                                     <td>{p.stats?.workouts_done ?? 0}</td>
                                                     <td></td>
-                                                    <td>⭐{p.stats?.stars_balance ?? 0}</td>
+                                                    <td>{p.stats?.xp_balance ?? 0} XP</td>
                                                     <td>{lastFmt}</td>
                                                     <td>{p.stats ? <CompletionBar rate={p.stats.completion_rate} /> : '—'}</td>
                                                     <td style={{ position: 'relative' }}>

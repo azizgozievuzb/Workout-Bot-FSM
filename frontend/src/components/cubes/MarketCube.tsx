@@ -82,7 +82,7 @@ const ShopItemCard: React.FC<CardProps> = ({ item, buyingId, onBuy, onGift, dimm
                 <div className="shop-item-desc">{item.description}</div>
             )}
             <div className="shop-item-price-row">
-                <span className="shop-item-price">⭐ {item.price_stars}</span>
+                <span className="shop-item-price">{item.price_stars} XP</span>
                 {showQty && <span className="shop-item-qty">×{item.freeze_count}</span>}
             </div>
             {onBuy && (
@@ -162,7 +162,7 @@ const PlayerShop: React.FC = () => {
             if (code === 'NOT_YOUR_ITEM') {
                 showToast('Недоступно');
             } else if (typeof detail === 'string' && detail.includes('Недостаточно')) {
-                showToast('Недостаточно звёзд');
+                showToast('Недостаточно XP');
             } else {
                 showToast('Ошибка покупки');
             }

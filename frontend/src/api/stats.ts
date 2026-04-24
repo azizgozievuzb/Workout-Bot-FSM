@@ -6,7 +6,7 @@ export interface PlayerStats {
     current_streak: number;
     best_streak: number;
     last_workout_date: string | null;
-    star_balance: number;
+    xp_balance: number;
     level_window: number[];
     rest_days_remaining: number;
     rest_days_used_this_month: number;
@@ -17,7 +17,7 @@ export interface PartnerStats {
     first_name: string;
     current_streak: number;
     best_streak: number;
-    star_balance: number;
+    xp_balance: number;
     last_workout_date: string | null;
     global_score: number;
     is_deactivated: boolean;

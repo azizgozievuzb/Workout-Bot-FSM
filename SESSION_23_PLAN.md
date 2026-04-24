@@ -217,6 +217,19 @@ Do NOT touch: <что нельзя задевать>
 
 ## 🎨 Этап 3 — Frontend
 
+> **Модели для Claude Code CLI** (per CLAUDE.md):
+> | Шаг | Model | Effort | Ultrathink |
+> |-----|-------|--------|-----------|
+> | 3.1 authStore.ts | `sonnet` | `high` | нет |
+> | 3.2 API clients | `sonnet` | `medium` | нет |
+> | 3.3 AdminCube | `opus` | `xhigh` | да |
+> | 3.4 ResponsibleCube (ActionCube) | `opus` | `xhigh` | да |
+> | 3.5 MarketCube | `opus` | `xhigh` | да |
+> | 3.6 PlayerCube (ActionCube) | `sonnet` | `high` | нет |
+> | 3.7 TierMatrixScreen | `sonnet` | `medium` | нет |
+> | 3.8 NotificationCenter (BondCube) | `opus` | `xhigh` | да |
+> | 3.9 Global search-replace | `haiku` | `medium` | нет |
+
 ### 3.1 Стор (`frontend/src/stores/authStore.ts`)
 - [ ] Заменить `accessTier` на пару: `ownAccessTier` + `playerViewTier`.
 - [ ] Добавить `shopFreezeBalance`, `giftFreezeBalance` (Responsible), `streakFreezeBalance`, `restDaysRemaining` (Player), `hasActivePartnerships` (Responsible), `unreadNotifications` (все).

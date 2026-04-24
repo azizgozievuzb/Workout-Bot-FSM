@@ -267,16 +267,16 @@ async def finish_session(session_id: str = Form(...), user: dict = Depends(get_c
         .execute()
     )
 
-    # Credit star_balance + last_workout_date + streak on player_stats
+    # Credit xp_balance + last_workout_date + streak on player_stats
     stats_res = await (
         db.table("player_stats")
-        .select("star_balance, current_streak, best_streak, last_workout_date")
+        .select("xp_balance, current_streak, best_streak, last_workout_date")
         .eq("player_id", player_id)
         .maybe_single()
         .execute()
     )
     cur = stats_res.data if stats_res and stats_res.data else {}
-    new_balance = int(cur.get("star_balance") or 0) + stars
+    new_balance = int(cur.get("xp_balance") or 0) + stars
     today = datetime.now(timezone.utc).date().isoformat()
     last = cur.get("last_workout_date")
     streak = int(cur.get("current_streak") or 0)
@@ -290,7 +290,7 @@ async def finish_session(session_id: str = Form(...), user: dict = Depends(get_c
 
     upsert_payload = {
         "player_id": player_id,
-        "star_balance": new_balance,
+        "xp_balance": new_balance,
         "last_workout_date": today,
         "current_streak": streak,
         "best_streak": best,

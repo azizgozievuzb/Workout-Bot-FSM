@@ -41,7 +41,7 @@ const DashboardPanel: React.FC<DashboardPanelProps> = ({ onOpen }) => {
                         setData(prev => ({
                             ...prev,
                             current_streak: s.current_streak,
-                            star_balance: s.star_balance,
+                            xp_balance: s.xp_balance,
                             rest_days_remaining: s.rest_days_remaining,
                         }));
                     })

@@ -19,7 +19,7 @@ export async function listPromoCodes(params?: { code_type?: string; is_used?: bo
 
 export interface PlayerStats {
     workouts_done: number;
-    stars_balance: number;
+    xp_balance: number;
     last_workout_at: string | null;
     completion_rate: number;
 }
@@ -27,7 +27,7 @@ export interface PlayerStats {
 export interface ResponsibleStats {
     total_workouts: number;
     active_players: number;
-    total_stars_earned: number;
+    total_xp_earned: number;
     avg_completion_rate: number;
 }
 
