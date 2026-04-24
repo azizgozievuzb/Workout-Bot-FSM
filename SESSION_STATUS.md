@@ -1,3 +1,48 @@
+# SESSION STATUS — Session 30 (2026-04-25) — Этап 6 Задача 5 ✅ COMMITTED
+
+## ✅ Задача 5: Онбординг в боте (2026-04-25)
+
+Расширенный онбординг для Player: после `SET_GENDER` добавлена цепочка
+`player_fitness_setup → player_age_setup → player_goal_setup → Mini App`.
+Команда `/settings` перезапускает цепочку с `player_fitness_setup`
+(gender не трогает). Повторный триггер — Job H каждые 120 активных дней.
+
+Коммиты:
+- `319aa1e` — feat(db): migration 024 — extended onboarding columns
+- `c91216c` — feat(fsm): 101_onboardingMachine v3 — player_fitness/age/goal chain
+- `e1caef4` — feat(bot): extended onboarding + /settings command
+- `f549dcf` — feat(auth): guard 403 ONBOARDING_REQUIRED + frontend block screen
+- `728b2c1` — feat(scheduler): Job H — daily active_days_count + 120-day goal refresh
+
+**Файлы:**
+- `backend/db/migrations/024_onboarding_extended.sql` — **нужно применить в Supabase SQL Editor** (колонки: fitness_level / age_range / goal / active_days_count / goal_update_required / goal_last_updated_at)
+- `fsm_blueprints/101_onboardingMachine.ts` — добавлены states + глобальный `RESET_GOAL_ONLY`
+- `backend/handlers/onboarding.py` — process_gender → player_fitness_setup; новые callbacks fitness/age/goal
+- `backend/handlers/settings.py` — новый, `/settings` command
+- `backend/keyboards/onboarding_keyboards.py` — 3 новых keyboards
+- `backend/main.py` — settings_router подключён перед onboarding_router
+- `backend/api/routers/auth.py` — `_check_onboarding_gate()` в `/auth/telegram` и `/auth/register`
+- `backend/schedulers/subscription_lifecycle.py` — Job H (03:00 UTC)
+- `frontend/src/stores/authStore.ts` — поля `onboardingBlocked` + setter
+- `frontend/src/hooks/useAuth.ts` — 403 ONBOARDING_REQUIRED handling
+- `frontend/src/components/shared/OnboardingBlockedScreen.tsx` — новый
+- `frontend/src/App.tsx` — рендер блок-скрина
+
+**Post-deploy ручные шаги:**
+1. Применить миграцию 024 в Supabase SQL Editor.
+2. (опционально) проставить `VITE_BOT_USERNAME` в env фронта, иначе дефолт `conectionWorkout_bot`.
+3. Smoke-тесты согласно Acceptance:
+   - Новый Player: P-code → пол → уровень → возраст → цель → Mini App.
+   - Старый Player (goal=NULL): Mini App → 403 → блок-скрин → `/settings` в боте → Mini App.
+   - `/settings` у заполненного Player: fitness/age/goal заново.
+   - Job H trigger: `python -c "..."` + DB check.
+
+**Известные ограничения:**
+- Bot push в Job H — best-effort: если cron сработал раньше lifespan (edge при рестарте) — push пропустится, `goal_update_required` всё равно проставится (Mini App заблокируется).
+- `active_days_count` увеличивается ТОЛЬКО у player'ов с активной партнёркой. После expire счётчик не растёт (goal refresh не сработает у недействующих аккаунтов).
+
+---
+
 # SESSION STATUS — Session 29 (2026-04-25) — Этап 6 задачи 1–4 ✅ COMMITTED
 
 ## 🎉 Acceptance: COMPLETE ✅ (2026-04-24)
