@@ -27,31 +27,34 @@
 - Шаг 6 ✅ tsc/py_compile зелёные, ActionCube для Mr. больше не чёрный
 
 **Файлы:**
-- `backend/db/migrations/024_onboarding_extended.sql` — **нужно применить в Supabase SQL Editor** (колонки: fitness_level / age_range / goal / active_days_count / goal_update_required / goal_last_updated_at)
+- `backend/db/migrations/024_onboarding_extended.sql` — ✅ применена в Supabase (project `dlpdwmmfpzfxcelxqvlq`); колонки: fitness_level / age_range / goal / active_days_count / goal_update_required / goal_last_updated_at
 - `fsm_blueprints/101_onboardingMachine.ts` — добавлены states + глобальный `RESET_GOAL_ONLY`
-- `backend/handlers/onboarding.py` — process_gender → player_fitness_setup; новые callbacks fitness/age/goal
+- `backend/handlers/onboarding.py` — process_gender → player_fitness_setup; новые callbacks fitness/age/goal; auto-resume на /start; блок свободного текста в player_*_setup; предупреждение «через 120 дней» на goal-step
 - `backend/handlers/settings.py` — новый, `/settings` command
 - `backend/keyboards/onboarding_keyboards.py` — 3 новых keyboards
-- `backend/main.py` — settings_router подключён перед onboarding_router
-- `backend/api/routers/auth.py` — `_check_onboarding_gate()` в `/auth/telegram` и `/auth/register`
-- `backend/schedulers/subscription_lifecycle.py` — Job H (03:00 UTC)
+- `backend/main.py` — settings_router подключён перед onboarding_router; включён onboarding_api_router
+- `backend/api/routers/auth.py` — флаг `onboarding_blocked` в TokenResponse (НЕ 403; JWT всё равно выдаётся, чтобы /onboarding/wake мог сработать)
+- `backend/api/routers/onboarding.py` — новый, `POST /onboarding/wake`: ставит state=player_fitness_setup и шлёт боту первый вопрос
+- `backend/services/bot_notify.py` — расширен поддержкой `reply_markup`
+- `backend/schedulers/subscription_lifecycle.py` — Job H (03:00 UTC, `increment_active_days`)
 - `frontend/src/stores/authStore.ts` — поля `onboardingBlocked` + setter
-- `frontend/src/hooks/useAuth.ts` — 403 ONBOARDING_REQUIRED handling
-- `frontend/src/components/shared/OnboardingBlockedScreen.tsx` — новый
+- `frontend/src/hooks/useAuth.ts` — читает `data.onboarding_blocked` из ответа /auth/telegram
+- `frontend/src/components/shared/OnboardingBlockedScreen.tsx` — кнопка «Пройти опрос» вызывает `/onboarding/wake` + `Telegram.WebApp.openTelegramLink` + `close()`
 - `frontend/src/App.tsx` — рендер блок-скрина
-
-**Post-deploy ручные шаги:**
-1. Применить миграцию 024 в Supabase SQL Editor.
-2. (опционально) проставить `VITE_BOT_USERNAME` в env фронта, иначе дефолт `conectionWorkout_bot`.
-3. Smoke-тесты согласно Acceptance:
-   - Новый Player: P-code → пол → уровень → возраст → цель → Mini App.
-   - Старый Player (goal=NULL): Mini App → 403 → блок-скрин → `/settings` в боте → Mini App.
-   - `/settings` у заполненного Player: fitness/age/goal заново.
-   - Job H trigger: `python -c "..."` + DB check.
+- `frontend/src/components/cubes/ActionCube.tsx` — fix orphan `fetchRequests` (causal: чёрный экран у responsibles)
 
 **Известные ограничения:**
 - Bot push в Job H — best-effort: если cron сработал раньше lifespan (edge при рестарте) — push пропустится, `goal_update_required` всё равно проставится (Mini App заблокируется).
 - `active_days_count` увеличивается ТОЛЬКО у player'ов с активной партнёркой. После expire счётчик не растёт (goal refresh не сработает у недействующих аккаунтов).
+- Шаг 4 Acceptance (полный прогон Job H через python-shell) — пропущен (нет Railway shell); вместо него выполнена SQL-имитация в §Шаг 5.
+
+## ▶️ Следующая точка входа (новый чат)
+
+Этап 6 (Задачи 1–5) полностью закрыт. **Жду указаний пользователя** на новую задачу. Возможные направления:
+- Этап 7 — E2E прогон в проде (бот + Mini App + workout-сессия с камерой и Gemini Vision).
+- Доработки UX по результатам smoke-тестов на реальных устройствах.
+- Технический долг: миграция 024 в `_hidden_docs/code dlya workout.html`, очистка legacy полей в users (`access_tier` после migration 021).
+- Новые фичи из ROADMAP (раздел 581+).
 
 ---
 
