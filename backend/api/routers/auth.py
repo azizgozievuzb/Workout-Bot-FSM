@@ -24,25 +24,18 @@ USER_SELECT_COLS = (
 ONBOARDING_REQUIRED_MESSAGE = "Вернись в бот, ответь на 3 вопроса (/settings)."
 
 
-def _check_onboarding_gate(user_data: dict) -> None:
+def _is_onboarding_blocked(user_data: dict) -> bool:
     """
-    Раз player завершил P-код активацию и имеет role='player', но цель ещё
-    не проставлена (или сработал Job H → goal_update_required=TRUE) — блокируем
-    Mini App до ответа в боте.
+    Player завершил P-код активацию и имеет role='player', но цель ещё
+    не проставлена (или сработал Job H → goal_update_required=TRUE).
+    Возвращает True если Mini App должен показать OnboardingBlockedScreen.
+    JWT всё равно выдаётся, чтобы /onboarding/wake мог сработать.
     """
     if user_data.get("role") != "player":
-        return
+        return False
     goal = user_data.get("goal")
     goal_update_required = bool(user_data.get("goal_update_required"))
-    if goal and not goal_update_required:
-        return
-    raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail={
-            "code": "ONBOARDING_REQUIRED",
-            "message": ONBOARDING_REQUIRED_MESSAGE,
-        },
-    )
+    return not (goal and not goal_update_required)
 
 
 class TelegramAuthRequest(BaseModel):
@@ -76,6 +69,8 @@ class TokenResponse(BaseModel):
     days_left: int | None = None
     unread_notifications: int = 0
     gender: str | None = None
+    onboarding_blocked: bool = False
+    onboarding_blocked_message: str | None = None
 
 
 async def _build_full_token_response(db, telegram_id: int, user_data: dict) -> TokenResponse:
@@ -196,6 +191,7 @@ async def _build_full_token_response(db, telegram_id: int, user_data: dict) -> T
     unread_notifications = int(un_res.count or 0)
 
     token = create_access_token(telegram_id, compat_role)
+    blocked = _is_onboarding_blocked(user_data)
 
     return TokenResponse(
         access_token=token,
@@ -222,6 +218,8 @@ async def _build_full_token_response(db, telegram_id: int, user_data: dict) -> T
         days_left=days_left,
         unread_notifications=unread_notifications,
         gender=user_data.get("gender"),
+        onboarding_blocked=blocked,
+        onboarding_blocked_message=ONBOARDING_REQUIRED_MESSAGE if blocked else None,
     )
 
 
@@ -251,7 +249,6 @@ async def telegram_auth(body: TelegramAuthRequest) -> TokenResponse:
     if user_data is None:
         raise HTTPException(status_code=403, detail={"code": "NO_ACCESS"})
 
-    _check_onboarding_gate(user_data)
     return await _build_full_token_response(db, telegram_id, user_data)
 
 

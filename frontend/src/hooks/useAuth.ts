@@ -115,6 +115,11 @@ export function useAuth() {
           if (data.ban_until) {
             setBanInfo({ until: data.ban_until, reason: data.ban_reason ?? null, missed: data.ban_missed ?? 0 });
           }
+          // Player с пустым/устаревшим goal — показываем OnboardingBlockedScreen.
+          // JWT уже выдан (data.access_token), чтобы /onboarding/wake мог сработать.
+          if (data.onboarding_blocked) {
+            setOnboardingBlocked(data.onboarding_blocked_message ?? null);
+          }
         }
       } catch (err: any) {
         if (!cancelled) {
