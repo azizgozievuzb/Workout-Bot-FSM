@@ -415,8 +415,7 @@ const ResponsibleView: React.FC = () => {
         setToast(`Продлено на ${addedDays} дн.`);
         setTimeout(() => setToast(''), 3000);
         fetchPlayers();
-        fetchRequests();
-    }, [fetchPlayers, fetchRequests]);
+    }, [fetchPlayers]);
 
     const handleBonusSuccess = useCallback((msg: string) => {
         setModal(null);
