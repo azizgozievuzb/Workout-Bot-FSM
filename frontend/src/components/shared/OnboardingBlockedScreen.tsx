@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import api from '../../api/client';
 
 const BOT_USERNAME =
     (import.meta.env.VITE_BOT_USERNAME as string | undefined) || 'conectionWorkout_bot';
@@ -9,10 +10,22 @@ interface Props {
 
 const OnboardingBlockedScreen: React.FC<Props> = ({ message }) => {
     const text = message || 'Вернись в бот и пройди опрос — это займёт 30 секунд.';
+    const [busy, setBusy] = useState(false);
 
-    const handleOpenBot = () => {
+    const handleOpenBot = async () => {
+        if (busy) return;
+        setBusy(true);
         const tg = (window as any).Telegram?.WebApp;
-        // Открываем чат с ботом и закрываем Mini App, чтобы пользователь сразу увидел диалог
+
+        // 1. Просим backend сразу прислать игроку первый вопрос в боте
+        //    (после закрытия Mini App юзер сразу увидит готовое сообщение с кнопками)
+        try {
+            await api.post('/onboarding/wake');
+        } catch {
+            // Если эндпоинт упал — fallback на deep-link `?start=settings`
+        }
+
+        // 2. Открываем чат с ботом + закрываем Mini App
         if (tg?.openTelegramLink) {
             tg.openTelegramLink(`https://t.me/${BOT_USERNAME}?start=settings`);
             setTimeout(() => tg.close?.(), 150);
@@ -22,7 +35,6 @@ const OnboardingBlockedScreen: React.FC<Props> = ({ message }) => {
             tg.close();
             return;
         }
-        // Fallback (десктоп-браузер вне Telegram)
         window.location.href = `tg://resolve?domain=${BOT_USERNAME}`;
     };
 
@@ -47,19 +59,21 @@ const OnboardingBlockedScreen: React.FC<Props> = ({ message }) => {
             <div style={{ fontSize: 18, lineHeight: 1.45, maxWidth: 420 }}>{text}</div>
             <button
                 onClick={handleOpenBot}
+                disabled={busy}
                 style={{
                     marginTop: 8,
                     padding: '14px 26px',
-                    background: 'rgba(255,255,255,0.14)',
+                    background: busy ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.14)',
                     border: '1px solid rgba(255,255,255,0.3)',
                     borderRadius: 14,
                     color: '#fff',
                     fontSize: 16,
                     fontWeight: 600,
-                    cursor: 'pointer',
+                    cursor: busy ? 'wait' : 'pointer',
+                    opacity: busy ? 0.6 : 1,
                 }}
             >
-                Пройти опрос
+                {busy ? 'Открываем…' : 'Пройти опрос'}
             </button>
         </div>
     );
