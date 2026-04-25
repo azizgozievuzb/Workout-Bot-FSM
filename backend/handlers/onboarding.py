@@ -104,6 +104,47 @@ async def cmd_start(message: types.Message, state: FSMContext) -> None:
     # db_state is None either for new users (no row) or users with cleared state
 
     # ------------------------------------------------------------------
+    # Resume player-онбординг (legacy без goal/fitness/age ИЛИ 120-day refresh)
+    # Триггер: deep-link `?start=settings` ИЛИ обычный /start у такого юзера
+    # ------------------------------------------------------------------
+    if db_state == "onboardingComplete" or deeplink == "settings":
+        db = await get_supabase()
+        user_res = (
+            await db.table("users")
+            .select(
+                "id, role, gender, fitness_level, age_range, goal, "
+                "goal_update_required"
+            )
+            .eq("telegram_id", message.from_user.id)
+            .maybe_single()
+            .execute()
+        )
+        if user_res and user_res.data and user_res.data.get("role") == "player":
+            u = user_res.data
+            needs_refresh = (
+                bool(u.get("gender"))
+                and (
+                    u.get("goal") is None
+                    or u.get("fitness_level") is None
+                    or u.get("age_range") is None
+                    or u.get("goal_update_required") is True
+                )
+            )
+            if needs_refresh or deeplink == "settings":
+                await (
+                    db.table("users")
+                    .update({"onboarding_state": "player_fitness_setup"})
+                    .eq("telegram_id", message.from_user.id)
+                    .execute()
+                )
+                await message.answer(
+                    "Давай обновим профиль — это займёт 30 секунд.\n\n"
+                    "Какой у тебя уровень физической подготовки?",
+                    reply_markup=get_fitness_keyboard(),
+                )
+                return
+
+    # ------------------------------------------------------------------
     # Уже завершил онбординг → smart menu
     # ------------------------------------------------------------------
     if db_state == "onboardingComplete":
@@ -414,7 +455,9 @@ async def process_age(callback: types.CallbackQuery) -> None:
         .execute()
     )
     await callback.message.edit_text(
-        "Какая у тебя цель тренировок?",
+        "Какая у тебя цель тренировок?\n\n"
+        "ℹ️ Через 120 дней активной подписки мы повторим этот вопрос — "
+        "возможно, твоя цель к тому моменту изменится.",
         reply_markup=get_goal_keyboard(),
     )
     await callback.answer()
@@ -493,6 +536,27 @@ async def process_survey(callback: types.CallbackQuery) -> None:
 async def process_text_input(message: types.Message) -> None:
     svc = await get_svc()
     db_state, _ = await svc.get_state(message.from_user.id)
+
+    # --- BLOCK free-text во время player onboarding (fitness/age/goal) ---
+    if db_state in ("player_fitness_setup", "player_age_setup", "player_goal_setup"):
+        kb_map = {
+            "player_fitness_setup": (
+                get_fitness_keyboard(), "Какой у тебя уровень физической подготовки?"
+            ),
+            "player_age_setup": (get_age_keyboard(), "Сколько тебе лет?"),
+            "player_goal_setup": (
+                get_goal_keyboard(),
+                "Какая у тебя цель тренировок?\n\n"
+                "ℹ️ Через 120 дней активной подписки мы повторим этот вопрос — "
+                "возможно, твоя цель к тому моменту изменится.",
+            ),
+        }
+        kb, prompt = kb_map[db_state]
+        await message.answer(
+            "Пожалуйста, выбери вариант на клавиатуре ниже 👇\n\n" + prompt,
+            reply_markup=kb,
+        )
+        return
 
     # --- PROMO CODE (DB validation) ---
     # db_state is None for new users (no row yet) or users with cleared/old state
@@ -802,3 +866,6 @@ async def handle_non_text_in_promo(message: types.Message) -> None:
     db_state, _ = await svc.get_state(message.from_user.id)
     if db_state == "resp_promo":
         await message.answer("Пожалуйста, введите только промокод.")
+        return
+    if db_state in ("player_fitness_setup", "player_age_setup", "player_goal_setup"):
+        await message.answer("Пожалуйста, выбери вариант на клавиатуре выше 👇")

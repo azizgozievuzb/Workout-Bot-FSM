@@ -13,6 +13,8 @@
 - `e1caef4` — feat(bot): extended onboarding + /settings command
 - `f549dcf` — feat(auth): guard 403 ONBOARDING_REQUIRED + frontend block screen
 - `728b2c1` — feat(scheduler): Job H — daily active_days_count + 120-day goal refresh
+- `0709d8c` — fix(action-cube): remove orphan fetchRequests reference (black screen for responsibles)
+- `(pending)` — feat(bot): добавлено предупреждение «через 120 дней повторим вопрос» в goal-step (виден и в первичном онбординге, и в /settings)
 
 **Файлы:**
 - `backend/db/migrations/024_onboarding_extended.sql` — **нужно применить в Supabase SQL Editor** (колонки: fitness_level / age_range / goal / active_days_count / goal_update_required / goal_last_updated_at)

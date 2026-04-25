@@ -8,8 +8,23 @@ interface Props {
 }
 
 const OnboardingBlockedScreen: React.FC<Props> = ({ message }) => {
-    const text = message || 'Вернись в бот, ответь на 3 вопроса (/settings).';
-    const deepLink = `tg://resolve?domain=${BOT_USERNAME}`;
+    const text = message || 'Вернись в бот и пройди опрос — это займёт 30 секунд.';
+
+    const handleOpenBot = () => {
+        const tg = (window as any).Telegram?.WebApp;
+        // Открываем чат с ботом и закрываем Mini App, чтобы пользователь сразу увидел диалог
+        if (tg?.openTelegramLink) {
+            tg.openTelegramLink(`https://t.me/${BOT_USERNAME}?start=settings`);
+            setTimeout(() => tg.close?.(), 150);
+            return;
+        }
+        if (tg?.close) {
+            tg.close();
+            return;
+        }
+        // Fallback (десктоп-браузер вне Telegram)
+        window.location.href = `tg://resolve?domain=${BOT_USERNAME}`;
+    };
 
     return (
         <div
@@ -30,8 +45,8 @@ const OnboardingBlockedScreen: React.FC<Props> = ({ message }) => {
         >
             <div style={{ fontSize: 40 }}>🎯</div>
             <div style={{ fontSize: 18, lineHeight: 1.45, maxWidth: 420 }}>{text}</div>
-            <a
-                href={deepLink}
+            <button
+                onClick={handleOpenBot}
                 style={{
                     marginTop: 8,
                     padding: '14px 26px',
@@ -39,13 +54,13 @@ const OnboardingBlockedScreen: React.FC<Props> = ({ message }) => {
                     border: '1px solid rgba(255,255,255,0.3)',
                     borderRadius: 14,
                     color: '#fff',
-                    textDecoration: 'none',
                     fontSize: 16,
                     fontWeight: 600,
+                    cursor: 'pointer',
                 }}
             >
-                Открыть бота
-            </a>
+                Пройти опрос
+            </button>
         </div>
     );
 };
