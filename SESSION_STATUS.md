@@ -14,7 +14,17 @@
 - `f549dcf` — feat(auth): guard 403 ONBOARDING_REQUIRED + frontend block screen
 - `728b2c1` — feat(scheduler): Job H — daily active_days_count + 120-day goal refresh
 - `0709d8c` — fix(action-cube): remove orphan fetchRequests reference (black screen for responsibles)
-- `(pending)` — feat(bot): добавлено предупреждение «через 120 дней повторим вопрос» в goal-step (виден и в первичном онбординге, и в /settings)
+- `d40bd62` — fix(onboarding): blocked-screen button via WebApp.openTelegramLink + bot auto-resume on /start + block free text in player_*_setup + 120-day warning text
+- `d2e3a36` — feat(onboarding): /onboarding/wake endpoint — instant survey kick-off after Mini App close
+- `b167b6f` — fix(auth): onboarding-block via response field (issue JWT) instead of 403 — unblocks /onboarding/wake
+
+**Acceptance (2026-04-25): ✅ ALL PASSED**
+- Шаг 1 ✅ Новый player (tg=156453252): полная цепочка пол→fitness→age→goal, все поля NOT NULL, Mini App открылся
+- Шаг 2 ✅ Legacy guard (Dol tg=7458599391): JWT выдан, OnboardingBlockedScreen, кнопка «Пройти опрос» → /onboarding/wake → бот сразу прислал fitness keyboard → пройдено fitness/age/goal → Mini App разблокирован
+- Шаг 3 ✅ /settings у заполненного (Dol): спросил только fitness/age/goal, gender=male не изменился, предупреждение «через 120 дней» отображается на шаге goal
+- Шаг 4 (skip — Job H через SQL имитация)
+- Шаг 5 ✅ 120-day trigger: SET active_days_count=120 + goal_update_required=true → Mini App у Dol заблокирован OnboardingBlockedScreen-ом
+- Шаг 6 ✅ tsc/py_compile зелёные, ActionCube для Mr. больше не чёрный
 
 **Файлы:**
 - `backend/db/migrations/024_onboarding_extended.sql` — **нужно применить в Supabase SQL Editor** (колонки: fitness_level / age_range / goal / active_days_count / goal_update_required / goal_last_updated_at)
