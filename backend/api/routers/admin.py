@@ -824,7 +824,6 @@ async def apply_tier_change_with_evictions(
     )
     new_p_code = _gen_prefixed("P", new_tier)
     duration_days = int(code_row.get("duration_days") or 30)
-    import secrets as _sec
     token = str(_uuid.uuid4())
     await (
         db.table("promo_codes")

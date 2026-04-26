@@ -226,7 +226,6 @@ async def cmd_start(message: types.Message, state: FSMContext) -> None:
     # NEW PROMO V2: deep link token (UUID format) → redirect to Mini App
     # ------------------------------------------------------------------
     if deeplink and UUID_RE.match(deeplink):
-        mini_app_url = settings.MINI_APP_URL.rstrip("/")
         await message.answer(
             "Вас пригласили! Откройте приложение для активации:",
             reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
@@ -680,7 +679,6 @@ async def process_text_input(message: types.Message) -> None:
             if not resp_res or not resp_res.data:
                 await message.answer("Ответственный не найден.")
                 return
-            responsible_name = resp_res.data.get("first_name") or "Ответственный"
             resp_tier = resp_res.data.get("responsible_access_tier") or "standard"
 
             # Slot limit

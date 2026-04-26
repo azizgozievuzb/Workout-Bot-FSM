@@ -1,7 +1,7 @@
 """Player Stats API — ActionCube + MarketCube (balance)."""
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from ...core.deps import get_current_user

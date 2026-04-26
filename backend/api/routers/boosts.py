@@ -1,7 +1,7 @@
 """Boosts API — X2 множитель от Responsible."""
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from ...core.deps import get_current_user

@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from random import choices
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ...core.config import settings
