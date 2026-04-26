@@ -1,5 +1,6 @@
 """Admin-only endpoints: create/list promo codes."""
 import string
+import uuid as _uuid
 from datetime import datetime, timedelta, timezone
 from random import choices
 
@@ -654,3 +655,214 @@ async def cb_admin_promo_duration(callback: types.CallbackQuery) -> None:
         parse_mode="HTML",
     )
     await callback.answer()
+
+
+# ---------------------------------------------------------------------------
+# POST /admin/promo/apply-tier-change-with-evictions
+# ---------------------------------------------------------------------------
+
+_TIER_PLAYER_LIMITS: dict[str, int] = {
+    "standard": 1,
+    "premium": 2,
+    "elite": 3,
+}
+
+
+class TierChangeEvictionReq(BaseModel):
+    new_tier_code: str = Field(min_length=8, max_length=32)
+    player_ids_to_evict: list[_uuid.UUID]
+
+
+class RemainingPlayer(BaseModel):
+    id: str
+    first_name: str | None = None
+
+
+class TierChangeEvictionResp(BaseModel):
+    evicted_count: int
+    new_tier: str
+    remaining_players: list[RemainingPlayer]
+
+
+@router.post("/apply-tier-change-with-evictions", response_model=TierChangeEvictionResp)
+async def apply_tier_change_with_evictions(
+    body: TierChangeEvictionReq,
+    current_user: dict = Depends(get_current_user),
+):
+    role = current_user.get("role", "")
+    if role not in ("responsible", "admin"):
+        raise HTTPException(status_code=403, detail="Только для Ответственного или Админа")
+
+    db = await get_supabase()
+    telegram_id = current_user["telegram_id"]
+
+    user_res = await (
+        db.table("users")
+        .select("id, responsible_access_tier, has_responsible_access")
+        .eq("telegram_id", telegram_id)
+        .single()
+        .execute()
+    )
+    user_data = user_res.data
+    user_id = user_data["id"]
+
+    if not user_data.get("has_responsible_access"):
+        raise HTTPException(status_code=403, detail="Нет доступа Ответственного")
+
+    # Validate promo code
+    code = body.new_tier_code.strip()
+    code_res = await (
+        db.table("promo_codes")
+        .select("id, code_type, access_tier, is_used, duration_days")
+        .eq("code", code)
+        .maybe_single()
+        .execute()
+    )
+    if not code_res or not code_res.data:
+        raise HTTPException(status_code=400, detail={"code": "INVALID_CODE"})
+    code_row = code_res.data
+    if code_row.get("code_type") != "responsible" or code_row.get("is_used"):
+        raise HTTPException(status_code=400, detail={"code": "INVALID_CODE"})
+
+    new_tier = code_row.get("access_tier") or "standard"
+    max_players = _TIER_PLAYER_LIMITS.get(new_tier, 1)
+    evict_ids = [str(pid) for pid in body.player_ids_to_evict]
+
+    # Count current partnerships
+    all_pairs_res = await (
+        db.table("partnerships")
+        .select("id, player_id")
+        .eq("responsible_id", user_id)
+        .execute()
+    )
+    all_pairs = all_pairs_res.data or []
+    current_count = len(all_pairs)
+    remaining_after = current_count - len(evict_ids)
+
+    if remaining_after > max_players:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "INSUFFICIENT_EVICTIONS",
+                "required": current_count - max_players,
+                "provided": len(evict_ids),
+            },
+        )
+
+    # Validate all evicted player_ids belong to this responsible
+    pair_player_ids = {p["player_id"] for p in all_pairs}
+    for eid in evict_ids:
+        if eid not in pair_player_ids:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "PLAYER_NOT_IN_YOUR_TEAM", "player_id": eid},
+            )
+
+    # Hard-delete partnerships + conditional data cleanup
+    now_iso = datetime.now(timezone.utc).isoformat()
+    evicted_count = 0
+    for player_id in evict_ids:
+        await (
+            db.table("partnerships")
+            .delete()
+            .eq("responsible_id", user_id)
+            .eq("player_id", player_id)
+            .execute()
+        )
+        evicted_count += 1
+
+        # Keep player data if they have other partnerships or dual-role access
+        other_pairs_res = await (
+            db.table("partnerships")
+            .select("id", count="exact")
+            .eq("player_id", player_id)
+            .neq("responsible_id", user_id)
+            .execute()
+        )
+        player_user_res = await (
+            db.table("users")
+            .select("has_responsible_access, is_admin")
+            .eq("id", player_id)
+            .maybe_single()
+            .execute()
+        )
+        player_user = player_user_res.data if player_user_res else {}
+        has_dual_role = player_user.get("has_responsible_access") or player_user.get("is_admin")
+        has_other_partnerships = (other_pairs_res.count or 0) > 0
+
+        if not has_dual_role and not has_other_partnerships:
+            await db.table("player_stats").delete().eq("player_id", player_id).execute()
+            await db.table("shop_items").delete().eq("player_id", player_id).execute()
+            await db.table("boosts").delete().eq("player_id", player_id).execute()
+            await db.table("workout_sessions").delete().eq("player_id", player_id).execute()
+
+    # Update caller's tier
+    await (
+        db.table("users")
+        .update({"responsible_access_tier": new_tier})
+        .eq("id", user_id)
+        .execute()
+    )
+
+    # Burn the promo code atomically
+    await (
+        db.table("promo_codes")
+        .update({"is_used": True, "used_by": user_id, "used_at": now_iso})
+        .eq("id", code_row["id"])
+        .eq("is_used", False)
+        .execute()
+    )
+
+    # Expire old player P-codes and regen with new tier prefix
+    await (
+        db.table("promo_codes")
+        .update({"is_used": True})
+        .eq("responsible_id", user_id)
+        .eq("code_type", "player")
+        .eq("is_used", False)
+        .execute()
+    )
+    new_p_code = _gen_prefixed("P", new_tier)
+    duration_days = int(code_row.get("duration_days") or 30)
+    import secrets as _sec
+    token = str(_uuid.uuid4())
+    await (
+        db.table("promo_codes")
+        .insert({
+            "code": new_p_code,
+            "code_type": "player",
+            "access_tier": new_tier,
+            "responsible_id": user_id,
+            "deep_link_token": token,
+            "is_used": False,
+            "duration_days": duration_days,
+        })
+        .execute()
+    )
+
+    # Return remaining players
+    remaining_res = await (
+        db.table("partnerships")
+        .select("player_id")
+        .eq("responsible_id", user_id)
+        .execute()
+    )
+    remaining_player_ids = [p["player_id"] for p in (remaining_res.data or [])]
+    remaining_players_list: list[RemainingPlayer] = []
+    if remaining_player_ids:
+        rp_res = await (
+            db.table("users")
+            .select("id, first_name")
+            .in_("id", remaining_player_ids)
+            .execute()
+        )
+        remaining_players_list = [
+            RemainingPlayer(id=r["id"], first_name=r.get("first_name"))
+            for r in (rp_res.data or [])
+        ]
+
+    return TierChangeEvictionResp(
+        evicted_count=evicted_count,
+        new_tier=new_tier,
+        remaining_players=remaining_players_list,
+    )
