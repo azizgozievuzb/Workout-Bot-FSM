@@ -788,6 +788,51 @@ async def process_text_input(message: types.Message) -> None:
         # Regular responsible promo — create user row + player P-code immediately
         tier = promo_result["tier"]
         access_tier = promo_result.get("access_tier", "standard")
+
+        # --- Downgrade detection for existing Responsibles ---
+        _TIER_LIMITS_BOT: dict[str, int] = {"standard": 1, "premium": 2, "elite": 3}
+        existing_resp_res = await (
+            db.table("users")
+            .select("id, has_responsible_access")
+            .eq("telegram_id", tg.id)
+            .maybe_single()
+            .execute()
+        )
+        existing_resp = existing_resp_res.data if existing_resp_res else None
+        if existing_resp and existing_resp.get("has_responsible_access"):
+            new_max = _TIER_LIMITS_BOT.get(access_tier, 1)
+            pair_count_res = await (
+                db.table("partnerships")
+                .select("id", count="exact")
+                .eq("responsible_id", existing_resp["id"])
+                .execute()
+            )
+            current_count = pair_count_res.count or 0
+            if current_count > new_max:
+                mini_app_start = f"downgrade_{access_tier}_{message.text.strip()}"
+                mini_app_url = (
+                    f"https://t.me/{settings.BOT_USERNAME}?startapp={mini_app_start}"
+                )
+                await (
+                    db.table("users")
+                    .update({"onboarding_state": "onboardingComplete"})
+                    .eq("telegram_id", tg.id)
+                    .execute()
+                )
+                await message.answer(
+                    f"⚠️ Тариф {access_tier.capitalize()} позволяет максимум "
+                    f"{new_max} игрок(а). У вас сейчас {current_count}.\n\n"
+                    "Выберите в приложении, кого удалить, и подтвердите переход:",
+                    reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[[
+                        types.InlineKeyboardButton(
+                            text="🗑 Выбрать в приложении",
+                            url=mini_app_url,
+                        )
+                    ]]),
+                )
+                return
+        # --- End downgrade detection ---
+
         await (
             db.table("users")
             .upsert(
