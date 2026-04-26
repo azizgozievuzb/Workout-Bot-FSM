@@ -1,3 +1,64 @@
+# SESSION STATUS — Session 31 (2026-04-27) — Задача 7.1 ✅ IMPLEMENTED
+
+## ✅ Задача 7.1: Tier Downgrade Flow с Эвикцией Игроков (2026-04-27)
+
+### Что сделано
+- **Backend endpoint**: `POST /admin/promo/apply-tier-change-with-evictions` в `backend/api/routers/admin.py`
+  - Pydantic: `TierChangeEvictionReq` + `TierChangeEvictionResp`
+  - Валидация: R-код не использован, тип `responsible`, caller — Responsible/Admin
+  - Валидация: `current_count - evicted_count <= new_tier.max_players` (иначе 400 `INSUFFICIENT_EVICTIONS`)
+  - Валидация: каждый evicted player_id принадлежит partnerships Responsible (иначе 400)
+  - Каскадное удаление: hard-delete partnership → если нет других партнёрств и нет dual-role → delete player_stats / shop_items / boosts / workout_sessions
+  - Обновление `responsible_access_tier` в users
+  - Сжигание R-кода (is_used=True) атомарно
+  - Регенерация P-кода с новым тир-префиксом
+- **Bot upgrade flow**: `backend/handlers/onboarding.py` — в resp_promo обработчике добавлено обнаружение downgrade перед upsert
+  - Если `has_responsible_access=True` И `count(partnerships) > new_tier.max` → бот шлёт сообщение с inline-кнопкой → Mini App deep-link `?startapp=downgrade_{tier}_{code}`
+  - R-код НЕ сжигается — применяется только через новый endpoint
+- **Frontend модалка**: `frontend/src/components/cubes/TierDowngradeModal.tsx`
+  - Props: `targetTier, promoCode, onClose, onSuccess`
+  - Чек-боксы по списку `getMyPlayers()`, Apply disabled пока `selected.size < mustEvict`
+  - POST на новый endpoint → haptic success + `window.location.reload()` для обновления `own_access_tier`
+- **App.tsx**: читает `start_param` из Telegram WebApp initDataUnsafe при монтировании
+  - Парсит `downgrade_{tier}_{code}` → открывает `TierDowngradeModal`
+- **TokenResponse** (`own_access_tier`): уже корректно отдаётся из `responsible_access_tier` — изменений не потребовалось
+- **Миграция**: не нужна, все таблицы уже существуют
+
+### Файлы изменены
+| Файл | Что |
+|------|-----|
+| `backend/api/routers/admin.py` | `import uuid`, `TierChangeEvictionReq/Resp`, endpoint `/apply-tier-change-with-evictions`, `_TIER_PLAYER_LIMITS` |
+| `backend/handlers/onboarding.py` | Downgrade detection блок в resp_promo ветке |
+| `frontend/src/api/admin.ts` | `applyTierChangeWithEvictions()`, `TierChangeEvictionRequest/Response` |
+| `frontend/src/components/cubes/TierDowngradeModal.tsx` | Новый файл — модалка с чек-боксами |
+| `frontend/src/App.tsx` | `useEffect` для start_param, `downgradeModal` state, `TierDowngradeModal` рендер |
+
+### Тиры (актуальные в коде)
+`standard=1, premium=2, elite=3` (TIER_PLAYER_LIMITS в promo.py и admin.py)
+
+### Acceptance тесты
+Требуют выполнения на реальном боте + Supabase MCP:
+1. Elite(5 игроков) → ввести P-код Premium → бот → deep-link → модалка → выбрать 3 → применить
+2. Premium(1 игрок) → Standard → без модалки, сразу меняет тир
+3. Попытка с недостаточным числом выбранных → 400 INSUFFICIENT_EVICTIONS
+4. Dual-role игрок: partnerships удаляется, user row остаётся (has_responsible_access=True)
+5. tsc + py_compile ✅ зелёные
+
+### Коммиты (рекомендуемые)
+- `feat(backend): POST /admin/promo/apply-tier-change-with-evictions`
+- `feat(bot): downgrade detection in /upgrade resp_promo flow`
+- `feat(frontend): TierDowngradeModal + App.tsx deep-link integration`
+
+## ▶️ Следующая точка входа (новый чат)
+
+**Задача 7.2 — Технический долг:**
+- 4a) Drop `users.access_tier` — миграция 025_drop_legacy_access_tier.sql + grep-аудит + применить через Supabase MCP
+- 4b) `_hidden_docs/` cleanup — прочитать и удалить/переместить мёртвое
+- 4c) Лёгкая ruff-волна — dead imports, unused functions
+- **Модель:** Sonnet + medium effort
+
+---
+
 # SESSION STATUS — Session 30 (2026-04-25) — Этап 6 Задача 5 ✅ COMMITTED
 
 ## ✅ Задача 5: Онбординг в боте (2026-04-25)
@@ -50,11 +111,43 @@
 
 ## ▶️ Следующая точка входа (новый чат)
 
-Этап 6 (Задачи 1–5) полностью закрыт. **Жду указаний пользователя** на новую задачу. Возможные направления:
-- Этап 7 — E2E прогон в проде (бот + Mini App + workout-сессия с камерой и Gemini Vision).
-- Доработки UX по результатам smoke-тестов на реальных устройствах.
-- Технический долг: миграция 024 в `_hidden_docs/code dlya workout.html`, очистка legacy полей в users (`access_tier` после migration 021).
-- Новые фичи из ROADMAP (раздел 581+).
+Этап 6 (Задачи 1–5) полностью закрыт. **Зафиксированный порядок Этапа 7:**
+
+### 🥇 Задача 7.1 — Tier downgrade flow (СЛЕДУЮЩАЯ)
+TODO из SESSION_23_PLAN §14/15. Когда Responsible переходит на тариф ниже (например Elite → Standard), у него может быть больше игроков чем разрешено новым тиром. Нужно:
+- UX: при попытке downgrade — модалка «У вас N игроков, новый тариф позволяет M. Кого удалить?» с чек-боксами
+- Backend endpoint: `POST /admin/promo/apply-tier-change-with-evictions {player_ids_to_evict: [...]}`
+- Каскад: hard-delete партнёрств выбранных игроков → очистка их player_stats / shop_items / boosts
+- Возвращать в TokenResponse актуальный `own_access_tier` после downgrade
+- **Модель:** Sonnet + high effort
+
+### 🥈 Задача 7.2 — Технический долг
+Подробности раскрыты в комментарии Cowork-сессии 30:
+- **4a) Drop `users.access_tier`** — миграция 025_drop_legacy_access_tier.sql + grep-аудит на остаточные ссылки + применение через Supabase MCP
+- **4b) `_hidden_docs/` cleanup** — прочитать содержимое (`TEST_PLAN.md`, `code dlya workout.html` и др.), удалить мертвое или переместить в `_archive/`
+- **4c) Лёгкая ruff-волна** — dead imports, unused functions
+- **Модель:** Sonnet + medium effort
+
+### 🥉 Задача 7.3 — E2E smoke на реальном устройстве
+Прогон полного workout-flow в проде на iPhone/Android:
+- /start → P-код → онбординг (gender/fitness/age/goal) → Mini App
+- Camera permission → 35-минутная сессия с Gemini Vision evaluation
+- Начисление Stars → покупка в Shop → списание freeze
+- Verification: WakeLock работает, smart timer не сбивается, /workout/clip-uploads успешны
+- **Модель:** Sonnet + medium (баги локальные, точечный фикс)
+
+### 🏁 Задача 7.4 — Telegram Stars payments
+Интеграция реального top-up через Stars (сейчас Stars начисляются автоматически после workout, но платёжного флоу нет):
+- Aiogram pre-checkout query handler
+- Pydantic-схемы для invoice
+- Backend endpoint `/payments/create-invoice`
+- UX в MarketCube: «Купить N Stars» с invoice-генератором
+- Webhook для обработки successful_payment
+- **Модель:** Opus + xhigh effort + ultrathink (новая платёжная архитектура, security-critical)
+
+---
+
+**ИТОГО:** последовательность для следующих 4 чатов: **7.1 → 7.2 → 7.3 → 7.4**
 
 ---
 

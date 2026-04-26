@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Backdrop from './design/backdrop/Backdrop';
 import type { GlassCubesHandle } from './design/backdrop/GlassCubes';
@@ -18,6 +18,8 @@ import OnboardingBlockedScreen from './components/shared/OnboardingBlockedScreen
 import './App.css';
 import DashboardPanel from './components/shared/DashboardPanel';
 import DashboardRoleSwitch from './components/shared/DashboardRoleSwitch';
+import TierDowngradeModal from './components/cubes/TierDowngradeModal';
+import type { AccessTier } from './api/promo';
 import './styles/dashboard.css';
 
 // --- Типы ---
@@ -45,6 +47,24 @@ const App: React.FC = () => {
 
     const cubesRef = useRef<GlassCubesHandle>(null);
     const contentRef = useRef<HTMLElement>(null);
+
+    // Deep-link: downgrade_{tier}_{code} sent by bot when Responsible enters R-code
+    const [downgradeModal, setDowngradeModal] = useState<{
+        tier: AccessTier;
+        code: string;
+    } | null>(null);
+
+    useEffect(() => {
+        const startParam = window.Telegram?.WebApp?.initDataUnsafe?.start_param as string | undefined;
+        if (!startParam?.startsWith('downgrade_')) return;
+        const parts = startParam.split('_');
+        // format: downgrade_{tier}_{code}  (tier has no underscores, code may)
+        if (parts.length < 3) return;
+        const tier = parts[1] as AccessTier;
+        const code = parts.slice(2).join('_');
+        if (!['standard', 'premium', 'elite'].includes(tier) || !code) return;
+        setDowngradeModal({ tier, code });
+    }, []);
 
     // --- Gesture state ---
     const pointerDownAt = useRef<number>(0);
@@ -164,6 +184,12 @@ const App: React.FC = () => {
         return <OnboardingBlockedScreen message={onboardingBlockedMessage} />;
     }
 
+    const handleDowngradeSuccess = useCallback(() => {
+        setDowngradeModal(null);
+        // Re-authenticate to pick up updated own_access_tier
+        window.location.reload();
+    }, []);
+
     return (
         <ThemeContext.Provider value={theme}>
         <div className={`app-container ${theme}-theme`}>
@@ -268,6 +294,14 @@ const App: React.FC = () => {
                 </main>
             </div>
         </div>
+            {downgradeModal && (
+                <TierDowngradeModal
+                    targetTier={downgradeModal.tier}
+                    promoCode={downgradeModal.code}
+                    onClose={() => setDowngradeModal(null)}
+                    onSuccess={handleDowngradeSuccess}
+                />
+            )}
         </ThemeContext.Provider>
     );
 };

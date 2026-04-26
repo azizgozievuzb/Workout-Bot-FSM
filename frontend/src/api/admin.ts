@@ -133,6 +133,24 @@ export async function getBanHistory(): Promise<{ bans: BanHistoryEntry[] }> {
     return res.data;
 }
 
+export interface TierChangeEvictionRequest {
+    new_tier_code: string;
+    player_ids_to_evict: string[];
+}
+
+export interface TierChangeEvictionResponse {
+    evicted_count: number;
+    new_tier: string;
+    remaining_players: { id: string; first_name: string | null }[];
+}
+
+export async function applyTierChangeWithEvictions(
+    req: TierChangeEvictionRequest,
+): Promise<TierChangeEvictionResponse> {
+    const res = await api.post('/admin/promo/apply-tier-change-with-evictions', req);
+    return res.data;
+}
+
 export interface CreateResponsibleCodeResponse {
     code: string;
     expires_at: string | null;
