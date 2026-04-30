@@ -33,3 +33,6 @@ frontend/dist/
 
 # Claude
 .claude/
+
+# Large workout source videos (used to cut demos, not for repo)
+_workout_sources/

@@ -1,3 +1,164 @@
+# SESSION STATUS — Session 34 (2026-04-30) — Задача 7.3 🔄 IN PROGRESS
+
+## 🔄 Задача 7.3: E2E Smoke Test (Standard Tier) — продолжение
+
+### Аккаунты для теста (БД `dlpdwmmfpzfxcelxqvlq`)
+| TG ID | Имя | Роль | Tier |
+|---|---|---|---|
+| 8580720783 | Oil | Responsible | standard |
+| 8777447186 | Cell | Player (у Oil) | standard |
+
+### ✅ Пройдено в этой сессии (Session 34)
+
+**BUG-1 (layout) — FIXED ✅**
+- `frontend/src/components/workout/WorkoutScreen.tsx`: переписан JSX — основной фон стал `<video class="ws-demo-video">` (демо упражнения, autoplay+loop), камера юзера переехала в `<video class="ws-cam-pip">` (top-right, 28vw, mirrored). Название упражнения вынесено в `.ws-name-overlay` снизу.
+- `frontend/src/components/workout/WorkoutScreen.css`: добавлены `.ws-demo-video`, `.ws-cam-pip`, `.ws-name-overlay`. HUD перенесён в bottom-left, countdown уменьшен.
+- Демо-видео НЕ `muted` — звук разблокируется при тапе «Начать» (user gesture).
+
+**BUG-2 (попап между упражнениями) — FIXED ✅**
+- Удалён center-card для `aiVerdictReview`. Добавлен `useEffect` с автопереходом: после `aiVerdictReview` через `Math.max(800, review_sec*1000)` авто-шлёт `NEXT_EXERCISE`. Поток непрерывный.
+
+**16 демо-видео нарезаны и закоммичены ✅**
+- 16 mp4 файлов в `frontend/public/demos/<key>.mp4` (h264, 720×1280, 8.0 сек, ~25 МБ суммарно).
+- Источник: 3 длинных тренировки в `_workout_sources/{1,2,3}.mp4`. Antigravity-агент (Gemini 3.1 Pro) собрал спрайты через PIL и нашёл таймкоды; финальную нарезку сделал Cowork (ffmpeg в sandbox).
+- ⚠️ **Content debt:** многие клипы НЕ совпадают с названием упражнения (Gemini местами ошибся). Для smoke-теста достаточно — контент заменим перед продакшеном.
+- Source video 3.mp4 не использован (агент нашёл всё в 1.mp4 + 2.mp4).
+
+**Конфиг циклa изменён ✅** (`backend/core/workout_config.py`)
+- `EXERCISE_SEC`: 40 → **60** (1 минута активной работы)
+- `REST_SEC`: 90 → **30** (30 сек отдыха)
+- Итого цикл: 16 × (5+60+30+5) = **~26.7 мин** (было 37.3)
+- Frontend пикапит автоматически через `GET /workout/config`.
+- ⚠️ 30 сек rest — тайтко для Gemini Vision на 60-сек клип. Если в smoke-тесте будут частые `errorMessage` в `aiVerdictReview` — поднять `REST_SEC` до 45 или 60.
+
+### 🆕 Артефакты сессии (можно удалить после прохождения smoke)
+- `_workout_sources/{1,2,3}.mp4` — длинные исходники (~950 МБ, в `.gitignore` уже / или добавить)
+- `WORKOUT_VEO_PROMPTS.md` — 16 промптов для Veo 3 (на случай смены источника)
+- `STOCK_VIDEO_SEARCH.md` — ссылки на Pexels/Mixkit/Pixabay по упражнениям
+- `YOUTUBE_CUT_PLAN.md` — гайд по нарезке из YouTube
+- `ANTIGRAVITY_CUT_PROMPT.md` — промпт для Antigravity (использовался)
+
+### 📦 Коммиты, которые ждут push
+1. `7642e90` — feat(workout): add 16 demo videos + enable audio on demo player
+2. `(не закоммичен из-за git lock)` — config(workout): exercise 40s→60s, rest 90s→30s
+   - Файл изменён, изменения staged. Юзеру дома: `rm -f .git/HEAD.lock && git commit -m "config(workout): exercise 40s→60s, rest 90s→30s" && git push`
+
+### ▶️ Что делать в следующей сессии (Session 35)
+
+**Сначала** — пользователь дома пушит зависший коммит конфига (см. выше) и ждёт деплой Railway/Vercel (~2 мин).
+
+**Потом** — Phase 2 step 2.6+ (`TASK_7_3_SMOKE_PLAN.md`, секция "Phase 2 — Workout Session"):
+1. **2.6:** Открыть Mini App с TG #2 (Cell, `8777447186`) → запустить тренировку → проверить что:
+   - На фоне крутится демо-видео (со звуком из видео или тишиной — у нас `-an`)
+   - Камера в углу (PiP)
+   - Название упражнения снизу
+   - Между упражнениями НЕТ попапа
+   - В Network/Railway: `POST /workout/clip` → 200 + `{exercise_idx, score, feedback}`
+2. **2.7:** Свернуть Telegram на 30 сек → таймер не замёрз
+3. **2.8:** Дать сессии завершиться → score + Stars
+4. **Phase 3:** Shop & Boosts (`MarketCube` → купить boost)
+5. **Phase 4:** Edge cases (Dol legacy guard `forcashe`, tier-limit у Oil)
+
+После полного прогона — обновить SESSION_STATUS.md (Session 35), задача 7.3 → **CLOSED**, переход в **7.4 (Telegram Stars payments)**.
+
+### 📋 SQL-чеки после Phase 2 (для следующей сессии)
+```sql
+-- Сессия завершена?
+SELECT id, status, started_at, ended_at, score, stars_awarded
+FROM workout_sessions
+WHERE player_id = (SELECT id FROM users WHERE telegram_id = 8777447186)
+ORDER BY started_at DESC LIMIT 1;
+
+-- 16 клипов залились?
+SELECT count(*) FROM workout_clips WHERE session_id = '<SESSION_ID>';
+
+-- Stats обновились?
+SELECT global_score, xp_balance, current_streak, last_workout_date
+FROM player_stats
+WHERE player_id = (SELECT id FROM users WHERE telegram_id = 8777447186);
+```
+
+### 🤔 Открытые вопросы (НЕ блокеры smoke-теста)
+- **Content correctness:** заменить демо-видео на правильно подписанные (Veo / Pexels / своя съёмка) перед продакшеном.
+- **REST_SEC=30 vs Gemini latency:** проверить эмпирически на smoke; при ошибках — поднять.
+- **SESSION_23_PLAN.md** (subscription/renewal архитектура) — статус не проверен в этой сессии. Это отдельная задача, не часть 7.3. Открыть и сверить с продом отдельной сессией.
+
+---
+
+# SESSION STATUS — Session 33 (2026-04-28) — Задача 7.3 (старт)
+
+## 🔄 Задача 7.3: E2E Smoke Test (Standard Tier) — start
+
+### Новые аккаунты в БД
+| TG ID | Имя | Роль | Tier |
+|---|---|---|---|
+| 8580720783 | Oil | Responsible | standard |
+| 8777447186 | Cell | Player (у Oil) | standard |
+
+### ✅ Пройдено в Session 33
+- Phase 0 (0.1–0.3): R-код standard создан, Oil зарегистрирован, P-код создан
+- Phase 1 (1.1–1.7): Cell зарегистрирован, онбординг пройден, Mini App открылся
+- Phase 2 (2.1–2.5): Workout запустился, WakeLock держит экран 5+ мин ✅
+
+### 🐛 Баги найдены (фиксы → Session 34)
+- **BUG-1:** Workout screen layout — нужно демо-видео на фоне, камера в PiP. ✅ Fixed in Session 34.
+- **BUG-2:** Попап между упражнениями — нужен непрерывный поток. ✅ Fixed in Session 34.
+
+---
+
+# SESSION STATUS — Session 32 (2026-04-27) — Задача 7.2 ✅ IMPLEMENTED
+
+## ✅ Задача 7.2: Технический долг (2026-04-27)
+
+### 4a) Drop `users.access_tier`
+- Создана миграция `backend/db/migrations/025_drop_legacy_access_tier.sql` (`ALTER TABLE users DROP COLUMN IF EXISTS access_tier`).
+- Grep-аудит: ни одного runtime SELECT/UPDATE на `users.access_tier` не осталось — все ссылки или на `promo_codes.access_tier`, или на `responsible_access_tier`/`player_access_tier`, или локальные Python-переменные.
+- **TODO для пользователя:** применить миграцию через Supabase MCP (project `dlpdwmmfpzfxcelxqvlq`).
+
+### 4b) `_hidden_docs/` cleanup
+- 7 файлов перемещены в `_archive/_hidden_docs/`: `INTRODUCTION.html`, `PROMPT_MINIMAL_TRANSITIONS.md`, `TEST_PLAN.md`, `code dlya workout.html`, `code_audit_report.pdf`, `promocode generate.html`, `tsc_errors.txt` (мёртвые one-shot артефакты от сессий 1–18).
+- Пустая директория `_hidden_docs/` осталась — rmdir заблокирован на уровне mount; пользователь может удалить вручную.
+
+### 4c) Ruff-волна (F401 / F841)
+- `backend/api/routers/admin.py` — удалён `import secrets as _sec` (line 827, не использовался).
+- `backend/api/routers/boosts.py` — удалён `status` из `from fastapi import …`.
+- `backend/api/routers/promo.py` — удалён `status`.
+- `backend/api/routers/stats.py` — удалён `status`.
+- `backend/api/routers/workout.py` — удалён `status`.
+- `backend/handlers/onboarding.py` — удалена unused `mini_app_url = …` (line 229).
+- `backend/handlers/onboarding.py` — удалена unused `responsible_name = …` (line 682).
+- `backend/services/fsm_mock.py` — удалён `import json`.
+- `ruff check backend --select F401,F811,F841` → **All checks passed!**
+
+### Verify
+- `python3 -m py_compile` по всему `backend/` → exit 0
+- `npx tsc --noEmit` → exit 0
+
+### Файлы изменены
+| Файл | Что |
+|------|-----|
+| `backend/db/migrations/025_drop_legacy_access_tier.sql` | NEW |
+| `backend/api/routers/admin.py` | unused `import secrets as _sec` |
+| `backend/api/routers/boosts.py` | unused `status` |
+| `backend/api/routers/promo.py` | unused `status` |
+| `backend/api/routers/stats.py` | unused `status` |
+| `backend/api/routers/workout.py` | unused `status` |
+| `backend/handlers/onboarding.py` | 2× unused locals |
+| `backend/services/fsm_mock.py` | unused `import json` |
+| `_hidden_docs/*` → `_archive/_hidden_docs/*` | 7 файлов |
+
+### Коммиты (рекомендуемые)
+- `chore(db): migration 025 — drop legacy users.access_tier`
+- `chore(backend): ruff F401/F841 cleanup`
+- `chore(repo): archive _hidden_docs`
+
+## ▶️ Следующая точка входа (новый чат)
+
+**Задача 7.3 — E2E smoke на реальном устройстве** (Sonnet + medium effort).
+Также не забыть применить миграцию 025 через Supabase MCP.
+
+---
+
 # SESSION STATUS — Session 31 (2026-04-27) — Задача 7.1 ✅ IMPLEMENTED
 
 ## ✅ Задача 7.1: Tier Downgrade Flow с Эвикцией Игроков (2026-04-27)
