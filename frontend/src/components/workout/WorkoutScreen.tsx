@@ -304,7 +304,8 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
 
   return (
     <div className="ws-root">
-      {/* MAIN: pre-recorded exercise demo video, full-screen background */}
+      {/* MAIN: pre-recorded exercise demo video with built-in music + voice cues.
+          Not muted — user gesture (handleStart) unlocks audio for the session. */}
       {currentExercise && inActivePhase && (
         <video
           ref={demoVideoRef}
@@ -313,7 +314,6 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
           src={`/demos/${currentExercise.key}.mp4`}
           autoPlay
           loop
-          muted
           playsInline
           preload="auto"
         />
