@@ -51,7 +51,8 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
   const [startError, setStartError] = useState<string | null>(null);
 
   // --- refs for imperative hardware --------------------------------
-  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);     // user camera (PiP)
+  const demoVideoRef = useRef<HTMLVideoElement | null>(null); // exercise demo (main)
   const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -232,6 +233,16 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
     send({ type: 'NEXT_EXERCISE' });
   }, [send]);
 
+  // BUG-2 fix: auto-advance through aiVerdictReview — no popup, no tap.
+  // Keep a brief beat (review_sec from config, default 1.5s) so haptic + state settle,
+  // then transition straight into the next preparePhase / finishSession.
+  useEffect(() => {
+    if (ctx.state !== 'aiVerdictReview') return;
+    const ms = Math.max(800, (config?.review_sec ?? 1.5) * 1000);
+    const t = window.setTimeout(() => { handleNext(); }, ms);
+    return () => window.clearTimeout(t);
+  }, [ctx.state, config?.review_sec, handleNext]);
+
   // --- finish -------------------------------------------------------
   useEffect(() => {
     if (ctx.state !== 'finishSession' || !sessionId || result) return;
@@ -285,14 +296,37 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
     );
   }
 
+  const inActivePhase =
+    ctx.state === 'preparePhase' ||
+    ctx.state === 'exercisingPhase' ||
+    ctx.state === 'restAndAnalyzingPhase' ||
+    ctx.state === 'aiVerdictReview';
+
   return (
     <div className="ws-root">
+      {/* MAIN: pre-recorded exercise demo video, full-screen background */}
+      {currentExercise && inActivePhase && (
+        <video
+          ref={demoVideoRef}
+          key={currentExercise.key}
+          className="ws-demo-video"
+          src={`/demos/${currentExercise.key}.mp4`}
+          autoPlay
+          loop
+          muted
+          playsInline
+          preload="auto"
+        />
+      )}
+
+      {/* PiP: user's own camera, small corner overlay */}
       <video
         ref={videoRef}
-        className={`ws-video ${ctx.state === 'idle' ? 'ws-video--off' : ''}`}
+        className={`ws-cam-pip ${inActivePhase ? '' : 'ws-cam-pip--off'}`}
         playsInline
         muted
       />
+
       <div className="ws-scrim" />
 
       {/* --- top bar --- */}
@@ -318,34 +352,30 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
         </div>
       )}
 
-      {(ctx.state === 'preparePhase' || ctx.state === 'exercisingPhase' || ctx.state === 'restAndAnalyzingPhase') && currentExercise && (
+      {/* HUD: phase badge + countdown (top-right area).
+          Active phases incl. aiVerdictReview — keeps flow continuous, no popup. */}
+      {inActivePhase && currentExercise && (
         <div className="ws-hud">
           <div className={`ws-phase-badge ws-phase-${ctx.state}`}>
             {ctx.state === 'preparePhase' && 'Приготовьтесь'}
             {ctx.state === 'exercisingPhase' && 'Выполняйте'}
             {ctx.state === 'restAndAnalyzingPhase' && 'Отдых'}
+            {ctx.state === 'aiVerdictReview' && 'Дальше…'}
           </div>
-          <div className="ws-exercise-name">{currentExercise.name}</div>
-          <div className="ws-exercise-hint">{currentExercise.hint}</div>
-          <div className="ws-countdown">{phaseSecLeft}</div>
+          {ctx.state !== 'aiVerdictReview' && (
+            <div className="ws-countdown">{phaseSecLeft}</div>
+          )}
           {ctx.state === 'exercisingPhase' && <div className="ws-rec-dot" aria-label="Запись" />}
         </div>
       )}
 
-      {ctx.state === 'aiVerdictReview' && currentExercise && (
-        <div className="ws-center-card">
-          <div className="ws-verdict-title">{currentExercise.name}</div>
-          {ctx.errorMessage ? (
-            <div className="ws-verdict-error">{ctx.errorMessage}</div>
-          ) : (
-            <>
-              <div className="ws-verdict-score">{ctx.lastVerdict?.score ?? 0}%</div>
-              <div className="ws-verdict-feedback">{ctx.lastVerdict?.feedback ?? ''}</div>
-            </>
+      {/* Bottom name overlay — appears whenever an exercise is on screen */}
+      {inActivePhase && currentExercise && (
+        <div className="ws-name-overlay">
+          <div className="ws-name-overlay__name">{currentExercise.name}</div>
+          {currentExercise.hint && (
+            <div className="ws-name-overlay__hint">{currentExercise.hint}</div>
           )}
-          <button className="ws-btn ws-btn--primary" onClick={handleNext}>
-            {ctx.currentExercise + 1 >= config.total_exercises ? 'Завершить' : 'Дальше'}
-          </button>
         </div>
       )}
 
