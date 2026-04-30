@@ -1,10 +1,14 @@
 """
-Workout configuration — single source of truth for 35-min cycle.
+Workout configuration — single source of truth for the cycle.
 FE/BE share the same EXERCISES list (FE fetches via GET /workout/config).
 
-Cycle design (35 min total):
-  16 × (prepare 5s → exercise 40s → rest+analyze 90s → review 5s)  ≈ 16 × 140 ≈ 37.3 min
+Cycle design (~27 min total):
+  16 × (prepare 5s → exercise 60s → rest+analyze 30s → review 5s) = 16 × 100 = 1600s ≈ 26.7 min
   (slight slack absorbed by cold-start + network delay)
+
+⚠️  REST_SEC=30 is tight for Gemini Vision analysis of a 60s clip.
+    If verdict frequently arrives late (errorMessage shown in aiVerdictReview),
+    bump REST_SEC back up to 45–60.
 
 Stars award formula:
   stars = round(total_score / 16 * MAX_STARS_PER_SESSION / 100)
@@ -13,8 +17,8 @@ Stars award formula:
 from dataclasses import dataclass, asdict
 
 PREPARE_SEC = 5
-EXERCISE_SEC = 40
-REST_SEC = 90
+EXERCISE_SEC = 60   # active period: 60s (was 40)
+REST_SEC = 30       # rest + AI analyze: 30s (was 90) — see warning above
 REVIEW_SEC = 5
 TOTAL_EXERCISES = 16
 MAX_STARS_PER_SESSION = 50  # TODO: tier-based
