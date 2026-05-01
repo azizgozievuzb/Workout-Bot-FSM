@@ -67,6 +67,10 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
   const chunksRef = useRef<Blob[]>([]);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const phaseTimerRef = useRef<number | null>(null);
+  // BUG-4: wall-clock timer — survives setInterval throttling when tab is hidden
+  const phaseEndsAtRef = useRef<number | null>(null);
+  const phaseStartedAtRef = useRef<number | null>(null);
+  const currentOnEndRef = useRef<(() => void) | null>(null);
 
   // --- load config + start session --------------------------------
   useEffect(() => {
@@ -119,41 +123,112 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
     }
   }, []);
 
+  // BUG-4: reconcile timer + demo position after returning from background.
+  // Browsers throttle setInterval to ~1Hz when tab is hidden; iOS may pause
+  // <video> entirely. Wall-clock comparison + explicit demo currentTime fixes both.
+  const reconcileAfterVisible = useCallback(() => {
+    const endsAt = phaseEndsAtRef.current;
+    if (endsAt == null) return;
+    const now = Date.now();
+    if (now >= endsAt) {
+      // Timer should have already fired — invoke onEnd manually
+      if (phaseTimerRef.current) window.clearInterval(phaseTimerRef.current);
+      phaseTimerRef.current = null;
+      phaseEndsAtRef.current = null;
+      phaseStartedAtRef.current = null;
+      const fn = currentOnEndRef.current;
+      currentOnEndRef.current = null;
+      setPhaseSecLeft(0);
+      fn?.();
+      return;
+    }
+    setPhaseSecLeft(Math.ceil((endsAt - now) / 1000));
+    // Re-arm interval if browser killed it
+    if (!phaseTimerRef.current) {
+      const tick = () => {
+        const endsAtNow = phaseEndsAtRef.current;
+        if (endsAtNow == null) return;
+        const left = endsAtNow - Date.now();
+        if (left <= 0) {
+          if (phaseTimerRef.current) window.clearInterval(phaseTimerRef.current);
+          phaseTimerRef.current = null;
+          phaseEndsAtRef.current = null;
+          phaseStartedAtRef.current = null;
+          const fn = currentOnEndRef.current;
+          currentOnEndRef.current = null;
+          setPhaseSecLeft(0);
+          fn?.();
+          return;
+        }
+        setPhaseSecLeft(Math.ceil(left / 1000));
+      };
+      phaseTimerRef.current = window.setInterval(tick, 250);
+    }
+    // Resync demo video to the position it would be at if it had played continuously.
+    const demo = demoVideoRef.current;
+    const startedAt = phaseStartedAtRef.current;
+    if (demo && startedAt != null) {
+      const elapsedSec = (Date.now() - startedAt) / 1000;
+      const dur = demo.duration;
+      if (Number.isFinite(dur) && dur > 0) {
+        try { demo.currentTime = elapsedSec % dur; } catch {}
+      }
+      demo.play().catch(() => {});
+    }
+  }, []);
+
   useEffect(() => {
     // acquire wakelock once, re-acquire on visibility change
     (async () => { wakeLockRef.current = await acquireWakeLock(); })();
     const onVis = async () => {
-      if (document.visibilityState === 'visible' && !wakeLockRef.current) {
+      if (document.visibilityState !== 'visible') return;
+      if (!wakeLockRef.current) {
         wakeLockRef.current = await acquireWakeLock();
       }
+      reconcileAfterVisible();
     };
+    const onPageShow = () => { reconcileAfterVisible(); };
     document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('pageshow', onPageShow);
     return () => {
       document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('pageshow', onPageShow);
       releaseWakeLock();
       stopCamera();
       if (phaseTimerRef.current) { window.clearInterval(phaseTimerRef.current); phaseTimerRef.current = null; }
+      phaseEndsAtRef.current = null;
+      phaseStartedAtRef.current = null;
+      currentOnEndRef.current = null;
     };
-  }, [releaseWakeLock, stopCamera]);
+  }, [releaseWakeLock, stopCamera, reconcileAfterVisible]);
 
-  // --- phase timer helper (count-down) ----------------------------
+  // --- phase timer helper (wall-clock count-down) -----------------
+  // Uses absolute end-timestamp instead of decrementing local counter so that
+  // setInterval throttling / pausing in background tabs cannot drift the clock.
   const runPhaseTimer = useCallback((seconds: number, onEnd: () => void) => {
     if (phaseTimerRef.current) window.clearInterval(phaseTimerRef.current);
-    setPhaseSecLeft(seconds);
-    const tickMs = 250;
-    let left = seconds * 1000;
-    phaseTimerRef.current = window.setInterval(() => {
-      left -= tickMs;
-      send({ type: 'TICK', deltaMs: tickMs });
+    const startedAt = Date.now();
+    const endsAt = startedAt + seconds * 1000;
+    phaseStartedAtRef.current = startedAt;
+    phaseEndsAtRef.current = endsAt;
+    currentOnEndRef.current = onEnd;
+    const tick = () => {
+      const left = endsAt - Date.now();
       if (left <= 0) {
-        window.clearInterval(phaseTimerRef.current!);
+        if (phaseTimerRef.current) window.clearInterval(phaseTimerRef.current);
         phaseTimerRef.current = null;
+        phaseEndsAtRef.current = null;
+        phaseStartedAtRef.current = null;
+        currentOnEndRef.current = null;
         setPhaseSecLeft(0);
         onEnd();
-      } else {
-        setPhaseSecLeft(Math.ceil(left / 1000));
+        return;
       }
-    }, tickMs);
+      setPhaseSecLeft(Math.ceil(left / 1000));
+      send({ type: 'TICK', deltaMs: 250 });
+    };
+    tick();
+    phaseTimerRef.current = window.setInterval(tick, 250);
   }, [send]);
 
   // --- recorder control -------------------------------------------
