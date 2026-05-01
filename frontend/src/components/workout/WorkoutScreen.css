@@ -305,6 +305,17 @@
   color: var(--tg-theme-button-text-color, #fff);
 }
 
+.ws-btn--secondary {
+  background: rgba(255, 255, 255, 0.10);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.ws-btn--danger {
+  background: #ff3b30;
+  color: #fff;
+}
+
 /* --- Loading / error --- */
 .ws-loading {
   margin: auto;

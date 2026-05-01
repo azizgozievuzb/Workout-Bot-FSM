@@ -8,9 +8,12 @@
  *  - UI       → this component, CSS only in WorkoutScreen.css
  *
  * Contract with FSM blueprint (1:1):
- *   idle → preparePhase(5s) → exercisingPhase(40s + record)
- *        → restAndAnalyzingPhase(90s + upload+analyze) → aiVerdictReview
+ *   idle → preparePhase(5s) → exercisingPhase(60s + record)
+ *        → restAndAnalyzingPhase(30s + upload+analyze) → aiVerdictReview
  *        → (NEXT_EXERCISE) → preparePhase | finishSession
+ *
+ * Camera lifecycle: live ONLY during preparePhase + exercisingPhase.
+ * Released on entry to restAndAnalyzingPhase, re-acquired on next preparePhase.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useWorkoutMachine } from '../../fsm/workoutSessionMachine';
@@ -31,6 +34,11 @@ interface Props {
   onClose: () => void;
 }
 
+interface ErrState {
+  message: string;
+  retry?: () => void;
+}
+
 // --- WakeLock (no React context needed) -------------------------------
 async function acquireWakeLock(): Promise<WakeLockSentinel | null> {
   try {
@@ -48,7 +56,8 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [phaseSecLeft, setPhaseSecLeft] = useState<number>(0);
   const [result, setResult] = useState<FinishSessionResponse | null>(null);
-  const [startError, setStartError] = useState<string | null>(null);
+  const [errState, setErrState] = useState<ErrState | null>(null);
+  const [retryToken, setRetryToken] = useState(0);
 
   // --- refs for imperative hardware --------------------------------
   const videoRef = useRef<HTMLVideoElement | null>(null);     // user camera (PiP)
@@ -70,7 +79,7 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
         setSessionId(sess.session_id);
       } catch (e) {
         if (cancelled) return;
-        setStartError('Не удалось начать сессию. Попробуйте позже.');
+        setErrState({ message: 'Не удалось начать сессию. Попробуйте позже.' });
       }
     })();
     return () => { cancelled = true; };
@@ -82,6 +91,9 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
     recorderRef.current = null;
     streamRef.current?.getTracks().forEach(t => t.stop());
     streamRef.current = null;
+    if (videoRef.current) {
+      try { videoRef.current.srcObject = null; } catch {}
+    }
   }, []);
 
   const releaseWakeLock = useCallback(() => {
@@ -90,6 +102,7 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
   }, []);
 
   const initCamera = useCallback(async (): Promise<boolean> => {
+    if (streamRef.current) return true;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
@@ -102,7 +115,6 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
       }
       return true;
     } catch (e) {
-      setStartError('Нет доступа к камере. Откройте приложение заново и разрешите камеру.');
       return false;
     }
   }, []);
@@ -184,10 +196,10 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
 
   const handleExerciseEnd = useCallback(async () => {
     hapticImpact('heavy');
+    // BUG-3: stopRecording MUST complete before TIMER_END (which triggers stopCamera on rest entry).
+    const blob = await stopRecording();
     send({ type: 'TIMER_END' });
     if (!sessionId) return;
-    const blob = await stopRecording();
-    // Analyze during rest phase — fire-and-forget, verdict arrives before rest ends
     if (!blob) {
       send({ type: 'AI_ERROR' });
       return;
@@ -208,22 +220,45 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
   // --- kickoff effect: when in a timed state, start the timer ------
   useEffect(() => {
     if (!config || !sessionId) return;
+    let cancelled = false;
     if (ctx.state === 'preparePhase') {
-      runPhaseTimer(config.prepare_sec, handlePrepareEnd);
+      (async () => {
+        // Re-acquire camera if it was released during rest (or first prepare after handleStart).
+        if (!streamRef.current) {
+          const ok = await initCamera();
+          if (cancelled) return;
+          if (!ok) {
+            setErrState({
+              message: 'Не удалось включить камеру. Закройте другие приложения и повторите.',
+              retry: () => { setErrState(null); setRetryToken(t => t + 1); },
+            });
+            return;
+          }
+        }
+        runPhaseTimer(config.prepare_sec, handlePrepareEnd);
+      })();
     } else if (ctx.state === 'exercisingPhase') {
       runPhaseTimer(config.exercise_sec, handleExerciseEnd);
     } else if (ctx.state === 'restAndAnalyzingPhase') {
+      // BUG-3: release camera fully during rest — LED off, no MediaStream live.
+      stopCamera();
       runPhaseTimer(config.rest_sec, handleRestEnd);
     }
-    // aiVerdictReview + finishSession: no timer
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ctx.state, config, sessionId]);
+  }, [ctx.state, config, sessionId, retryToken]);
 
   // --- first start --------------------------------------------------
   const handleStart = useCallback(async () => {
     if (!config || !sessionId) return;
     const ok = await initCamera();
-    if (!ok) return;
+    if (!ok) {
+      setErrState({
+        message: 'Нет доступа к камере. Откройте приложение заново и разрешите камеру.',
+        retry: () => { setErrState(null); /* user re-clicks Начать */ },
+      });
+      return;
+    }
     hapticImpact('medium');
     send({ type: 'START_WORKOUT' });
   }, [config, initCamera, send, sessionId]);
@@ -276,13 +311,16 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
     : 0;
 
   // --- Render -------------------------------------------------------
-  if (startError) {
+  if (errState) {
     return (
       <div className="ws-root">
         <div className="ws-error-card">
           <div className="ws-error-title">Ошибка</div>
-          <div className="ws-error-text">{startError}</div>
-          <button className="ws-btn ws-btn--primary" onClick={onClose}>Закрыть</button>
+          <div className="ws-error-text">{errState.message}</div>
+          {errState.retry && (
+            <button className="ws-btn ws-btn--primary" onClick={errState.retry}>Повторить</button>
+          )}
+          <button className="ws-btn ws-btn--secondary" onClick={handleClose}>Завершить</button>
         </div>
       </div>
     );
@@ -296,6 +334,10 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
     );
   }
 
+  // Demo + own-camera PiP only during prepare/exercise — released during rest (BUG-3).
+  const showDemoAndCam =
+    ctx.state === 'preparePhase' || ctx.state === 'exercisingPhase';
+
   const inActivePhase =
     ctx.state === 'preparePhase' ||
     ctx.state === 'exercisingPhase' ||
@@ -306,7 +348,7 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
     <div className="ws-root">
       {/* MAIN: pre-recorded exercise demo video with built-in music + voice cues.
           Not muted — user gesture (handleStart) unlocks audio for the session. */}
-      {currentExercise && inActivePhase && (
+      {currentExercise && showDemoAndCam && (
         <video
           ref={demoVideoRef}
           key={currentExercise.key}
@@ -319,15 +361,15 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
         />
       )}
 
-      {/* PiP: user's own camera, small corner overlay */}
+      {/* PiP: user's own camera, small corner overlay — hidden when camera is released */}
       <video
         ref={videoRef}
-        className={`ws-cam-pip ${inActivePhase ? '' : 'ws-cam-pip--off'}`}
+        className={`ws-cam-pip ${showDemoAndCam ? '' : 'ws-cam-pip--off'}`}
         playsInline
         muted
       />
 
-      <div className="ws-scrim" />
+      {showDemoAndCam && <div className="ws-scrim" />}
 
       {/* --- top bar --- */}
       <div className="ws-topbar">
