@@ -37,6 +37,8 @@ class ExerciseMeta(BaseModel):
     name: str
     hint: str
     targets: str
+    position: str
+    muscles: list[str]
 
 
 class WorkoutConfigResponse(BaseModel):

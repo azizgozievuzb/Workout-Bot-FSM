@@ -6,6 +6,8 @@ export interface ExerciseMeta {
   name: string;
   hint: string;
   targets: string;
+  position: string;
+  muscles: string[];
 }
 
 export interface WorkoutConfig {

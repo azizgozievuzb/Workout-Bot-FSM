@@ -50,6 +50,12 @@ async function acquireWakeLock(): Promise<WakeLockSentinel | null> {
   return null;
 }
 
+// BUG-5: Telegram WebApp accessor — every method optional-chained because
+// older clients silently lack newer APIs (requestFullscreen/disableVerticalSwipes
+// are Bot API 8.0+, BackButton/showConfirm are 6.1+).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const tgWeb = (): any => (typeof window !== 'undefined' ? (window as any).Telegram?.WebApp : null);
+
 const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
   const { ctx, send } = useWorkoutMachine();
   const [config, setConfig] = useState<WorkoutConfig | null>(null);
@@ -58,6 +64,11 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
   const [result, setResult] = useState<FinishSessionResponse | null>(null);
   const [errState, setErrState] = useState<ErrState | null>(null);
   const [retryToken, setRetryToken] = useState(0);
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+
+  // BUG-5: stable BackButton handler — Telegram requires identity match for offClick
+  const closeWithConfirmRef = useRef<() => void>(() => {});
+  const stableBackHandlerRef = useRef<() => void>(() => closeWithConfirmRef.current?.());
 
   // --- refs for imperative hardware --------------------------------
   const videoRef = useRef<HTMLVideoElement | null>(null);     // user camera (PiP)
@@ -103,6 +114,28 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
   const releaseWakeLock = useCallback(() => {
     const wl = wakeLockRef.current;
     if (wl) { wl.release().catch(() => {}); wakeLockRef.current = null; }
+  }, []);
+
+  // BUG-5: lock Telegram chrome so swipe-down / swipe-back / × cannot kill the
+  // workout silently. Each call is try/catch — older clients lack these methods.
+  const lockTelegramChrome = useCallback(() => {
+    const w = tgWeb(); if (!w) return;
+    try { w.expand?.(); } catch {}
+    try { w.requestFullscreen?.(); } catch {}
+    try { w.disableVerticalSwipes?.(); } catch {}
+    try { w.enableClosingConfirmation?.(); } catch {}
+    try { w.MainButton?.hide?.(); } catch {}
+    try { w.BackButton?.show?.(); } catch {}
+    try { w.BackButton?.onClick?.(stableBackHandlerRef.current); } catch {}
+  }, []);
+
+  const unlockTelegramChrome = useCallback(() => {
+    const w = tgWeb(); if (!w) return;
+    try { w.exitFullscreen?.(); } catch {}
+    try { w.enableVerticalSwipes?.(); } catch {}
+    try { w.disableClosingConfirmation?.(); } catch {}
+    try { w.BackButton?.offClick?.(stableBackHandlerRef.current); } catch {}
+    try { w.BackButton?.hide?.(); } catch {}
   }, []);
 
   const initCamera = useCallback(async (): Promise<boolean> => {
@@ -335,8 +368,11 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
       return;
     }
     hapticImpact('medium');
+    // BUG-5: lock Telegram chrome AFTER user gesture (handleStart) so swipe/×
+    // can't kill the workout. Done after camera init so error path stays clean.
+    lockTelegramChrome();
     send({ type: 'START_WORKOUT' });
-  }, [config, initCamera, send, sessionId]);
+  }, [config, initCamera, lockTelegramChrome, send, sessionId]);
 
   const handleNext = useCallback(() => {
     hapticImpact('light');
@@ -364,20 +400,54 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
       } catch { /* silent */ }
       stopCamera();
       releaseWakeLock();
+      unlockTelegramChrome();
     })();
-  }, [ctx.state, sessionId, result, stopCamera, releaseWakeLock]);
+  }, [ctx.state, sessionId, result, stopCamera, releaseWakeLock, unlockTelegramChrome]);
 
   const handleClose = useCallback(async () => {
     hapticImpact('light');
+    unlockTelegramChrome();
     try { if (sessionId && ctx.state !== 'finishSession') await cancelWorkoutSession(sessionId); } catch {}
     stopCamera();
     releaseWakeLock();
     onClose();
-  }, [ctx.state, onClose, releaseWakeLock, sessionId, stopCamera]);
+  }, [ctx.state, onClose, releaseWakeLock, sessionId, stopCamera, unlockTelegramChrome]);
+
+  // BUG-5: confirm before destroying an in-flight workout. Prefer Telegram's
+  // native showConfirm; fall back to a React modal on older clients.
+  const handleCloseWithConfirm = useCallback(() => {
+    if (ctx.state === 'idle' || ctx.state === 'finishSession') {
+      handleClose();
+      return;
+    }
+    const w = tgWeb();
+    if (w?.showConfirm) {
+      try {
+        w.showConfirm('Завершить тренировку? Прогресс будет потерян.', (ok: boolean) => {
+          if (ok) handleClose();
+        });
+        return;
+      } catch { /* fall through to modal */ }
+    }
+    setShowCloseConfirm(true);
+  }, [ctx.state, handleClose]);
+
+  // Keep the BackButton handler ref pointed at the latest closure
+  useEffect(() => {
+    closeWithConfirmRef.current = handleCloseWithConfirm;
+  }, [handleCloseWithConfirm]);
+
+  // Safety net — if component unmounts mid-workout, release Telegram chrome too
+  useEffect(() => () => { unlockTelegramChrome(); }, [unlockTelegramChrome]);
 
   // --- Derived UI data ---------------------------------------------
   const currentExercise = useMemo(
     () => (config ? config.exercises[ctx.currentExercise] : null),
+    [config, ctx.currentExercise],
+  );
+
+  const nextExercise = useMemo(
+    () => (config ? config.exercises[ctx.currentExercise + 1] ?? null : null),
     [config, ctx.currentExercise],
   );
 
@@ -413,11 +483,9 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
   const showDemoAndCam =
     ctx.state === 'preparePhase' || ctx.state === 'exercisingPhase';
 
-  const inActivePhase =
-    ctx.state === 'preparePhase' ||
-    ctx.state === 'exercisingPhase' ||
-    ctx.state === 'restAndAnalyzingPhase' ||
-    ctx.state === 'aiVerdictReview';
+  // Rest screen takes over for both rest+analyze and the brief verdict review.
+  const restPhase =
+    ctx.state === 'restAndAnalyzingPhase' || ctx.state === 'aiVerdictReview';
 
   return (
     <div className="ws-root">
@@ -448,7 +516,7 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
 
       {/* --- top bar --- */}
       <div className="ws-topbar">
-        <button className="ws-close" onClick={handleClose} aria-label="Закрыть">×</button>
+        <button className="ws-close" onClick={handleCloseWithConfirm} aria-label="Закрыть">×</button>
         <div className="ws-progress">
           <div className="ws-progress-bar" style={{ width: `${progressPct}%` }} />
           <span className="ws-progress-text">
@@ -469,29 +537,56 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
         </div>
       )}
 
-      {/* HUD: phase badge + countdown (top-right area).
-          Active phases incl. aiVerdictReview — keeps flow continuous, no popup. */}
-      {inActivePhase && currentExercise && (
+      {/* HUD: phase badge + countdown — only over the demo (prepare/exercise). */}
+      {showDemoAndCam && currentExercise && (
         <div className="ws-hud">
           <div className={`ws-phase-badge ws-phase-${ctx.state}`}>
-            {ctx.state === 'preparePhase' && 'Приготовьтесь'}
-            {ctx.state === 'exercisingPhase' && 'Выполняйте'}
-            {ctx.state === 'restAndAnalyzingPhase' && 'Отдых'}
-            {ctx.state === 'aiVerdictReview' && 'Дальше…'}
+            {ctx.state === 'preparePhase' ? 'Приготовьтесь' : 'Выполняйте'}
           </div>
-          {ctx.state !== 'aiVerdictReview' && (
-            <div className="ws-countdown">{phaseSecLeft}</div>
-          )}
+          <div className="ws-countdown">{phaseSecLeft}</div>
           {ctx.state === 'exercisingPhase' && <div className="ws-rec-dot" aria-label="Запись" />}
         </div>
       )}
 
-      {/* Bottom name overlay — appears whenever an exercise is on screen */}
-      {inActivePhase && currentExercise && (
+      {/* Bottom name overlay — only when demo is visible */}
+      {showDemoAndCam && currentExercise && (
         <div className="ws-name-overlay">
           <div className="ws-name-overlay__name">{currentExercise.name}</div>
           {currentExercise.hint && (
             <div className="ws-name-overlay__hint">{currentExercise.hint}</div>
+          )}
+        </div>
+      )}
+
+      {/* Rest screen — black background, big countdown, next-exercise card.
+          Replaces HUD/name-overlay for restAndAnalyzingPhase + aiVerdictReview. */}
+      {restPhase && (
+        <div className="ws-rest-root">
+          <div className="ws-rest-countdown">
+            {ctx.state === 'restAndAnalyzingPhase' ? phaseSecLeft : '·'}
+          </div>
+          {nextExercise ? (
+            <div className="ws-rest-next">
+              <div className="ws-rest-next__name">Дальше: {nextExercise.name}</div>
+              <div className="ws-rest-next__position">Положение: {nextExercise.position}</div>
+              {nextExercise.muscles.length > 0 && (
+                <div className="ws-rest-next__muscles">
+                  Работают: {nextExercise.muscles.join(', ')}
+                </div>
+              )}
+              {nextExercise.hint && (
+                <div className="ws-rest-next__hint">{nextExercise.hint}</div>
+              )}
+            </div>
+          ) : (
+            <div className="ws-rest-next">
+              <div className="ws-rest-next__name">Дальше: финиш 🎉</div>
+            </div>
+          )}
+          {ctx.lastVerdict && (
+            <div className="ws-rest-feedback">
+              Оценка: {ctx.lastVerdict.score}% — {ctx.lastVerdict.feedback}
+            </div>
           )}
         </div>
       )}
@@ -508,6 +603,27 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
             <div className="ws-loading ws-loading--inline">Сохраняем результат…</div>
           )}
           <button className="ws-btn ws-btn--primary" onClick={onClose}>Закрыть</button>
+        </div>
+      )}
+
+      {/* Custom confirm modal — fallback when WebApp.showConfirm is unavailable */}
+      {showCloseConfirm && (
+        <div className="ws-modal-backdrop" onClick={() => setShowCloseConfirm(false)}>
+          <div className="ws-modal" onClick={e => e.stopPropagation()}>
+            <div className="ws-modal-title">Завершить тренировку?</div>
+            <div className="ws-modal-text">Прогресс будет потерян.</div>
+            <div className="ws-modal-actions">
+              <button className="ws-btn ws-btn--secondary" onClick={() => setShowCloseConfirm(false)}>
+                Отмена
+              </button>
+              <button
+                className="ws-btn ws-btn--danger"
+                onClick={() => { setShowCloseConfirm(false); handleClose(); }}
+              >
+                Завершить
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
