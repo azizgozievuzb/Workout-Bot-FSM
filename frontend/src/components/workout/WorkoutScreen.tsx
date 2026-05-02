@@ -65,6 +65,7 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
   const [errState, setErrState] = useState<ErrState | null>(null);
   const [retryToken, setRetryToken] = useState(0);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const [showSwipeWarning, setShowSwipeWarning] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [diagInfo, setDiagInfo] = useState<any>(null);
 
@@ -250,32 +251,48 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
     }
   }, []);
 
-  // BUG-D: block iOS edge-swipe from killing the workout. touch-action / overscroll
-  // alone aren't enough — we also intercept edge touches (start + move) and prevent default.
+  // BUG-D: while WorkoutScreen is mounted, gate native gestures via CSS
+  // (overflow:fixed + touch-action:none on html/body).
   useEffect(() => {
     document.documentElement.classList.add('workout-active');
     document.body.classList.add('workout-active');
-    const onTouch = (e: TouchEvent) => {
-      const t = e.touches[0]; if (!t) return;
-      const x = t.clientX;
-      const w = window.innerWidth;
-      if (x < 30 || x > w - 30) {
-        try { e.preventDefault(); } catch {}
-        e.stopPropagation();
-      }
-    };
-    window.addEventListener('touchstart', onTouch, { passive: false, capture: true });
-    window.addEventListener('touchmove', onTouch, { passive: false, capture: true });
     return () => {
-      window.removeEventListener('touchstart', onTouch, true);
-      window.removeEventListener('touchmove', onTouch, true);
       document.documentElement.classList.remove('workout-active');
       document.body.classList.remove('workout-active');
     };
   }, []);
 
-  // Mount-time arsenal: try fullscreen / swipe locks ASAP — even before user taps Начать.
-  // No-op on older clients (try/catch on every call).
+  // BUG-D: 40px edge-swipe interceptor — only during active phases.
+  // Skipped in idle/finishSession so taps near the edges (Начать/Закрыть, modal
+  // buttons) work. Note: iOS Telegram horizontal pager-swipe cannot be fully
+  // blocked from JS — the system jest fires before touchstart. This is a best-effort.
+  useEffect(() => {
+    if (ctx.state === 'idle' || ctx.state === 'finishSession') return;
+    const onTouch = (e: TouchEvent) => {
+      const t = e.touches[0] || e.changedTouches[0];
+      if (!t) return;
+      const x = t.clientX;
+      const w = window.innerWidth;
+      if (x < 40 || x > w - 40) {
+        try { e.preventDefault(); } catch {}
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+      }
+    };
+    window.addEventListener('touchstart', onTouch, { passive: false, capture: true });
+    window.addEventListener('touchmove', onTouch, { passive: false, capture: true });
+    window.addEventListener('touchend', onTouch, { passive: false, capture: true });
+    return () => {
+      window.removeEventListener('touchstart', onTouch, true);
+      window.removeEventListener('touchmove', onTouch, true);
+      window.removeEventListener('touchend', onTouch, true);
+    };
+  }, [ctx.state]);
+
+  // Mount-time arsenal: swipe locks ASAP. NOTE: requestFullscreen is intentionally
+  // NOT called here — Safari prefers a user-gesture trigger, and a second call
+  // from handleConfirmStart would fail with ALREADY_FULLSCREEN. Fullscreen is
+  // requested only from the user-gesture path inside lockTelegramChrome().
   useEffect(() => {
     const w = tgWeb(); if (!w) return;
     try { w.expand?.(); } catch {}
@@ -283,8 +300,6 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
     try { w.enableClosingConfirmation?.(); } catch {}
     try { w.SwipeBehavior?.disable?.(); } catch {}
     try { w.disableSwipeBack?.(); } catch {}
-    try { w.requestFullscreen?.(); } catch {}
-    try { w.postEvent?.('web_app_request_fullscreen', false, {}); } catch {}
   }, []);
 
   // Subscribe to fullscreenChanged / fullscreenFailed for live diagnostics.
@@ -294,6 +309,8 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
     const onChg = () => setDiagInfo((d: typeof diagInfo) => d ? { ...d, isFullscreen: w.isFullscreen } : d);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const onFail = (e: any) => {
+      // ALREADY_FULLSCREEN is benign — a duplicate request when we're already in FS.
+      if (e?.error === 'ALREADY_FULLSCREEN') return;
       console.warn('[workout] fullscreenFailed', e);
       setDiagInfo((d: typeof diagInfo) => d ? { ...d, fullscreenFailed: e?.error || 'unknown' } : d);
     };
@@ -453,7 +470,15 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
   }, [ctx.state, config, sessionId, retryToken]);
 
   // --- first start --------------------------------------------------
-  const handleStart = useCallback(async () => {
+  // handleStart only opens the swipe-warning modal. Camera/lock/dispatch happen
+  // in handleConfirmStart so the user gesture comes AFTER reading the warning.
+  const handleStart = useCallback(() => {
+    if (!config || !sessionId) return;
+    setShowSwipeWarning(true);
+  }, [config, sessionId]);
+
+  const handleConfirmStart = useCallback(async () => {
+    setShowSwipeWarning(false);
     if (!config || !sessionId) return;
     const ok = await initCamera();
     if (!ok) {
@@ -464,8 +489,7 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
       return;
     }
     hapticImpact('medium');
-    // BUG-5: lock Telegram chrome AFTER user gesture (handleStart) so swipe/×
-    // can't kill the workout. Done after camera init so error path stays clean.
+    // BUG-5: lock Telegram chrome AFTER user gesture so swipe/× can't kill the workout.
     lockTelegramChrome();
     send({ type: 'START_WORKOUT' });
   }, [config, initCamera, lockTelegramChrome, send, sessionId]);
@@ -609,29 +633,33 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
 
   return (
     <div className="ws-root">
-      {/* --- top bar (BUG-F) --- */}
-      <div className="ws-topbar">
-        <button
-          className="ws-finish-btn"
-          onClick={handleCloseWithConfirm}
-          aria-label="Завершить тренировку"
-        >
-          Завершить
-        </button>
-        <div className="ws-progress-label">
-          {Math.min(ctx.currentExercise + 1, config.total_exercises)} / {config.total_exercises}
-        </div>
-      </div>
-
-      {/* --- segmented progress rail (BUG-E) --- */}
-      <div className="ws-progress-rail">
-        {segments.map((seg, i) => (
-          <div key={i} className={`ws-seg ws-seg--${seg.status}`}>
-            <div className="ws-seg__ex" style={{ transform: `scaleX(${seg.exerciseFill})` }} />
-            <div className="ws-seg__rest" style={{ transform: `scaleX(${seg.restFill})` }} />
+      {/* --- top bar + progress rail: hidden in idle (no workout in flight there;
+            Telegram's native «Закрыть» is enough). --- */}
+      {ctx.state !== 'idle' && (
+        <>
+          <div className="ws-topbar">
+            <button
+              className="ws-finish-btn"
+              onClick={handleCloseWithConfirm}
+              aria-label="Завершить тренировку"
+            >
+              Завершить
+            </button>
+            <div className="ws-progress-label">
+              {Math.min(ctx.currentExercise + 1, config.total_exercises)} / {config.total_exercises}
+            </div>
           </div>
-        ))}
-      </div>
+
+          <div className="ws-progress-rail">
+            {segments.map((seg, i) => (
+              <div key={i} className={`ws-seg ws-seg--${seg.status}`}>
+                <div className="ws-seg__ex" style={{ transform: `scaleX(${seg.exerciseFill})` }} />
+                <div className="ws-seg__rest" style={{ transform: `scaleX(${seg.restFill})` }} />
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       {/* --- split layout (top 65% demo / bottom 35% camera) — only during prepare/exercise --- */}
       {showDemoAndCam && (
@@ -681,8 +709,8 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
         </div>
       )}
 
-      {/* Diagnostic overlay — visible during workout, tap to dismiss. */}
-      {diagInfo && (
+      {/* Diagnostic overlay — DEV builds only. Tap to dismiss. */}
+      {import.meta.env.DEV && diagInfo && (
         <div className="ws-diag" onClick={() => setDiagInfo(null)}>
           v:{String(diagInfo.version)} · {String(diagInfo.platform)} ·
           {' '}FS:{String(diagInfo.hasRequestFullscreen)} ·
@@ -748,6 +776,32 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
               <div className="ws-loading ws-loading--inline">Сохраняем результат…</div>
             )}
             <button className="ws-btn ws-btn--primary" onClick={onClose}>Закрыть</button>
+          </div>
+        </div>
+      )}
+
+      {/* Pre-start swipe warning — iOS Telegram pager-swipe can't be fully blocked
+          from JS, so we warn the user once before the workout begins. */}
+      {showSwipeWarning && (
+        <div className="ws-warn-overlay">
+          <div className="ws-warn-card">
+            <div className="ws-warn-icon">⚠️</div>
+            <div className="ws-warn-title">Внимание</div>
+            <div className="ws-warn-text">
+              Во время тренировки <b>не свайпайте от краёв экрана</b> — это закроет
+              приложение и прервёт тренировку. К сожалению, Telegram не позволяет
+              полностью отключить этот жест на iOS.
+              <br /><br />
+              Используйте кнопку «Завершить» в верхнем углу, если нужно остановиться.
+            </div>
+            <div className="ws-warn-buttons">
+              <button className="ws-btn ws-btn--secondary" onClick={() => setShowSwipeWarning(false)}>
+                Отмена
+              </button>
+              <button className="ws-btn ws-btn--primary" onClick={handleConfirmStart}>
+                Понял, начинаем
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -456,6 +456,60 @@ html.workout-active, body.workout-active, body.workout-active #root {
   margin-top: 8px;
 }
 
+/* Pre-start swipe-warning modal — sits above everything except diag. */
+.ws-warn-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.ws-warn-card {
+  background: #1a1a1a;
+  border-radius: 16px;
+  padding: 24px 20px;
+  max-width: 360px;
+  width: 100%;
+  color: #fff;
+  border: 1px solid rgba(231, 76, 60, 0.3);
+}
+
+.ws-warn-icon {
+  font-size: 40px;
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.ws-warn-title {
+  font-size: 20px;
+  font-weight: 600;
+  text-align: center;
+  margin-bottom: 12px;
+}
+
+.ws-warn-text {
+  font-size: 14px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.85);
+  margin-bottom: 20px;
+}
+
+.ws-warn-text b { color: #e74c3c; }
+
+.ws-warn-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.ws-warn-buttons .ws-btn {
+  flex: 1;
+  touch-action: manipulation;
+}
+
 /* Diagnostic overlay — top-center, tap to dismiss. */
 .ws-diag {
   position: fixed;
