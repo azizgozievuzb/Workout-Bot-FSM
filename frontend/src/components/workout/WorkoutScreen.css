@@ -11,120 +11,121 @@
   flex-direction: column;
 }
 
-/* Main demo video — pre-recorded exercise demonstration, full-screen */
-.ws-demo-video {
+/* Split layout: top 65% demo, bottom 35% camera. Visible only during
+   preparePhase + exercisingPhase — replaced wholesale by .ws-rest-root on rest. */
+.ws-split {
   position: absolute;
   inset: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ws-demo-top {
+  position: relative;
+  flex: 0 0 65%;
+  height: 65%;
+  background: #000;
+  overflow: hidden;
+}
+
+.ws-demo-top > video {
   width: 100%;
   height: 100%;
   object-fit: cover;
   background: #000;
+  display: block;
 }
 
-/* PiP — user's own camera, small corner overlay so they can frame themselves */
-.ws-cam-pip {
-  position: absolute;
-  z-index: 3;
-  top: calc(64px + env(safe-area-inset-top));
-  right: 12px;
-  width: 28vw;
-  max-width: 140px;
-  aspect-ratio: 3 / 4;
-  border-radius: 14px;
+.ws-cam-bottom {
+  flex: 0 0 35%;
+  height: 35%;
+  width: 100%;
   object-fit: cover;
   transform: scaleX(-1); /* selfie mirror */
   background: #111;
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  display: block;
 }
 
-.ws-cam-pip--off {
-  opacity: 0;
-  pointer-events: none;
-}
-
-/* Legacy class kept for back-compat with any stray references */
-.ws-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.ws-video--off { opacity: 0; pointer-events: none; }
-
-.ws-scrim {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    180deg,
-    rgba(0, 0, 0, 0.55) 0%,
-    rgba(0, 0, 0, 0.15) 25%,
-    rgba(0, 0, 0, 0.15) 60%,
-    rgba(0, 0, 0, 0.70) 100%
-  );
-  pointer-events: none;
-}
-
-/* --- top bar --- */
+/* --- top bar (sits above split layout via z-index) --- */
 .ws-topbar {
-  position: relative;
-  z-index: 2;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 5;
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 16px calc(8px + env(safe-area-inset-top));
-  padding-top: calc(12px + env(safe-area-inset-top));
+  padding: calc(10px + env(safe-area-inset-top)) 16px 8px;
+  background: linear-gradient(180deg, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0) 100%);
 }
 
-.ws-close {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  border: none;
-  background: rgba(0, 0, 0, 0.55);
-  color: #fff;
-  font-size: 22px;
-  line-height: 1;
+.ws-finish-btn {
+  appearance: none;
+  background: rgba(0, 0, 0, 0.45);
+  color: #ff6b5e;
+  border: 1px solid rgba(255, 107, 94, 0.55);
+  border-radius: 10px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.1;
   cursor: pointer;
-  display: grid;
-  place-items: center;
   -webkit-tap-highlight-color: transparent;
+  white-space: nowrap;
+  transition: transform 0.08s ease-out, background 0.2s;
 }
+.ws-finish-btn:active { transform: scale(0.96); background: rgba(255, 107, 94, 0.18); }
 
 .ws-progress {
   position: relative;
   flex: 1;
-  height: 6px;
+  height: 14px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.18);
   overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.10);
 }
 
 .ws-progress-bar {
   position: absolute;
   left: 0; top: 0; bottom: 0;
-  background: var(--tg-theme-button-color, #2f9bff);
-  transition: width 0.3s ease-out;
+  border-radius: 999px;
+  transition: width 600ms ease, background 600ms ease, box-shadow 600ms ease;
+}
+.ws-progress-bar--p1 { background: linear-gradient(90deg, #e74c3c 0%, #f39c12 100%); }
+.ws-progress-bar--p2 { background: linear-gradient(90deg, #f39c12 0%, #f1c40f 100%); }
+.ws-progress-bar--p3 { background: linear-gradient(90deg, #f1c40f 0%, #2ecc71 100%); }
+.ws-progress-bar--p4 {
+  background: #2ecc71;
+  box-shadow: 0 0 8px rgba(46, 204, 113, 0.6);
 }
 
 .ws-progress-text {
   position: absolute;
-  right: -52px;
-  top: -6px;
-  font-size: 12px;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
-  color: rgba(255, 255, 255, 0.85);
-  min-width: 48px;
-  text-align: right;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+  pointer-events: none;
 }
 
-/* --- HUD (during active phases) — moved to bottom-left so it doesn't fight
-   the PiP (top-right) or the name overlay (bottom-center). */
+/* --- HUD: top-right of demo-top section (countdown + phase + REC) --- */
 .ws-hud {
   position: absolute;
-  z-index: 2;
-  left: 16px;
-  bottom: calc(110px + env(safe-area-inset-bottom));
+  z-index: 3;
+  right: 12px;
+  top: calc(54px + env(safe-area-inset-top));
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  text-align: left;
-  gap: 8px;
+  align-items: flex-end;
+  text-align: right;
+  gap: 6px;
   pointer-events: none;
 }
 
@@ -158,47 +159,46 @@
 }
 
 .ws-countdown {
-  margin-top: 4px;
-  font-size: 56px;
+  font-size: 44px;
   font-weight: 300;
   font-variant-numeric: tabular-nums;
   line-height: 1;
   color: #fff;
-  text-shadow: 0 4px 18px rgba(0, 0, 0, 0.8);
+  text-shadow: 0 4px 18px rgba(0, 0, 0, 0.85);
 }
 
-/* Bottom name overlay — replaces the old popup-card title.
-   Always visible during active phases incl. transitions. */
+/* Name overlay — pinned to the bottom edge of demo-top (above the camera split). */
 .ws-name-overlay {
   position: absolute;
-  z-index: 2;
+  z-index: 3;
   left: 0;
   right: 0;
-  bottom: calc(20px + env(safe-area-inset-bottom));
-  padding: 12px 20px;
+  bottom: 0;
+  padding: 16px 16px 10px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   text-align: center;
   pointer-events: none;
-  background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.55) 100%);
+  background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.70) 100%);
 }
 
 .ws-name-overlay__name {
-  font-size: 22px;
+  font-size: 17px;
   font-weight: 700;
   color: #fff;
-  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.85);
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.9);
   letter-spacing: 0.01em;
+  line-height: 1.2;
 }
 
 .ws-name-overlay__hint {
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.85);
-  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8);
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.82);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.85);
   max-width: 92vw;
-  line-height: 1.35;
+  line-height: 1.3;
 }
 
 .ws-rec-dot {
@@ -343,8 +343,9 @@
 .ws-error-text { font-size: 14px; opacity: 0.85; }
 
 @media (max-width: 360px) {
-  .ws-countdown { font-size: 60px; }
+  .ws-countdown { font-size: 36px; }
   .ws-exercise-name { font-size: 22px; }
+  .ws-name-overlay__name { font-size: 15px; }
 }
 
 /* --- Rest screen (BUG-3 + UX) — fully replaces the demo during rest+verdict phases.
@@ -352,7 +353,7 @@
 .ws-rest-root {
   position: absolute;
   inset: 0;
-  z-index: 2;
+  z-index: 3;
   background: #000;
   display: flex;
   flex-direction: column;
@@ -405,21 +406,6 @@
   color: rgba(255, 255, 255, 0.62);
   line-height: 1.4;
   font-style: italic;
-}
-
-.ws-rest-feedback {
-  position: absolute;
-  left: 16px;
-  right: 16px;
-  bottom: calc(20px + env(safe-area-inset-bottom));
-  font-size: 13px;
-  text-align: center;
-  color: rgba(255, 255, 255, 0.78);
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 10px;
-  padding: 8px 12px;
-  max-width: 460px;
-  margin: 0 auto;
 }
 
 @media (max-width: 360px) {

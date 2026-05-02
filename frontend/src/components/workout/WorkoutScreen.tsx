@@ -71,8 +71,8 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
   const stableBackHandlerRef = useRef<() => void>(() => closeWithConfirmRef.current?.());
 
   // --- refs for imperative hardware --------------------------------
-  const videoRef = useRef<HTMLVideoElement | null>(null);     // user camera (PiP)
-  const demoVideoRef = useRef<HTMLVideoElement | null>(null); // exercise demo (main)
+  const videoRef = useRef<HTMLVideoElement | null>(null);     // user camera (bottom 35%)
+  const demoVideoRef = useRef<HTMLVideoElement | null>(null); // exercise demo (top 65%)
   const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -123,6 +123,8 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
     try { w.expand?.(); } catch {}
     try { w.requestFullscreen?.(); } catch {}
     try { w.disableVerticalSwipes?.(); } catch {}
+    try { w.disableSwipeBack?.(); } catch {}
+    try { w.SwipeBehavior?.disable?.(); } catch {}
     try { w.enableClosingConfirmation?.(); } catch {}
     try { w.MainButton?.hide?.(); } catch {}
     try { w.BackButton?.show?.(); } catch {}
@@ -455,6 +457,12 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
     ? Math.round(((ctx.currentExercise + (ctx.state === 'finishSession' ? 1 : 0)) / config.total_exercises) * 100)
     : 0;
 
+  const progressTier =
+    progressPct >= 100 ? 'p4'
+    : progressPct >= 67 ? 'p3'
+    : progressPct >= 34 ? 'p2'
+    : 'p1';
+
   // --- Render -------------------------------------------------------
   if (errState) {
     return (
@@ -489,41 +497,72 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
 
   return (
     <div className="ws-root">
-      {/* MAIN: pre-recorded exercise demo video with built-in music + voice cues.
-          Not muted — user gesture (handleStart) unlocks audio for the session. */}
-      {currentExercise && showDemoAndCam && (
-        <video
-          ref={demoVideoRef}
-          key={currentExercise.key}
-          className="ws-demo-video"
-          src={`/demos/${currentExercise.key}.mp4`}
-          autoPlay
-          loop
-          playsInline
-          preload="auto"
-        />
-      )}
-
-      {/* PiP: user's own camera, small corner overlay — hidden when camera is released */}
-      <video
-        ref={videoRef}
-        className={`ws-cam-pip ${showDemoAndCam ? '' : 'ws-cam-pip--off'}`}
-        playsInline
-        muted
-      />
-
-      {showDemoAndCam && <div className="ws-scrim" />}
-
       {/* --- top bar --- */}
       <div className="ws-topbar">
-        <button className="ws-close" onClick={handleCloseWithConfirm} aria-label="Закрыть">×</button>
+        <button
+          className="ws-finish-btn"
+          onClick={handleCloseWithConfirm}
+          aria-label="Завершить тренировку"
+        >
+          Завершить тренировку
+        </button>
         <div className="ws-progress">
-          <div className="ws-progress-bar" style={{ width: `${progressPct}%` }} />
+          <div
+            className={`ws-progress-bar ws-progress-bar--${progressTier}`}
+            style={{ width: `${progressPct}%` }}
+          />
           <span className="ws-progress-text">
             {Math.min(ctx.currentExercise + 1, config.total_exercises)} / {config.total_exercises}
           </span>
         </div>
       </div>
+
+      {/* --- split layout (top 65% demo / bottom 35% camera) — only during prepare/exercise --- */}
+      {showDemoAndCam && (
+        <div className="ws-split">
+          <div className="ws-demo-top">
+            {currentExercise && (
+              <video
+                ref={demoVideoRef}
+                key={currentExercise.key}
+                src={`/demos/${currentExercise.key}.mp4`}
+                autoPlay
+                loop
+                playsInline
+                preload="auto"
+              />
+            )}
+
+            {/* HUD: phase badge + countdown + REC dot — top-right of demo */}
+            {currentExercise && (
+              <div className="ws-hud">
+                <div className={`ws-phase-badge ws-phase-${ctx.state}`}>
+                  {ctx.state === 'preparePhase' ? 'Приготовьтесь' : 'Выполняйте'}
+                </div>
+                <div className="ws-countdown">{phaseSecLeft}</div>
+                {ctx.state === 'exercisingPhase' && <div className="ws-rec-dot" aria-label="Запись" />}
+              </div>
+            )}
+
+            {/* Exercise name overlay — bottom edge of demo (above camera) */}
+            {currentExercise && (
+              <div className="ws-name-overlay">
+                <div className="ws-name-overlay__name">{currentExercise.name}</div>
+                {currentExercise.hint && (
+                  <div className="ws-name-overlay__hint">{currentExercise.hint}</div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <video
+            ref={videoRef}
+            className="ws-cam-bottom"
+            playsInline
+            muted
+          />
+        </div>
+      )}
 
       {/* --- state-specific body --- */}
       {ctx.state === 'idle' && (
@@ -537,29 +576,9 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
         </div>
       )}
 
-      {/* HUD: phase badge + countdown — only over the demo (prepare/exercise). */}
-      {showDemoAndCam && currentExercise && (
-        <div className="ws-hud">
-          <div className={`ws-phase-badge ws-phase-${ctx.state}`}>
-            {ctx.state === 'preparePhase' ? 'Приготовьтесь' : 'Выполняйте'}
-          </div>
-          <div className="ws-countdown">{phaseSecLeft}</div>
-          {ctx.state === 'exercisingPhase' && <div className="ws-rec-dot" aria-label="Запись" />}
-        </div>
-      )}
-
-      {/* Bottom name overlay — only when demo is visible */}
-      {showDemoAndCam && currentExercise && (
-        <div className="ws-name-overlay">
-          <div className="ws-name-overlay__name">{currentExercise.name}</div>
-          {currentExercise.hint && (
-            <div className="ws-name-overlay__hint">{currentExercise.hint}</div>
-          )}
-        </div>
-      )}
-
       {/* Rest screen — black background, big countdown, next-exercise card.
-          Replaces HUD/name-overlay for restAndAnalyzingPhase + aiVerdictReview. */}
+          Replaces split layout for restAndAnalyzingPhase + aiVerdictReview.
+          NOTE: mid-workout AI score/feedback intentionally hidden — shown only on finish. */}
       {restPhase && (
         <div className="ws-rest-root">
           <div className="ws-rest-countdown">
@@ -583,11 +602,6 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
               <div className="ws-rest-next__name">Дальше: финиш 🎉</div>
             </div>
           )}
-          {ctx.lastVerdict && (
-            <div className="ws-rest-feedback">
-              Оценка: {ctx.lastVerdict.score}% — {ctx.lastVerdict.feedback}
-            </div>
-          )}
         </div>
       )}
 
@@ -596,7 +610,7 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
           <div className="ws-title">Готово 🎉</div>
           {result ? (
             <>
-              <div className="ws-result-row"><span>Средняя оценка</span><span className="ws-result-val">{result.avg_score}%</span></div>
+              <div className="ws-result-row"><span>XP</span><span className="ws-result-val">XP {result.avg_score}</span></div>
               <div className="ws-result-row"><span>Звёзды</span><span className="ws-result-val">⭐ {result.stars_earned}</span></div>
             </>
           ) : (
