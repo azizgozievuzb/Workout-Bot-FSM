@@ -1,29 +1,117 @@
 /* WorkoutScreen — full-screen, mobile-first, Telegram theme-aware */
 
+/* BUG-D: kill native gestures on html/body while workout is mounted */
+html.workout-active, body.workout-active {
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
+}
+
 .ws-root {
   position: fixed;
   inset: 0;
   z-index: 9999;
+  width: 100vw;
+  height: 100dvh;
+  min-height: 100vh;
   background: var(--tg-theme-bg-color, #000);
   color: var(--tg-theme-text-color, #fff);
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  touch-action: none;
+  overscroll-behavior: contain;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
-/* Split layout: top 65% demo, bottom 35% camera. Visible only during
-   preparePhase + exercisingPhase — replaced wholesale by .ws-rest-root on rest. */
-.ws-split {
-  position: absolute;
-  inset: 0;
+/* --- top bar (BUG-F): finish-btn + counter label, single row, non-absolute --- */
+.ws-topbar {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: calc(8px + env(safe-area-inset-top)) 12px 4px;
+}
+
+.ws-finish-btn {
+  appearance: none;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border: 1px solid rgba(231, 76, 60, 0.6);
+  background: transparent;
+  color: #e74c3c;
+  border-radius: 8px;
+  line-height: 1.1;
+  cursor: pointer;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition: transform 0.08s ease-out, background 0.2s;
+}
+.ws-finish-btn:active { transform: scale(0.96); background: rgba(231, 76, 60, 0.15); }
+
+.ws-progress-label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- segmented progress rail (BUG-E) --- */
+.ws-progress-rail {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 3px;
+  height: 8px;
+  padding: 0 12px;
+  margin-top: 6px;
+}
+.ws-seg {
+  flex: 1 1 0;
+  display: flex;
+  gap: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.ws-seg__ex {
+  flex: 0 0 75%;
+  height: 100%;
+  background: var(--seg-color, #2ecc71);
+  transform-origin: left;
+  transform: scaleX(0);
+  transition: transform 200ms linear;
+}
+.ws-seg__rest {
+  flex: 0 0 25%;
+  height: 100%;
+  background: var(--seg-rest-color, #3498db);
+  transform-origin: left;
+  transform: scaleX(0);
+  transition: transform 200ms linear;
+}
+.ws-seg--done .ws-seg__ex,
+.ws-seg--done .ws-seg__rest { transform: scaleX(1); background: #2ecc71; }
+.ws-seg--preparePhase { --seg-color: #f39c12; }
+.ws-seg--exercisingPhase { --seg-color: #e67e22; }
+.ws-seg--restAndAnalyzingPhase,
+.ws-seg--aiVerdictReview { --seg-rest-color: #3498db; }
+.ws-seg--future { opacity: 0.5; }
+
+/* --- stage (BUG-B): fills remaining viewport, splits 65/35 --- */
+.ws-stage {
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .ws-demo-top {
   position: relative;
   flex: 0 0 65%;
-  height: 65%;
   background: #000;
   overflow: hidden;
 }
@@ -38,136 +126,66 @@
 
 .ws-cam-bottom {
   flex: 0 0 35%;
-  height: 35%;
   width: 100%;
+  height: 100%;
   object-fit: cover;
   transform: scaleX(-1); /* selfie mirror */
   background: #111;
   display: block;
 }
 
-/* --- top bar (sits above split layout via z-index) --- */
-.ws-topbar {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 5;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: calc(10px + env(safe-area-inset-top)) 16px 8px;
-  background: linear-gradient(180deg, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0) 100%);
-}
-
-.ws-finish-btn {
-  appearance: none;
-  background: rgba(0, 0, 0, 0.45);
-  color: #ff6b5e;
-  border: 1px solid rgba(255, 107, 94, 0.55);
-  border-radius: 10px;
-  padding: 6px 12px;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  line-height: 1.1;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  white-space: nowrap;
-  transition: transform 0.08s ease-out, background 0.2s;
-}
-.ws-finish-btn:active { transform: scale(0.96); background: rgba(255, 107, 94, 0.18); }
-
-.ws-progress {
-  position: relative;
-  flex: 1;
-  height: 14px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.18);
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.10);
-}
-
-.ws-progress-bar {
-  position: absolute;
-  left: 0; top: 0; bottom: 0;
-  border-radius: 999px;
-  transition: width 600ms ease, background 600ms ease, box-shadow 600ms ease;
-}
-.ws-progress-bar--p1 { background: linear-gradient(90deg, #e74c3c 0%, #f39c12 100%); }
-.ws-progress-bar--p2 { background: linear-gradient(90deg, #f39c12 0%, #f1c40f 100%); }
-.ws-progress-bar--p3 { background: linear-gradient(90deg, #f1c40f 0%, #2ecc71 100%); }
-.ws-progress-bar--p4 {
-  background: #2ecc71;
-  box-shadow: 0 0 8px rgba(46, 204, 113, 0.6);
-}
-
-.ws-progress-text {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  font-size: 11px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  color: #fff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
-  pointer-events: none;
-}
-
-/* --- HUD: top-right of demo-top section (countdown + phase + REC) --- */
+/* --- HUD (BUG-F): compact, top-right of demo, doesn't collide with name overlay --- */
 .ws-hud {
   position: absolute;
   z-index: 3;
-  right: 12px;
-  top: calc(54px + env(safe-area-inset-top));
+  right: 10px;
+  top: 8px;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   text-align: right;
-  gap: 6px;
+  gap: 4px;
   pointer-events: none;
 }
 
 .ws-phase-badge {
-  font-size: 11px;
-  letter-spacing: 0.12em;
+  font-size: 9px;
+  letter-spacing: 0.10em;
   text-transform: uppercase;
-  padding: 4px 12px;
+  padding: 3px 9px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.12);
   backdrop-filter: blur(8px);
   color: #fff;
 }
-.ws-phase-preparePhase { background: rgba(47, 155, 255, 0.35); }
-.ws-phase-exercisingPhase { background: rgba(255, 68, 68, 0.40); }
-.ws-phase-restAndAnalyzingPhase { background: rgba(255, 170, 0, 0.35); }
-
-.ws-exercise-name {
-  font-size: 28px;
-  font-weight: 700;
-  line-height: 1.15;
-  color: #fff;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
-}
-
-.ws-exercise-hint {
-  font-size: 14px;
-  opacity: 0.85;
-  max-width: 420px;
-  color: rgba(255, 255, 255, 0.9);
-}
+.ws-phase-preparePhase { background: rgba(47, 155, 255, 0.40); }
+.ws-phase-exercisingPhase { background: rgba(255, 68, 68, 0.45); }
+.ws-phase-restAndAnalyzingPhase { background: rgba(255, 170, 0, 0.40); }
 
 .ws-countdown {
-  font-size: 44px;
+  font-size: 52px;
   font-weight: 300;
   font-variant-numeric: tabular-nums;
   line-height: 1;
   color: #fff;
-  text-shadow: 0 4px 18px rgba(0, 0, 0, 0.85);
+  text-shadow: 0 4px 16px rgba(0, 0, 0, 0.85);
 }
 
-/* Name overlay — pinned to the bottom edge of demo-top (above the camera split). */
+.ws-rec-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #ff3b30;
+  box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.9);
+  animation: ws-rec-pulse 1.2s infinite;
+}
+@keyframes ws-rec-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.8); }
+  70% { box-shadow: 0 0 0 10px rgba(255, 59, 48, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0); }
+}
+
+/* Name overlay — pinned to bottom edge of demo, above camera split. */
 .ws-name-overlay {
   position: absolute;
   z-index: 3;
@@ -201,21 +219,7 @@
   line-height: 1.3;
 }
 
-.ws-rec-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #ff3b30;
-  box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.9);
-  animation: ws-rec-pulse 1.2s infinite;
-}
-@keyframes ws-rec-pulse {
-  0% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.8); }
-  70% { box-shadow: 0 0 0 10px rgba(255, 59, 48, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0); }
-}
-
-/* --- Center card (idle / review / finish / error) --- */
+/* --- Center card (idle / finish / error) --- */
 .ws-center-card {
   position: relative;
   z-index: 2;
@@ -246,31 +250,6 @@
   line-height: 1.45;
 }
 
-.ws-verdict-title {
-  font-size: 20px;
-  font-weight: 600;
-  opacity: 0.9;
-}
-
-.ws-verdict-score {
-  font-size: 64px;
-  font-weight: 700;
-  line-height: 1;
-  color: var(--tg-theme-button-color, #2f9bff);
-}
-
-.ws-verdict-feedback {
-  font-size: 15px;
-  opacity: 0.85;
-  line-height: 1.4;
-  min-height: 1.4em;
-}
-
-.ws-verdict-error {
-  font-size: 14px;
-  color: var(--tg-theme-destructive-text-color, #ff453a);
-}
-
 .ws-result-row {
   display: flex;
   justify-content: space-between;
@@ -296,6 +275,7 @@
   font-weight: 600;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
   transition: transform 0.08s ease-out, opacity 0.2s;
 }
 .ws-btn:active { transform: scale(0.97); }
@@ -343,24 +323,21 @@
 .ws-error-text { font-size: 14px; opacity: 0.85; }
 
 @media (max-width: 360px) {
-  .ws-countdown { font-size: 36px; }
-  .ws-exercise-name { font-size: 22px; }
+  .ws-countdown { font-size: 42px; }
   .ws-name-overlay__name { font-size: 15px; }
 }
 
-/* --- Rest screen (BUG-3 + UX) — fully replaces the demo during rest+verdict phases.
-   Camera is released, demo not rendered, so background is solid black. */
+/* --- Rest screen — fills the stage area while camera is released. --- */
 .ws-rest-root {
-  position: absolute;
-  inset: 0;
-  z-index: 3;
+  flex: 1 1 auto;
+  min-height: 0;
   background: #000;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 28px;
-  padding: 80px 20px calc(40px + env(safe-area-inset-bottom));
+  padding: 40px 20px calc(40px + env(safe-area-inset-bottom));
   text-align: center;
 }
 

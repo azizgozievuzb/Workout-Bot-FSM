@@ -71,9 +71,20 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
   const stableBackHandlerRef = useRef<() => void>(() => closeWithConfirmRef.current?.());
 
   // --- refs for imperative hardware --------------------------------
-  const videoRef = useRef<HTMLVideoElement | null>(null);     // user camera (bottom 35%)
+  const videoElRef = useRef<HTMLVideoElement | null>(null);   // user camera (bottom 35%)
   const demoVideoRef = useRef<HTMLVideoElement | null>(null); // exercise demo (top 65%)
   const streamRef = useRef<MediaStream | null>(null);
+
+  // BUG-A: callback ref binds stream to <video> at mount time, regardless of
+  // whether stream was acquired before or after the element appeared. Fixes
+  // the regression where initCamera() ran before the conditional <video> mounted.
+  const camCallbackRef = useCallback((el: HTMLVideoElement | null) => {
+    videoElRef.current = el;
+    if (el && streamRef.current) {
+      try { el.srcObject = streamRef.current; } catch {}
+      el.play().catch(() => {});
+    }
+  }, []);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
@@ -106,8 +117,8 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
     recorderRef.current = null;
     streamRef.current?.getTracks().forEach(t => t.stop());
     streamRef.current = null;
-    if (videoRef.current) {
-      try { videoRef.current.srcObject = null; } catch {}
+    if (videoElRef.current) {
+      try { videoElRef.current.srcObject = null; } catch {}
     }
   }, []);
 
@@ -116,12 +127,21 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
     if (wl) { wl.release().catch(() => {}); wakeLockRef.current = null; }
   }, []);
 
-  // BUG-5: lock Telegram chrome so swipe-down / swipe-back / × cannot kill the
+  // BUG-5/C: lock Telegram chrome so swipe-down / swipe-back / × cannot kill the
   // workout silently. Each call is try/catch — older clients lack these methods.
   const lockTelegramChrome = useCallback(() => {
     const w = tgWeb(); if (!w) return;
-    try { w.expand?.(); } catch {}
-    try { w.requestFullscreen?.(); } catch {}
+    try { w.expand?.(); } catch (e) { console.warn('[workout] expand failed:', e); }
+    try {
+      if (typeof w.requestFullscreen === 'function') {
+        w.requestFullscreen();
+        console.info('[workout] requestFullscreen called');
+      } else {
+        console.warn('[workout] requestFullscreen unavailable (TG client < 8.0)');
+      }
+    } catch (e) {
+      console.warn('[workout] requestFullscreen failed:', e);
+    }
     try { w.disableVerticalSwipes?.(); } catch {}
     try { w.disableSwipeBack?.(); } catch {}
     try { w.SwipeBehavior?.disable?.(); } catch {}
@@ -148,9 +168,12 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
         audio: false,
       });
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play().catch(() => {});
+      // BUG-A: bind to <video> if it's already mounted (callback ref already fired
+      // before stream was acquired). Otherwise camCallbackRef will bind on mount.
+      const el = videoElRef.current;
+      if (el) {
+        try { el.srcObject = stream; } catch {}
+        el.play().catch(() => {});
       }
       return true;
     } catch (e) {
@@ -210,6 +233,27 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
       }
       demo.play().catch(() => {});
     }
+  }, []);
+
+  // BUG-D: block iOS edge-swipe from killing the workout. touch-action / overscroll
+  // alone aren't enough — we also intercept edge touches and prevent default.
+  useEffect(() => {
+    document.documentElement.classList.add('workout-active');
+    document.body.classList.add('workout-active');
+    const onTouchStart = (e: TouchEvent) => {
+      const x = e.touches[0]?.clientX ?? 0;
+      const w = window.innerWidth;
+      if (x < 24 || x > w - 24) {
+        try { e.preventDefault(); } catch {}
+        e.stopPropagation();
+      }
+    };
+    document.addEventListener('touchstart', onTouchStart, { passive: false, capture: true });
+    return () => {
+      document.removeEventListener('touchstart', onTouchStart, true);
+      document.documentElement.classList.remove('workout-active');
+      document.body.classList.remove('workout-active');
+    };
   }, []);
 
   useEffect(() => {
@@ -453,15 +497,33 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
     [config, ctx.currentExercise],
   );
 
-  const progressPct = config
-    ? Math.round(((ctx.currentExercise + (ctx.state === 'finishSession' ? 1 : 0)) / config.total_exercises) * 100)
-    : 0;
+  // BUG-E: per-segment fill ratios (exercise portion + rest portion) for the
+  // 16-segment progress rail. Each segment maps to one exercise; status is
+  // 'done' / 'future' / current ctx.state.
+  const segments = useMemo(() => {
+    if (!config) return [];
+    return Array.from({ length: config.total_exercises }).map((_, i) => {
+      const status: string =
+        i < ctx.currentExercise ? 'done'
+        : i > ctx.currentExercise ? 'future'
+        : ctx.state;
 
-  const progressTier =
-    progressPct >= 100 ? 'p4'
-    : progressPct >= 67 ? 'p3'
-    : progressPct >= 34 ? 'p2'
-    : 'p1';
+      const exerciseFill =
+        status === 'done' ? 1
+        : status === 'exercisingPhase' ? Math.max(0, 1 - phaseSecLeft / config.exercise_sec)
+        : status === 'preparePhase' ? 0
+        : status === 'restAndAnalyzingPhase' || status === 'aiVerdictReview' ? 1
+        : status === 'finishSession' ? 1
+        : 0;
+      const restFill =
+        status === 'done' ? 1
+        : status === 'restAndAnalyzingPhase' ? Math.max(0, 1 - phaseSecLeft / config.rest_sec)
+        : status === 'aiVerdictReview' ? 1
+        : status === 'finishSession' ? 1
+        : 0;
+      return { status, exerciseFill, restFill };
+    });
+  }, [config, ctx.currentExercise, ctx.state, phaseSecLeft]);
 
   // --- Render -------------------------------------------------------
   if (errState) {
@@ -497,29 +559,33 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
 
   return (
     <div className="ws-root">
-      {/* --- top bar --- */}
+      {/* --- top bar (BUG-F) --- */}
       <div className="ws-topbar">
         <button
           className="ws-finish-btn"
           onClick={handleCloseWithConfirm}
           aria-label="Завершить тренировку"
         >
-          Завершить тренировку
+          Завершить
         </button>
-        <div className="ws-progress">
-          <div
-            className={`ws-progress-bar ws-progress-bar--${progressTier}`}
-            style={{ width: `${progressPct}%` }}
-          />
-          <span className="ws-progress-text">
-            {Math.min(ctx.currentExercise + 1, config.total_exercises)} / {config.total_exercises}
-          </span>
+        <div className="ws-progress-label">
+          {Math.min(ctx.currentExercise + 1, config.total_exercises)} / {config.total_exercises}
         </div>
+      </div>
+
+      {/* --- segmented progress rail (BUG-E) --- */}
+      <div className="ws-progress-rail">
+        {segments.map((seg, i) => (
+          <div key={i} className={`ws-seg ws-seg--${seg.status}`}>
+            <div className="ws-seg__ex" style={{ transform: `scaleX(${seg.exerciseFill})` }} />
+            <div className="ws-seg__rest" style={{ transform: `scaleX(${seg.restFill})` }} />
+          </div>
+        ))}
       </div>
 
       {/* --- split layout (top 65% demo / bottom 35% camera) — only during prepare/exercise --- */}
       {showDemoAndCam && (
-        <div className="ws-split">
+        <div className="ws-stage">
           <div className="ws-demo-top">
             {currentExercise && (
               <video
@@ -556,10 +622,11 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
           </div>
 
           <video
-            ref={videoRef}
+            ref={camCallbackRef}
             className="ws-cam-bottom"
             playsInline
             muted
+            autoPlay
           />
         </div>
       )}
