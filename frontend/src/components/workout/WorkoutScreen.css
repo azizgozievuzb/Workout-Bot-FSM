@@ -1,10 +1,23 @@
 /* WorkoutScreen — full-screen, mobile-first, Telegram theme-aware */
 
-/* BUG-D: kill native gestures on html/body while workout is mounted */
-html.workout-active, body.workout-active {
+/* Always-on: dampen edge-pager / pull-to-refresh as much as possible */
+html, body {
+  overscroll-behavior: none;
+  touch-action: pan-y;
+}
+
+/* BUG-D: kill native gestures on html/body while workout is mounted.
+   position:fixed on iOS pins the viewport — gates pull-to-refresh and
+   horizontal edge-pager from the Telegram container. */
+html.workout-active, body.workout-active, body.workout-active #root {
   overflow: hidden;
   overscroll-behavior: none;
   touch-action: none;
+  position: fixed;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
 }
 
 .ws-root {
@@ -219,11 +232,21 @@ html.workout-active, body.workout-active {
   line-height: 1.3;
 }
 
+/* Idle / finish wrappers — center the card in remaining viewport (BUG-1). */
+.ws-idle-wrap,
+.ws-finish-wrap {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  min-height: 0;
+}
+
 /* --- Center card (idle / finish / error) --- */
 .ws-center-card {
-  position: relative;
+  position: static;
   z-index: 2;
-  margin: auto 20px calc(28px + env(safe-area-inset-bottom));
   background: rgba(0, 0, 0, 0.55);
   backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -233,9 +256,8 @@ html.workout-active, body.workout-active {
   flex-direction: column;
   gap: 14px;
   text-align: center;
-  max-width: 460px;
-  align-self: center;
-  width: calc(100% - 40px);
+  max-width: 360px;
+  width: 100%;
 }
 
 .ws-title {
@@ -432,4 +454,22 @@ html.workout-active, body.workout-active {
   grid-template-columns: 1fr 1fr;
   gap: 10px;
   margin-top: 8px;
+}
+
+/* Diagnostic overlay — top-center, tap to dismiss. */
+.ws-diag {
+  position: fixed;
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10001;
+  background: rgba(0, 0, 0, 0.8);
+  color: #0f0;
+  font-size: 10px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-family: monospace;
+  max-width: 95vw;
+  text-align: center;
+  pointer-events: auto;
 }

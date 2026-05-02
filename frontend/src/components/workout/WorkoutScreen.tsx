@@ -65,6 +65,8 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
   const [errState, setErrState] = useState<ErrState | null>(null);
   const [retryToken, setRetryToken] = useState(0);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [diagInfo, setDiagInfo] = useState<any>(null);
 
   // BUG-5: stable BackButton handler — Telegram requires identity match for offClick
   const closeWithConfirmRef = useRef<() => void>(() => {});
@@ -131,16 +133,29 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
   // workout silently. Each call is try/catch — older clients lack these methods.
   const lockTelegramChrome = useCallback(() => {
     const w = tgWeb(); if (!w) return;
+    const diag = {
+      version: w?.version,
+      platform: w?.platform,
+      hasRequestFullscreen: typeof w?.requestFullscreen === 'function',
+      hasDisableVerticalSwipes: typeof w?.disableVerticalSwipes === 'function',
+      hasSwipeBehavior: !!w?.SwipeBehavior,
+      isExpanded: w?.isExpanded,
+      isFullscreen: w?.isFullscreen,
+    };
+    console.log('[workout][TG-DIAG]', diag);
+    setDiagInfo(diag);
     try { w.expand?.(); } catch (e) { console.warn('[workout] expand failed:', e); }
     try {
       if (typeof w.requestFullscreen === 'function') {
         w.requestFullscreen();
         console.info('[workout] requestFullscreen called');
       } else {
-        console.warn('[workout] requestFullscreen unavailable (TG client < 8.0)');
+        console.warn('[workout] requestFullscreen unavailable — trying postEvent fallback');
+        try { w.postEvent?.('web_app_request_fullscreen', false, {}); } catch {}
       }
     } catch (e) {
       console.warn('[workout] requestFullscreen failed:', e);
+      try { w.postEvent?.('web_app_request_fullscreen', false, {}); } catch {}
     }
     try { w.disableVerticalSwipes?.(); } catch {}
     try { w.disableSwipeBack?.(); } catch {}
@@ -236,24 +251,59 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
   }, []);
 
   // BUG-D: block iOS edge-swipe from killing the workout. touch-action / overscroll
-  // alone aren't enough — we also intercept edge touches and prevent default.
+  // alone aren't enough — we also intercept edge touches (start + move) and prevent default.
   useEffect(() => {
     document.documentElement.classList.add('workout-active');
     document.body.classList.add('workout-active');
-    const onTouchStart = (e: TouchEvent) => {
-      const x = e.touches[0]?.clientX ?? 0;
+    const onTouch = (e: TouchEvent) => {
+      const t = e.touches[0]; if (!t) return;
+      const x = t.clientX;
       const w = window.innerWidth;
-      if (x < 24 || x > w - 24) {
+      if (x < 30 || x > w - 30) {
         try { e.preventDefault(); } catch {}
         e.stopPropagation();
       }
     };
-    document.addEventListener('touchstart', onTouchStart, { passive: false, capture: true });
+    window.addEventListener('touchstart', onTouch, { passive: false, capture: true });
+    window.addEventListener('touchmove', onTouch, { passive: false, capture: true });
     return () => {
-      document.removeEventListener('touchstart', onTouchStart, true);
+      window.removeEventListener('touchstart', onTouch, true);
+      window.removeEventListener('touchmove', onTouch, true);
       document.documentElement.classList.remove('workout-active');
       document.body.classList.remove('workout-active');
     };
+  }, []);
+
+  // Mount-time arsenal: try fullscreen / swipe locks ASAP — even before user taps Начать.
+  // No-op on older clients (try/catch on every call).
+  useEffect(() => {
+    const w = tgWeb(); if (!w) return;
+    try { w.expand?.(); } catch {}
+    try { w.disableVerticalSwipes?.(); } catch {}
+    try { w.enableClosingConfirmation?.(); } catch {}
+    try { w.SwipeBehavior?.disable?.(); } catch {}
+    try { w.disableSwipeBack?.(); } catch {}
+    try { w.requestFullscreen?.(); } catch {}
+    try { w.postEvent?.('web_app_request_fullscreen', false, {}); } catch {}
+  }, []);
+
+  // Subscribe to fullscreenChanged / fullscreenFailed for live diagnostics.
+  useEffect(() => {
+    const w = tgWeb();
+    if (!w?.onEvent) return;
+    const onChg = () => setDiagInfo((d: typeof diagInfo) => d ? { ...d, isFullscreen: w.isFullscreen } : d);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const onFail = (e: any) => {
+      console.warn('[workout] fullscreenFailed', e);
+      setDiagInfo((d: typeof diagInfo) => d ? { ...d, fullscreenFailed: e?.error || 'unknown' } : d);
+    };
+    try { w.onEvent('fullscreenChanged', onChg); } catch {}
+    try { w.onEvent('fullscreenFailed', onFail); } catch {}
+    return () => {
+      try { w.offEvent?.('fullscreenChanged', onChg); } catch {}
+      try { w.offEvent?.('fullscreenFailed', onFail); } catch {}
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -631,15 +681,28 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
         </div>
       )}
 
+      {/* Diagnostic overlay — visible during workout, tap to dismiss. */}
+      {diagInfo && (
+        <div className="ws-diag" onClick={() => setDiagInfo(null)}>
+          v:{String(diagInfo.version)} · {String(diagInfo.platform)} ·
+          {' '}FS:{String(diagInfo.hasRequestFullscreen)} ·
+          {' '}isFS:{String(diagInfo.isFullscreen)} ·
+          {' '}SB:{String(diagInfo.hasSwipeBehavior)}
+          {diagInfo.fullscreenFailed && ` · FAIL:${diagInfo.fullscreenFailed}`}
+        </div>
+      )}
+
       {/* --- state-specific body --- */}
       {ctx.state === 'idle' && (
-        <div className="ws-center-card">
-          <div className="ws-title">Готовы?</div>
-          <div className="ws-subtitle">
-            {config.total_exercises} упражнений · ~35 минут.<br />
-            Поставьте телефон горизонтально, камера должна видеть вас полностью.
+        <div className="ws-idle-wrap">
+          <div className="ws-center-card">
+            <div className="ws-title">Готовы?</div>
+            <div className="ws-subtitle">
+              {config.total_exercises} упражнений · ~{Math.round((config.total_exercises * (config.prepare_sec + config.exercise_sec + config.rest_sec + config.review_sec)) / 60)} минут.<br />
+              Поставьте телефон вертикально, камера должна видеть вас полностью.
+            </div>
+            <button className="ws-btn ws-btn--primary" onClick={handleStart}>Начать</button>
           </div>
-          <button className="ws-btn ws-btn--primary" onClick={handleStart}>Начать</button>
         </div>
       )}
 
@@ -673,17 +736,19 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
       )}
 
       {ctx.state === 'finishSession' && (
-        <div className="ws-center-card">
-          <div className="ws-title">Готово 🎉</div>
-          {result ? (
-            <>
-              <div className="ws-result-row"><span>XP</span><span className="ws-result-val">XP {result.avg_score}</span></div>
-              <div className="ws-result-row"><span>Звёзды</span><span className="ws-result-val">⭐ {result.stars_earned}</span></div>
-            </>
-          ) : (
-            <div className="ws-loading ws-loading--inline">Сохраняем результат…</div>
-          )}
-          <button className="ws-btn ws-btn--primary" onClick={onClose}>Закрыть</button>
+        <div className="ws-finish-wrap">
+          <div className="ws-center-card">
+            <div className="ws-title">Готово 🎉</div>
+            {result ? (
+              <>
+                <div className="ws-result-row"><span>XP</span><span className="ws-result-val">XP {result.avg_score}</span></div>
+                <div className="ws-result-row"><span>Звёзды</span><span className="ws-result-val">⭐ {result.stars_earned}</span></div>
+              </>
+            ) : (
+              <div className="ws-loading ws-loading--inline">Сохраняем результат…</div>
+            )}
+            <button className="ws-btn ws-btn--primary" onClick={onClose}>Закрыть</button>
+          </div>
         </div>
       )}
 
