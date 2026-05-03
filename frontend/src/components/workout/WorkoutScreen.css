@@ -50,6 +50,8 @@ html.workout-active, body.workout-active, body.workout-active #root {
 
 .ws-finish-btn {
   appearance: none;
+  position: relative;
+  z-index: 10;
   font-size: 13px;
   font-weight: 600;
   padding: 6px 12px;
@@ -124,7 +126,7 @@ html.workout-active, body.workout-active, body.workout-active #root {
 
 .ws-demo-top {
   position: relative;
-  flex: 0 0 65%;
+  flex: 0 0 40%;
   background: #000;
   overflow: hidden;
 }
@@ -138,7 +140,7 @@ html.workout-active, body.workout-active, body.workout-active #root {
 }
 
 .ws-cam-bottom {
-  flex: 0 0 35%;
+  flex: 0 0 60%;
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -150,23 +152,23 @@ html.workout-active, body.workout-active, body.workout-active #root {
 /* --- HUD (BUG-F): compact, top-right of demo, doesn't collide with name overlay --- */
 .ws-hud {
   position: absolute;
-  z-index: 3;
-  right: 10px;
-  top: 8px;
+  z-index: 5;
+  right: 12px;
+  top: 12px;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   text-align: right;
-  gap: 4px;
+  gap: 6px;
   pointer-events: none;
 }
 
 .ws-phase-badge {
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.10em;
   text-transform: uppercase;
-  padding: 3px 9px;
-  border-radius: 999px;
+  padding: 3px 10px;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.12);
   backdrop-filter: blur(8px);
   color: #fff;
@@ -176,12 +178,12 @@ html.workout-active, body.workout-active, body.workout-active #root {
 .ws-phase-restAndAnalyzingPhase { background: rgba(255, 170, 0, 0.40); }
 
 .ws-countdown {
-  font-size: 52px;
-  font-weight: 300;
+  font-size: 44px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
   line-height: 1;
   color: #fff;
-  text-shadow: 0 4px 16px rgba(0, 0, 0, 0.85);
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
 }
 
 .ws-rec-dot {
@@ -232,14 +234,25 @@ html.workout-active, body.workout-active, body.workout-active #root {
   line-height: 1.3;
 }
 
-/* Idle / finish wrappers — center the card in remaining viewport (BUG-1). */
-.ws-idle-wrap,
+/* Finish wrapper — center the card in remaining viewport (BUG-1). */
 .ws-finish-wrap {
   flex: 1 1 auto;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 20px;
+  min-height: 0;
+}
+
+/* Idle wrapper — push the card toward the top so it doesn't sit beneath the
+   tall Telegram chrome. ~12vh top padding lands the card in the upper third. */
+.ws-idle-wrap {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 12vh 20px 20px;
   min-height: 0;
 }
 

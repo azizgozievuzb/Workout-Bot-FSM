@@ -271,6 +271,12 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
     const onTouch = (e: TouchEvent) => {
       const t = e.touches[0] || e.changedTouches[0];
       if (!t) return;
+      // Whitelist: never intercept taps on topbar / progress / finish-btn —
+      // their hit-targets sit inside the 40px edge zone.
+      const target = e.target as Element | null;
+      if (target?.closest?.('.ws-topbar, .ws-progress-rail, .ws-finish-btn')) {
+        return;
+      }
       const x = t.clientX;
       const w = window.innerWidth;
       if (x < 40 || x > w - 40) {
