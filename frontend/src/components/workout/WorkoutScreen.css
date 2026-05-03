@@ -24,20 +24,24 @@ html.workout-active, body.workout-active, body.workout-active #root {
   position: fixed;
   inset: 0;
   z-index: 9999;
-  width: 100vw;
-  height: 100dvh;
-  min-height: 100vh;
+  width: 100%;
+  height: 100%;
   background: var(--tg-theme-bg-color, #000);
   color: var(--tg-theme-text-color, #fff);
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
   touch-action: none;
   overscroll-behavior: contain;
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
 }
+
+.ws-root *,
+.ws-root *::before,
+.ws-root *::after { box-sizing: border-box; }
 
 /* --- top bar (BUG-F): finish-btn + counter label, single row, non-absolute --- */
 .ws-topbar {
@@ -120,15 +124,19 @@ html.workout-active, body.workout-active, body.workout-active #root {
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
+  width: 100%;
   min-height: 0;
   overflow: hidden;
+  box-sizing: border-box;
 }
 
 .ws-demo-top {
   position: relative;
   flex: 0 0 40%;
+  width: 100%;
   background: #000;
   overflow: hidden;
+  box-sizing: border-box;
 }
 
 .ws-demo-top > video {
@@ -143,10 +151,11 @@ html.workout-active, body.workout-active, body.workout-active #root {
   flex: 0 0 60%;
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  transform: scaleX(-1); /* selfie mirror */
-  background: #111;
+  object-fit: contain;     /* show full FOV — black bars OK */
+  transform: scaleX(-1);   /* selfie mirror */
+  background: #000;
   display: block;
+  box-sizing: border-box;
 }
 
 /* --- HUD (BUG-F): compact, top-right of demo, doesn't collide with name overlay --- */
@@ -161,6 +170,8 @@ html.workout-active, body.workout-active, body.workout-active #root {
   text-align: right;
   gap: 6px;
   pointer-events: none;
+  width: auto;
+  max-width: 30%;
 }
 
 .ws-phase-badge {

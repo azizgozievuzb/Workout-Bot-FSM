@@ -180,7 +180,11 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
     if (streamRef.current) return true;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: {
+          facingMode: 'user',
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+        },
         audio: false,
       });
       streamRef.current = stream;
@@ -505,6 +509,21 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
     send({ type: 'NEXT_EXERCISE' });
   }, [send]);
 
+  // Early camera init during rest — kicks off ~5s before the next preparePhase
+  // so the stream is already live when the split layout mounts. Eliminates the
+  // visible "gap" between rest end and demo+camera appearing.
+  useEffect(() => {
+    if (ctx.state !== 'restAndAnalyzingPhase') return;
+    if (!config) return;
+    const earlyInitMs = Math.max(0, (config.rest_sec - 5) * 1000);
+    const t = window.setTimeout(() => {
+      if (!streamRef.current) {
+        initCamera().catch(() => {});
+      }
+    }, earlyInitMs);
+    return () => window.clearTimeout(t);
+  }, [ctx.state, config, initCamera]);
+
   // BUG-2 fix: auto-advance through aiVerdictReview — no popup, no tap.
   // Keep a brief beat (review_sec from config, default 1.5s) so haptic + state settle,
   // then transition straight into the next preparePhase / finishSession.
@@ -765,6 +784,15 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
             <div className="ws-rest-next">
               <div className="ws-rest-next__name">Дальше: финиш 🎉</div>
             </div>
+          )}
+          {nextExercise && (
+            <video
+              src={`/demos/${nextExercise.key}.mp4`}
+              preload="auto"
+              muted
+              playsInline
+              style={{ position: 'absolute', width: 1, height: 1, opacity: 0, pointerEvents: 'none' }}
+            />
           )}
         </div>
       )}
