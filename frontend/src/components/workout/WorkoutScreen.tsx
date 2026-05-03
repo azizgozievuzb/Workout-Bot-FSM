@@ -74,8 +74,8 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
   const stableBackHandlerRef = useRef<() => void>(() => closeWithConfirmRef.current?.());
 
   // --- refs for imperative hardware --------------------------------
-  const videoElRef = useRef<HTMLVideoElement | null>(null);   // user camera (bottom 35%)
-  const demoVideoRef = useRef<HTMLVideoElement | null>(null); // exercise demo (top 65%)
+  const videoElRef = useRef<HTMLVideoElement | null>(null);   // user camera (top 60%)
+  const demoVideoRef = useRef<HTMLVideoElement | null>(null); // exercise demo (bottom 40%)
   const streamRef = useRef<MediaStream | null>(null);
 
   // BUG-A: callback ref binds stream to <video> at mount time, regardless of
@@ -686,10 +686,30 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
         </>
       )}
 
-      {/* --- split layout (top 65% demo / bottom 35% camera) — only during prepare/exercise --- */}
+      {/* --- split layout (top 60% camera / bottom 40% demo) — only during prepare/exercise --- */}
       {showDemoAndCam && (
         <div className="ws-stage">
-          <div className="ws-demo-top">
+          <div className="ws-cam-top">
+            <video
+              ref={camCallbackRef}
+              playsInline
+              muted
+              autoPlay
+            />
+
+            {/* HUD: phase badge + countdown + REC dot — top-right of camera */}
+            {currentExercise && (
+              <div className="ws-hud">
+                <div className={`ws-phase-badge ws-phase-${ctx.state}`}>
+                  {ctx.state === 'preparePhase' ? 'Приготовьтесь' : 'Выполняйте'}
+                </div>
+                <div className="ws-countdown">{phaseSecLeft}</div>
+                {ctx.state === 'exercisingPhase' && <div className="ws-rec-dot" aria-label="Запись" />}
+              </div>
+            )}
+          </div>
+
+          <div className="ws-demo-bottom">
             {currentExercise && (
               <video
                 ref={demoVideoRef}
@@ -702,18 +722,7 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
               />
             )}
 
-            {/* HUD: phase badge + countdown + REC dot — top-right of demo */}
-            {currentExercise && (
-              <div className="ws-hud">
-                <div className={`ws-phase-badge ws-phase-${ctx.state}`}>
-                  {ctx.state === 'preparePhase' ? 'Приготовьтесь' : 'Выполняйте'}
-                </div>
-                <div className="ws-countdown">{phaseSecLeft}</div>
-                {ctx.state === 'exercisingPhase' && <div className="ws-rec-dot" aria-label="Запись" />}
-              </div>
-            )}
-
-            {/* Exercise name overlay — bottom edge of demo (above camera) */}
+            {/* Exercise name overlay — pinned to bottom of demo */}
             {currentExercise && (
               <div className="ws-name-overlay">
                 <div className="ws-name-overlay__name">{currentExercise.name}</div>
@@ -723,14 +732,6 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
               </div>
             )}
           </div>
-
-          <video
-            ref={camCallbackRef}
-            className="ws-cam-bottom"
-            playsInline
-            muted
-            autoPlay
-          />
         </div>
       )}
 
