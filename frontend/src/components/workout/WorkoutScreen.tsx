@@ -540,21 +540,6 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
     return () => window.clearTimeout(t);
   }, [ctx.state, config, initCamera]);
 
-  // Word-by-word announcement during rest — replaces static "next exercise" card.
-  useEffect(() => {
-    if (ctx.state !== 'restAndAnalyzingPhase' || !nextExercise || !config) return;
-    const words = buildAnnouncementWords(nextExercise);
-    if (words.length === 0) return;
-    setAnnounceIdx(0);
-    const totalMs = config.rest_sec * 1000;
-    const perWord = Math.max(1200, Math.min(3000, totalMs / words.length));
-    const interval = window.setInterval(() => {
-      setAnnounceIdx(prev => Math.min(prev + 1, words.length - 1));
-    }, perWord);
-    return () => window.clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ctx.state, nextExercise?.key, config?.rest_sec]);
-
   // BUG-2 fix: auto-advance through aiVerdictReview — no popup, no tap.
   // Keep a brief beat (review_sec from config, default 1.5s) so haptic + state settle,
   // then transition straight into the next preparePhase / finishSession.
@@ -626,6 +611,21 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
     () => (config ? config.exercises[ctx.currentExercise + 1] ?? null : null),
     [config, ctx.currentExercise],
   );
+
+  // Word-by-word announcement during rest — replaces static "next exercise" card.
+  useEffect(() => {
+    if (ctx.state !== 'restAndAnalyzingPhase' || !nextExercise || !config) return;
+    const words = buildAnnouncementWords(nextExercise);
+    if (words.length === 0) return;
+    setAnnounceIdx(0);
+    const totalMs = config.rest_sec * 1000;
+    const perWord = Math.max(1200, Math.min(3000, totalMs / words.length));
+    const interval = window.setInterval(() => {
+      setAnnounceIdx(prev => Math.min(prev + 1, words.length - 1));
+    }, perWord);
+    return () => window.clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ctx.state, nextExercise?.key, config?.rest_sec]);
 
   // BUG-E: per-segment fill ratios (exercise portion + rest portion) for the
   // 16-segment progress rail. Each segment maps to one exercise; status is
