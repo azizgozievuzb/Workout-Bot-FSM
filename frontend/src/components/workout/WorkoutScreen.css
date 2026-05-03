@@ -122,18 +122,19 @@ html.workout-active, body.workout-active, body.workout-active #root {
 /* --- stage: fills remaining viewport, splits 60/40 (camera top / demo bottom) --- */
 .ws-stage {
   flex: 1 1 auto;
-  display: flex;
-  flex-direction: column;
-  width: 100%;
   min-height: 0;
+  display: grid;
+  grid-template-rows: 60% 40%;
+  width: 100%;
   overflow: hidden;
   box-sizing: border-box;
 }
 
 .ws-cam-top {
   position: relative;
-  flex: 0 0 60%;
   width: 100%;
+  height: 100%;
+  min-height: 0;
   background: #000;
   overflow: hidden;
   box-sizing: border-box;
@@ -150,8 +151,9 @@ html.workout-active, body.workout-active, body.workout-active #root {
 
 .ws-demo-bottom {
   position: relative;
-  flex: 0 0 40%;
   width: 100%;
+  height: 100%;
+  min-height: 0;
   background: #000;
   overflow: hidden;
   box-sizing: border-box;
