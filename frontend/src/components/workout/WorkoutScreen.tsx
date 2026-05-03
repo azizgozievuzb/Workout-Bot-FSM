@@ -267,32 +267,6 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
     };
   }, []);
 
-  // DIAG (temporary): log viewport vs ws-root/ws-stage real heights at mount
-  // and again 500ms later (after layout settles + Telegram chrome adjusts).
-  useEffect(() => {
-    const dump = (tag: string) => {
-      const root = document.querySelector('.ws-root') as HTMLElement | null;
-      const stage = document.querySelector('.ws-stage') as HTMLElement | null;
-      const html = document.documentElement;
-      const body = document.body;
-      // eslint-disable-next-line no-console
-      console.log(`[ws-diag ${tag}]`, {
-        window_innerHeight: window.innerHeight,
-        visualViewport_height: window.visualViewport?.height,
-        html_clientHeight: html.clientHeight,
-        body_clientHeight: body.clientHeight,
-        root_clientHeight: root?.clientHeight,
-        root_offsetHeight: root?.offsetHeight,
-        root_rectH: root?.getBoundingClientRect().height,
-        stage_clientHeight: stage?.clientHeight,
-        stage_rectH: stage?.getBoundingClientRect().height,
-      });
-    };
-    dump('mount');
-    const t = window.setTimeout(() => dump('t+500'), 500);
-    return () => window.clearTimeout(t);
-  }, []);
-
   // BUG-D: 40px edge-swipe interceptor — only during active phases.
   // Skipped in idle/finishSession so taps near the edges (Начать/Закрыть, modal
   // buttons) work. Note: iOS Telegram horizontal pager-swipe cannot be fully
