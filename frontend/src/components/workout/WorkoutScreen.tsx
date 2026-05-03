@@ -57,6 +57,20 @@ async function acquireWakeLock(): Promise<WakeLockSentinel | null> {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const tgWeb = (): any => (typeof window !== 'undefined' ? (window as any).Telegram?.WebApp : null);
 
+type ExerciseType = WorkoutConfig['exercises'][number];
+
+// Sequence of words shown one-by-one on the rest screen. Order: name → position → muscles → hint.
+const buildAnnouncementWords = (next: ExerciseType): string[] => {
+  const words: string[] = ['Сейчас', 'будет', next.name];
+  if (next.position) words.push('Положение:', next.position);
+  if (next.muscles && next.muscles.length > 0) {
+    words.push('Работают:');
+    words.push(...next.muscles);
+  }
+  if (next.hint) words.push(next.hint);
+  return words;
+};
+
 const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
   const { ctx, send } = useWorkoutMachine();
   const [config, setConfig] = useState<WorkoutConfig | null>(null);
@@ -69,6 +83,7 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
   const [showSwipeWarning, setShowSwipeWarning] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [diagInfo, setDiagInfo] = useState<any>(null);
+  const [announceIdx, setAnnounceIdx] = useState(0);
 
   // BUG-5: stable BackButton handler — Telegram requires identity match for offClick
   const closeWithConfirmRef = useRef<() => void>(() => {});
@@ -525,6 +540,21 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
     return () => window.clearTimeout(t);
   }, [ctx.state, config, initCamera]);
 
+  // Word-by-word announcement during rest — replaces static "next exercise" card.
+  useEffect(() => {
+    if (ctx.state !== 'restAndAnalyzingPhase' || !nextExercise || !config) return;
+    const words = buildAnnouncementWords(nextExercise);
+    if (words.length === 0) return;
+    setAnnounceIdx(0);
+    const totalMs = config.rest_sec * 1000;
+    const perWord = Math.max(1200, Math.min(3000, totalMs / words.length));
+    const interval = window.setInterval(() => {
+      setAnnounceIdx(prev => Math.min(prev + 1, words.length - 1));
+    }, perWord);
+    return () => window.clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ctx.state, nextExercise?.key, config?.rest_sec]);
+
   // BUG-2 fix: auto-advance through aiVerdictReview — no popup, no tap.
   // Keep a brief beat (review_sec from config, default 1.5s) so haptic + state settle,
   // then transition straight into the next preparePhase / finishSession.
@@ -767,32 +797,29 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
         </div>
       )}
 
-      {/* Rest screen — black background, big countdown, next-exercise card.
+      {/* Rest screen — black background, small corner countdown, big word-by-word announcement.
           Replaces split layout for restAndAnalyzingPhase + aiVerdictReview.
           NOTE: mid-workout AI score/feedback intentionally hidden — shown only on finish. */}
       {restPhase && (
         <div className="ws-rest-root">
-          <div className="ws-rest-countdown">
+          <div className="ws-rest-countdown-corner">
             {ctx.state === 'restAndAnalyzingPhase' ? phaseSecLeft : '·'}
           </div>
-          {nextExercise ? (
-            <div className="ws-rest-next">
-              <div className="ws-rest-next__name">Дальше: {nextExercise.name}</div>
-              <div className="ws-rest-next__position">Положение: {nextExercise.position}</div>
-              {nextExercise.muscles.length > 0 && (
-                <div className="ws-rest-next__muscles">
-                  Работают: {nextExercise.muscles.join(', ')}
-                </div>
-              )}
-              {nextExercise.hint && (
-                <div className="ws-rest-next__hint">{nextExercise.hint}</div>
-              )}
-            </div>
-          ) : (
-            <div className="ws-rest-next">
-              <div className="ws-rest-next__name">Дальше: финиш 🎉</div>
-            </div>
+
+          {nextExercise && (() => {
+            const words = buildAnnouncementWords(nextExercise);
+            const currentWord = words[Math.min(announceIdx, words.length - 1)];
+            return (
+              <div className="ws-rest-word" key={announceIdx}>
+                {currentWord}
+              </div>
+            );
+          })()}
+
+          {!nextExercise && (
+            <div className="ws-rest-word">Финиш 🎉</div>
           )}
+
           {nextExercise && (
             <video
               src={`/demos/${nextExercise.key}.mp4`}

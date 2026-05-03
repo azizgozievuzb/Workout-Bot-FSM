@@ -412,64 +412,47 @@ body.workout-active #root {
 
 /* --- Rest screen — fills the stage area while camera is released. --- */
 .ws-rest-root {
+  position: relative;
   flex: 1 1 auto;
   min-height: 0;
-  background: #000;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 28px;
-  padding: 40px 20px calc(40px + env(safe-area-inset-bottom));
-  text-align: center;
+  background: #000;
+  padding: 20px;
+  box-sizing: border-box;
 }
 
-.ws-rest-countdown {
-  font-size: 120px;
-  font-weight: 200;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-  color: #fff;
-  text-shadow: 0 6px 30px rgba(0, 0, 0, 0.9);
-  letter-spacing: -0.04em;
-}
-
-.ws-rest-next {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  border-radius: 16px;
-  padding: 18px 20px;
-  max-width: 460px;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  text-align: left;
-}
-
-.ws-rest-next__name {
-  font-size: 20px;
+.ws-rest-countdown-corner {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  font-size: 28px;
   font-weight: 700;
+  color: rgba(255, 255, 255, 0.55);
+  font-variant-numeric: tabular-nums;
+}
+
+.ws-rest-word {
+  font-size: 56px;
+  font-weight: 800;
+  line-height: 1.1;
   color: #fff;
-  line-height: 1.25;
+  text-align: center;
+  letter-spacing: -0.02em;
+  animation: ws-word-fade 400ms ease-out;
+  padding: 0 8px;
+  word-break: break-word;
+  max-width: 92vw;
 }
 
-.ws-rest-next__position,
-.ws-rest-next__muscles {
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.78);
-  line-height: 1.4;
-}
-
-.ws-rest-next__hint {
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.62);
-  line-height: 1.4;
-  font-style: italic;
+@keyframes ws-word-fade {
+  from { opacity: 0; transform: translateY(20px) scale(0.95); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 @media (max-width: 360px) {
-  .ws-rest-countdown { font-size: 96px; }
+  .ws-rest-word { font-size: 44px; }
 }
 
 /* --- Confirm modal (BUG-5 fallback when WebApp.showConfirm is unavailable) --- */
