@@ -1,37 +1,66 @@
 /* WorkoutScreen — full-screen, mobile-first, Telegram theme-aware */
 
+/* DIAG (temporary — remove once layout confirmed): outline the viewport boxes
+   so we can see at a glance which container is clipping. */
+.ws-root        { outline: 3px solid red    !important; outline-offset: -3px; }
+.ws-stage       { outline: 3px solid lime   !important; outline-offset: -3px; }
+.ws-cam-top     { outline: 3px solid cyan   !important; outline-offset: -3px; }
+.ws-demo-bottom { outline: 3px solid yellow !important; outline-offset: -3px; }
+
 /* Always-on: dampen edge-pager / pull-to-refresh as much as possible */
 html, body {
   overscroll-behavior: none;
   touch-action: pan-y;
 }
 
-/* BUG-D: kill native gestures on html/body while workout is mounted.
-   position:fixed on iOS pins the viewport — gates pull-to-refresh and
-   horizontal edge-pager from the Telegram container. */
-html.workout-active, body.workout-active, body.workout-active #root {
-  overflow: hidden;
+/* BUG-D + BUG-LAYOUT: while workout is mounted, force html/body/#root into a
+   strict full-viewport box — kills native gestures AND removes any parent
+   max-height/padding that could clip the workout screen.
+   NOTE: WorkoutScreen is portaled to <body>, so #root isn't its parent — but
+   we still neutralize it to keep the rest of the UI (carousel chrome) from
+   pushing layout while a workout is in flight. */
+html.workout-active,
+body.workout-active,
+body.workout-active #root {
+  overflow: hidden !important;
   overscroll-behavior: none;
   touch-action: none;
   position: fixed;
-  width: 100%;
-  height: 100%;
+  width: 100vw !important;
+  height: 100vh !important;
+  height: 100lvh !important;        /* ignore mobile UI bars when supported */
+  min-height: 100vh !important;
+  min-height: 100lvh !important;
+  max-height: none !important;
   top: 0;
   left: 0;
+  margin: 0 !important;
+  padding: 0 !important;
 }
 
 .ws-root {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   z-index: 9999;
-  width: 100%;
-  height: 100%;
+  width: 100vw;
+  /* progressive enhancement: dvh respects dynamic UI bars, lvh pretends they're hidden */
+  height: 100vh;
+  height: 100dvh;
+  height: 100lvh;
+  min-height: 100vh;
+  min-height: 100lvh;
+  max-height: none;
   background: var(--tg-theme-bg-color, #000);
   color: var(--tg-theme-text-color, #fff);
   overflow: hidden;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
+  margin: 0;
+  padding: 0;
   touch-action: none;
   overscroll-behavior: contain;
   user-select: none;
@@ -119,12 +148,15 @@ html.workout-active, body.workout-active, body.workout-active #root {
 .ws-seg--aiVerdictReview { --seg-rest-color: #3498db; }
 .ws-seg--future { opacity: 0.5; }
 
-/* --- stage: fills remaining viewport, splits 60/40 (camera top / demo bottom) --- */
+/* --- stage: fills remaining viewport, splits 60/40 (camera top / demo bottom).
+   `flex: 1 1 0%` — basis 0 forces the stage to grow strictly via flex-grow
+   regardless of intrinsic content height. `fr` units split the resulting box
+   reliably even when min-content of children is non-zero. */
 .ws-stage {
-  flex: 1 1 auto;
+  flex: 1 1 0%;
   min-height: 0;
   display: grid;
-  grid-template-rows: 60% 40%;
+  grid-template-rows: 6fr 4fr;
   width: 100%;
   overflow: hidden;
   box-sizing: border-box;

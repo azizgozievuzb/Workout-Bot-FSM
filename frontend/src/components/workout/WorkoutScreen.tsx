@@ -16,6 +16,7 @@
  * Released on entry to restAndAnalyzingPhase, re-acquired on next preparePhase.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useWorkoutMachine } from '../../fsm/workoutSessionMachine';
 import {
   cancelWorkoutSession,
@@ -264,6 +265,32 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
       document.documentElement.classList.remove('workout-active');
       document.body.classList.remove('workout-active');
     };
+  }, []);
+
+  // DIAG (temporary): log viewport vs ws-root/ws-stage real heights at mount
+  // and again 500ms later (after layout settles + Telegram chrome adjusts).
+  useEffect(() => {
+    const dump = (tag: string) => {
+      const root = document.querySelector('.ws-root') as HTMLElement | null;
+      const stage = document.querySelector('.ws-stage') as HTMLElement | null;
+      const html = document.documentElement;
+      const body = document.body;
+      // eslint-disable-next-line no-console
+      console.log(`[ws-diag ${tag}]`, {
+        window_innerHeight: window.innerHeight,
+        visualViewport_height: window.visualViewport?.height,
+        html_clientHeight: html.clientHeight,
+        body_clientHeight: body.clientHeight,
+        root_clientHeight: root?.clientHeight,
+        root_offsetHeight: root?.offsetHeight,
+        root_rectH: root?.getBoundingClientRect().height,
+        stage_clientHeight: stage?.clientHeight,
+        stage_rectH: stage?.getBoundingClientRect().height,
+      });
+    };
+    dump('mount');
+    const t = window.setTimeout(() => dump('t+500'), 500);
+    return () => window.clearTimeout(t);
   }, []);
 
   // BUG-D: 40px edge-swipe interceptor — only during active phases.
@@ -625,8 +652,12 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
   }, [config, ctx.currentExercise, ctx.state, phaseSecLeft]);
 
   // --- Render -------------------------------------------------------
+  // BUG-LAYOUT: portal to <body> — escapes the framer-motion `transform` and
+  // `.overlay-fullscreen` `backdrop-filter` containing-block traps that were
+  // pinning .ws-root (position:fixed) to the parent box instead of the viewport,
+  // leaving ~40% of the screen empty at the bottom.
   if (errState) {
-    return (
+    return createPortal(
       <div className="ws-root">
         <div className="ws-error-card">
           <div className="ws-error-title">Ошибка</div>
@@ -636,15 +667,17 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
           )}
           <button className="ws-btn ws-btn--secondary" onClick={handleClose}>Завершить</button>
         </div>
-      </div>
+      </div>,
+      document.body,
     );
   }
 
   if (!config || !sessionId) {
-    return (
+    return createPortal(
       <div className="ws-root">
         <div className="ws-loading">Подготовка сессии…</div>
-      </div>
+      </div>,
+      document.body,
     );
   }
 
@@ -656,7 +689,7 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
   const restPhase =
     ctx.state === 'restAndAnalyzingPhase' || ctx.state === 'aiVerdictReview';
 
-  return (
+  return createPortal(
     <div className="ws-root">
       {/* --- top bar + progress rail: hidden in idle (no workout in flight there;
             Telegram's native «Закрыть» is enough). --- */}
@@ -861,7 +894,8 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
           </div>
         </div>
       )}
-    </div>
+    </div>,
+    document.body,
   );
 };
 
