@@ -1,25 +1,42 @@
-# SESSION STATUS — Session 39 (2026-06-05) — 7.3 заблокирован: Railway trial expired + unpaid invoice
+# SESSION STATUS — Session 40 (2026-06-05) — 7.3 готов к smoke (push сделан, инфра восстановлена)
 
-## 🚨 ИНФРА-БЛОКЕР (Session 38 → Session 39)
-**Railway:** Trial Ended + Unpaid Invoice («card has insufficient funds»). Все 3 проекта `0/X services online`, включая наш `affectionate-unity / production` (Workout Bot backend). До восстановления — smoke невозможен, любой push GitHub примет, но Railway проигнорит.
-
-**Что должен сделать юзер (вне Claude Code):**
-1. В Railway → Pay Invoice (если Visa 4120 declined → привязать рабочую карту в Settings → Billing → повторить).
-2. Subscribe → Hobby ($5/mo). Бот в idle ест копейки → ожидаемо $5–8/мес.
-3. `affectionate-unity → production` → дождаться поднятия service или Redeploy.
-4. Проверить env `GEMINI_API_KEY=...XNHY` (могло слететь после простоя).
-5. Проверить Vercel frontend (`vercel.com/dashboard`) — должен быть Ready, free tier не истекает.
+## ✅ Сделано в Session 38–39 (sandbox + Claude Code)
+- **Push на GitHub прошёл** (через CC, Session 39):
+  - `f6ca824` — `feat(7.3): Stars→Drops rename + new drops formula` (код + миграция 026 + BACKLOG.md)
+  - `5022eec` — `docs: Session 39 open question + Codex audit backlog`
+  - Локальный `main` = remote `main` (синхронизирован).
+- **Railway:** Hobby план оплачен (тег `HOBBY` есть), unpaid invoice погашен. Trial Ended баннер пропал.
+- **Vercel:** Hobby активен, проект `workout-bot-fsm` подключён к GitHub (auto-deploy от `main`).
+- **БД:** миграция 026 применена ещё в Session 37 через Supabase MCP (`workout_sessions.drops_earned` живёт).
 
 ## 🟡 ОТКРЫТЫЙ ВОПРОС (спросить юзера в начале сессии)
-1. **Railway оживили?** (Hobby оплачен, `affectionate-unity` поднят, env проверены)
-2. **Vercel жив?**
-3. **Запушил `git push` с мака?** (commit `f6ca824` готов в локальном `main`, sandbox-push упал без credentials)
+1. **Railway `affectionate-unity / production` — service зелёный?** (на момент конца Session 39 был `0/1 service online`. Hobby активен → auto-deploy должен был поднять; если нет — Redeploy вручную из последнего commit `5022eec`.)
+2. **`GEMINI_API_KEY=...XNHY` в Railway env на месте?** (мог слететь после простоя на trial).
+3. **Vercel deployment свежий?** (последний deploy должен быть `feat(7.3)` или `docs: Session 39`, не `May 3 TDZ fix` — это до Drops.)
 4. **Smoke прогнан** на TG `8777447186` (Cell, 3+ настоящих упражнения)?
 
-## ▶️ План Session 39 (как только все ответы = да)
-1. SQL-чек последней сессии: `started_at` ≥ деплою; `drops_earned` сходится с прикидкой ниже.
-2. Финальная карточка показывает «XP {avg}» + **«Капли 💧 {drops}»** (НЕ «Звёзды ⭐»).
-3. Если ОК → 7.3 → **CLOSED**, открыть **7.4 (Telegram Stars payments через test_dc)**.
+## ▶️ План Session 40 (как только Railway + Vercel зелёные)
+1. Юзер делает smoke на TG `8777447186` — 3+ настоящих упражнения (приседания/отжимания/планка).
+2. Юзер присылает скрин финальной карточки — должен быть «XP {avg}» + **«Капли 💧 {drops}»** (НЕ «Звёзды ⭐»). drops > 0.
+3. Я делаю SQL-чек через Supabase MCP:
+   ```sql
+   SELECT id, status, total_score, drops_earned, started_at
+   FROM workout_sessions
+   WHERE player_id = (SELECT id FROM users WHERE telegram_id = 8777447186)
+   ORDER BY started_at DESC LIMIT 1;
+   ```
+   `started_at` ≥ дате push'а (~05 июня 2026); `drops_earned` сходится с прикидкой (3@100 ≈ 17).
+4. Если ОК → 7.3 → **CLOSED**, открыть **7.4 (Telegram Stars payments через test_dc)** — см. ROADMAP.
+
+## ⚙️ Режим работы (важно)
+Юзер работает через **Claude Code CLI** (`claude --dangerously-skip-permissions`). Я (Cowork) → составляю промпты с Meta-блоком, юзер → копипастит в CC. Формат Meta (CLAUDE.md → AGENT PROMPT-DELIVERY RULE):
+```
+**Meta:**
+- 🧠 Model: `/model <alias>`  (opus = 4.7, sonnet = 4.6, haiku = 4.5)
+- ⚙️ Reasoning effort: low | medium | high | xhigh | max
+- 💭 Ultrathink: да / нет
+- 👁 Transcript: Normal / Thinking / Verbose / Summary
+```
 
 ## 🔒 Codex-аудит Session 38 (репо приватный → не блокер, но в TODO)
 - ⚠️ **Утечка Gemini key** в `research/compare_quality.py:6` и в git history (`PROMPT_AI_PHOTO.md`, старые `SESSION_STATUS.md`). Репо приватный → не критично, но при первом расшаривании ротировать + `git filter-repo`.
