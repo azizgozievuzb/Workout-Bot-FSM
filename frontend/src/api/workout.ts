@@ -16,7 +16,7 @@ export interface WorkoutConfig {
   exercise_sec: number;
   rest_sec: number;
   review_sec: number;
-  max_stars_per_session: number;
+  max_drops_per_session: number;
   exercises: ExerciseMeta[];
 }
 
@@ -35,7 +35,7 @@ export interface FinishSessionResponse {
   session_id: string;
   total_score: number;
   avg_score: number;
-  stars_earned: number;
+  drops_earned: number;
 }
 
 export async function getWorkoutConfig(): Promise<WorkoutConfig> {

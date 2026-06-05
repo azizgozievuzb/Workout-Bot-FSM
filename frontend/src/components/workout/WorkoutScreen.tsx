@@ -839,7 +839,7 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
             {result ? (
               <>
                 <div className="ws-result-row"><span>XP</span><span className="ws-result-val">XP {result.avg_score}</span></div>
-                <div className="ws-result-row"><span>Звёзды</span><span className="ws-result-val">⭐ {result.stars_earned}</span></div>
+                <div className="ws-result-row"><span>Капли</span><span className="ws-result-val">💧 {result.drops_earned}</span></div>
               </>
             ) : (
               <div className="ws-loading ws-loading--inline">Сохраняем результат…</div>

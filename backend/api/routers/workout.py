@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from ...core.deps import get_current_user
 from ...core.workout_config import (
     EXERCISE_SEC,
-    MAX_STARS_PER_SESSION,
+    MAX_DROPS_PER_SESSION,
     PREPARE_SEC,
     REST_SEC,
     REVIEW_SEC,
@@ -47,7 +47,7 @@ class WorkoutConfigResponse(BaseModel):
     exercise_sec: int
     rest_sec: int
     review_sec: int
-    max_stars_per_session: int
+    max_drops_per_session: int
     exercises: list[ExerciseMeta]
 
 
@@ -66,7 +66,7 @@ class FinishSessionResponse(BaseModel):
     session_id: str
     total_score: int
     avg_score: int
-    stars_earned: int
+    drops_earned: int
 
 
 # ---------------------------------------------------------------------------
@@ -115,7 +115,7 @@ async def get_config(user: dict = Depends(get_current_user)):
         exercise_sec=EXERCISE_SEC,
         rest_sec=REST_SEC,
         review_sec=REVIEW_SEC,
-        max_stars_per_session=MAX_STARS_PER_SESSION,
+        max_drops_per_session=MAX_DROPS_PER_SESSION,
         exercises=[ExerciseMeta(**e) for e in as_public_list()],
     )
 
@@ -250,9 +250,27 @@ async def finish_session(session_id: str = Form(...), user: dict = Depends(get_c
     )
     scores = [int(r.get("ai_score") or 0) for r in (ex_res.data or [])]
     total = sum(scores)
-    avg = round(total / TOTAL_EXERCISES)
-    # Star formula: avg% * scale
-    stars = round(avg * MAX_STARS_PER_SESSION / 100)
+
+    # Read player_stats up-front: streak BEFORE this workout drives streak_mult.
+    stats_res = await (
+        db.table("player_stats")
+        .select("xp_balance, current_streak, best_streak, last_workout_date")
+        .eq("player_id", player_id)
+        .maybe_single()
+        .execute()
+    )
+    cur = stats_res.data if stats_res and stats_res.data else {}
+    current_streak = int(cur.get("current_streak") or 0)
+
+    # Drops (Капли 💧) formula — main workout, see core/workout_config.py docstring.
+    done_scores = [s for s in scores if s > 0]
+    done_count  = len(done_scores)
+    quality     = (sum(done_scores) / done_count / 100.0) if done_count > 0 else 0.0
+    completion  = (done_count / TOTAL_EXERCISES) ** 0.65 if done_count > 0 else 0.0
+    streak_mult = 1 + min(current_streak, 20) * 0.015   # cap +30%
+    raw         = MAX_DROPS_PER_SESSION * quality * completion * streak_mult
+    drops       = round(min(raw, MAX_DROPS_PER_SESSION))
+    avg         = round(quality * 100)  # XP shown in final card = quality% of done exercises
 
     now_iso = datetime.now(timezone.utc).isoformat()
     await (
@@ -262,7 +280,7 @@ async def finish_session(session_id: str = Form(...), user: dict = Depends(get_c
                 "status": "finished",
                 "finished_at": now_iso,
                 "total_score": total,
-                "stars_earned": stars,
+                "drops_earned": drops,
             }
         )
         .eq("id", session_id)
@@ -270,18 +288,10 @@ async def finish_session(session_id: str = Form(...), user: dict = Depends(get_c
     )
 
     # Credit xp_balance + last_workout_date + streak on player_stats
-    stats_res = await (
-        db.table("player_stats")
-        .select("xp_balance, current_streak, best_streak, last_workout_date")
-        .eq("player_id", player_id)
-        .maybe_single()
-        .execute()
-    )
-    cur = stats_res.data if stats_res and stats_res.data else {}
-    new_balance = int(cur.get("xp_balance") or 0) + stars
+    new_balance = int(cur.get("xp_balance") or 0) + drops
     today = datetime.now(timezone.utc).date().isoformat()
     last = cur.get("last_workout_date")
-    streak = int(cur.get("current_streak") or 0)
+    streak = current_streak
     if last == today:
         pass  # already counted today
     elif last and (datetime.fromisoformat(today).toordinal() - datetime.fromisoformat(last).toordinal()) == 1:
@@ -303,7 +313,7 @@ async def finish_session(session_id: str = Form(...), user: dict = Depends(get_c
         session_id=session_id,
         total_score=total,
         avg_score=avg,
-        stars_earned=stars,
+        drops_earned=drops,
     )
 
 

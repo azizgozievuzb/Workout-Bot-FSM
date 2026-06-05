@@ -39,6 +39,7 @@
 |------------|---------|
 | `SESSION_STATUS.md` | Current task & last stop point. Update this before ending session. |
 | `PLAN.md` / `ROADMAP.md` | High-level checklist and detailed API/DB schema. |
+| `BACKLOG.md` | Парк идей/фич «на потом». Читается ПОСЛЕ плана. См. Workflow Protocol. |
 | `fsm_blueprints/` | Core logic (8 XState machines). *Do not read all at once!* |
 
 **FSM Index (Reference only, read specific file on demand):**
@@ -49,10 +50,15 @@
 ## 🤖 Workflow Protocol
 1. Read `SESSION_STATUS.md`.
 2. **ЕСЛИ в SESSION_STATUS.md есть блок "ОТКРЫТЫЙ ВОПРОС" — ОБЯЗАТЕЛЬНО спроси пользователя про него в начале сессии.**
-3. Execute the task concisely.
-4. If writing code, verify against FSM logic.
-5. Update `SESSION_STATUS.md` upon task completion.
-6. Stop generating text immediately after the technical objective is met.
+3. Если задача требует — прочитай `PLAN.md` / `ROADMAP.md`.
+4. **После плана — прочитай `BACKLOG.md`.** Для каждой фичи в бэклоге проверь:
+   - Если в текущем плане есть подходящее место (зона проработана) → встрой фичу в план, удали из BACKLOG.
+   - Если места нет (зона не готова) → оставь в BACKLOG, не трогай.
+5. Execute the task concisely.
+6. If writing code, verify against FSM logic.
+7. Update `SESSION_STATUS.md` upon task completion.
+8. Если по ходу сессии родилась новая идея «на потом» — добавь в `BACKLOG.md` (3-5 строк: контекст + что делать + когда).
+9. Stop generating text immediately after the technical objective is met.
 
 ---
 

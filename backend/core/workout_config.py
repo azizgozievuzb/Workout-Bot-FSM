@@ -10,9 +10,14 @@ Cycle design (~27 min total):
     If verdict frequently arrives late (errorMessage shown in aiVerdictReview),
     bump REST_SEC back up to 45–60.
 
-Stars award formula:
-  stars = round(total_score / 16 * MAX_STARS_PER_SESSION / 100)
-  i.e. avg_score_percent * scale
+Drops (Капли 💧) award formula — main workout (Phase 7.3):
+  done_scores = [s for s in scores if s > 0]
+  done        = len(done_scores)
+  quality     = (sum(done_scores) / done / 100) if done > 0 else 0
+  completion  = (done / 16) ** 0.65 if done > 0 else 0
+  streak_mult = 1 + min(current_streak, 20) * 0.015   # cap +30%
+  raw         = MAX_DROPS_PER_SESSION * quality * completion * streak_mult
+  drops       = round(min(raw, MAX_DROPS_PER_SESSION))
 """
 from dataclasses import dataclass, field, asdict
 
@@ -21,7 +26,7 @@ EXERCISE_SEC = 60   # active period: 60s (was 40)
 REST_SEC = 30       # rest + AI analyze: 30s (was 90) — see warning above
 REVIEW_SEC = 5
 TOTAL_EXERCISES = 16
-MAX_STARS_PER_SESSION = 50  # TODO: tier-based
+MAX_DROPS_PER_SESSION = 50  # main-tier cap (Капли 💧). Light-режим = 30, Phase 8.
 
 
 @dataclass(frozen=True)

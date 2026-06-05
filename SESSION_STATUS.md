@@ -1,3 +1,203 @@
+# SESSION STATUS — Session 37 (2026-05-07) — 7.3 = Drops rename + новая формула ✅
+
+## ✅ Сделано в Session 37
+- **Миграция 026** (`backend/db/migrations/026_rename_stars_to_drops.sql`) создана и **применена через Supabase MCP** (project `dlpdwmmfpzfxcelxqvlq`). Колонка `workout_sessions.stars_earned → drops_earned`.
+  - Verified: `SELECT column_name FROM information_schema.columns WHERE table_name='workout_sessions' AND column_name IN ('stars_earned','drops_earned')` → `[{"column_name":"drops_earned"}]`.
+  - Старые данные сохранены: последняя сессия от Session 36 (`2026-05-04`, total_score=315, drops_earned=10) — корректно перенесена.
+- **`backend/core/workout_config.py`** — `MAX_STARS_PER_SESSION → MAX_DROPS_PER_SESSION`, докстринг с новой формулой.
+- **`backend/api/routers/workout.py`** — импорт + `WorkoutConfigResponse.max_drops_per_session` + `FinishSessionResponse.drops_earned`. В `finish_session` теперь читаем `current_streak` ДО расчёта (нужен для `streak_mult`), новая формула:
+  ```
+  done_scores = [s for s in scores if s > 0]
+  quality     = sum(done_scores)/len/100
+  completion  = (done/16)**0.65
+  streak_mult = 1 + min(streak,20)*0.015     # cap +30%
+  drops       = round(min(50*quality*completion*streak_mult, 50))
+  avg_score   = round(quality*100)
+  ```
+  `xp_balance += drops` (in-game currency = drops).
+- **`frontend/src/api/workout.ts`** — `max_drops_per_session`, `drops_earned`.
+- **`frontend/src/components/workout/WorkoutScreen.tsx`** — финальная карточка: `Звёзды ⭐ {stars_earned}` → `Капли 💧 {drops_earned}`.
+
+## ⚠️ Не трогали (outside scope 7.3)
+- `AdminCube.tsx:219` — pre-existing typo `g.stats.total_stars_earned` (бэкенд отдаёт `total_xp_earned`, поле рендерится `undefined`). Не относится ни к Drops, ни к фазе 7.3 — оставить как tech-debt.
+- Light-режим, дисклеймер-тесты, экономика → фаза 8.
+- `017_workout_sessions.sql` исторический — не правим, миграция 026 переименовала поверх.
+
+## ▶️ Что делать в Session 38
+1. Убедиться что push прошёл и Railway/Vercel задеплоились (~2 мин).
+2. Юзер прогоняет smoke на TG `8777447186` (Cell). Делает 3+ упражнения по-настоящему (приседания/отжимания/планка).
+3. Проверка финальной карточки: «XP {avg}» + **«Капли 💧 {drops}»** (НЕ «Звёзды ⭐»). drops > 0.
+4. SQL-чек:
+   ```sql
+   SELECT id, status, total_score, drops_earned, started_at
+   FROM workout_sessions
+   WHERE player_id = (SELECT id FROM users WHERE telegram_id = 8777447186)
+   ORDER BY started_at DESC LIMIT 1;
+   ```
+   `started_at` ≥ дате деплоя (не `2026-05-04` от Session 36).
+5. Если ОК → 7.3 → **CLOSED**, переход в **7.4 (Telegram Stars payments через test_dc)**.
+
+## ⚠️ Известные tech-debt (вне 7.3)
+- `frontend/src/components/cubes/AdminCube.tsx:219` — `g.stats.total_stars_earned` рендерится `undefined` (бэкенд отдаёт `total_xp_earned`). Pre-existing typo, не блокер. Отдельной строкой в BACKLOG не добавляли — фиксится в один грэп.
+- `017_workout_sessions.sql` всё ещё содержит исходное `stars_earned` (история). Миграция 026 переименовала поверх — оставить как есть, новые миграции пишутся как diff.
+
+## 📌 Ожидаемые цифры (sanity-check на старте Session 38)
+- 3 упражнения по 100, streak=0:
+  - quality=1.0; completion=(3/16)^0.65 ≈ 0.3369; streak_mult=1.0
+  - raw = 50 × 1.0 × 0.3369 × 1.0 ≈ 16.84 → drops = **17**
+- 16 упражнений по 100, streak=0: drops = **50** (cap).
+- 16 по 100, streak=20: raw=65 → cap → **50**.
+- 0 упражнений: drops = **0**.
+
+## 🔑 Ключи / окружение
+- Supabase: `dlpdwmmfpzfxcelxqvlq` (миграция 026 применена).
+- Gemini: `...XNHY` (project `workout-bot`).
+- Test Player: TG `8777447186` (Cell, standard, спарен с Oil `8580720783`).
+
+---
+
+# SESSION STATUS — Session 36 (2026-05-04) — 7.3 в процессе закрытия + design фазы 8
+
+## ✅ Что разблокировалось в Session 36
+- Gemini API заработал (новый ключ `...XNHY`, проект `workout-bot`, prepay пополнен).
+- Юзер прогнал смоук-сессию: 3 упражнения по ~100 → формула выдала **XP 20, Stars 10**.
+- Подтверждено: `ai_score` записывается, формула работает.
+
+## 📐 Что было сделано в Session 36 (без кода)
+- **Полное design-интервью** по новой формуле капель + механика типов тренировок (main/light) + экономика покупок + privacy/safety policy.
+- Все решения оформлены в **`BACKLOG.md` → секция «🟦 Фаза 8 — Workout Types & Drops Economy (DESIGN DOC)»**.
+- Согласованы все принципы: pair-only, без расторжения, hidden streak-multiplier, GDPR-policy на видео, etc.
+
+## 🟡 ОТКРЫТЫЙ ВОПРОС / задача для Session 37
+
+**Закрыть 7.3:** переименовать `Stars → Drops (Капли 💧)` + применить новую формулу.
+
+### ⚠️ Перед началом Session 37
+**ОБЯЗАТЕЛЬНО прочитай `BACKLOG.md` секцию «Фаза 8»** — там весь контекст design-doc'а из Session 36.
+
+### Новая формула (финал, для имплементации):
+```python
+# В backend/api/routers/workout.py, замена логики на 251-255:
+done_scores = [s for s in scores if s > 0]
+done_count  = len(done_scores)
+quality     = (sum(done_scores) / done_count / 100.0) if done_count > 0 else 0.0
+completion  = (done_count / 16) ** 0.65 if done_count > 0 else 0.0
+streak_mult = 1 + min(current_streak, 20) * 0.015   # cap +30%
+raw         = 50 * quality * completion * streak_mult
+drops       = round(min(raw, 50))
+```
+
+### Файлы для правки в Session 37:
+| Файл | Что делать |
+|---|---|
+| `backend/db/migrations/026_rename_stars_to_drops.sql` | Создать. ALTER TABLE: `stars_earned → drops_earned`, `stars_awarded → drops_awarded` |
+| `backend/api/routers/workout.py:251-255` | Новая формула + переименование переменных |
+| `backend/models/workout.py` (или где `FinishSessionResponse`) | Поля `stars_earned → drops_earned` |
+| `frontend/src/components/workout/WorkoutScreen.tsx` | UI: «Звёзды» → «Капли 💧» |
+| `frontend/src/api/workout.ts` (типы) | `stars_earned → drops_earned` |
+
+### План на Session 37 (порядок):
+1. Прочитать `BACKLOG.md` секцию «Фаза 8» — там весь контекст.
+2. Применить миграцию `026_rename_stars_to_drops.sql` через Supabase MCP.
+3. Обновить backend (formula + переименование переменных).
+4. Обновить frontend (UI + типы).
+5. Деплой → юзер прогоняет смоук → проверка drops > 0 в финальной карточке.
+6. Если ОК → 7.3 → **CLOSED**, переход к **7.4 (Telegram Stars payments через test_dc)**.
+
+### Принципиальное (для Session 37 учесть):
+- Это **закрывает только 7.3** — base-case: 16 main-упражнений, без light-режима.
+- Light-режим, экономика, дисклеймер-тесты, decay, snooze, two-mode shop — это всё **фаза 8**, отдельно.
+- В Session 37 трогаем **только формулу + переименование**.
+
+### 🔑 Ключи / окружение
+- Gemini ключ: `...XNHY` (проект `workout-bot`) — работает после пополнения prepay.
+- Supabase project: `dlpdwmmfpzfxcelxqvlq`
+- Тестовый аккаунт Player: TG `8777447186` (Cell, standard, спарен с Oil `8580720783`).
+
+---
+
+# SESSION STATUS — Session 35 (2026-05-03) — Задача 7.3 🚧 BLOCKED (Gemini API)
+
+## 🚧 Задача 7.3: E2E Smoke Test — БЛОКЕР: Gemini billing
+
+### ⚠️ ОТКРЫТЫЙ ВОПРОС (спроси юзера в начале новой сессии)
+**Заработал ли Gemini API после смены ключа и оплаты overdue?**
+- Юзер должен был: оплатить $8.39 overdue в Google AI Studio Billing, обновить `GEMINI_API_KEY` в Railway env на новый ключ `...XNHY` (проект `workout-bot`, gen-lang-client-0531472359).
+- Проверка: запросить у юзера скрин `aistudio.google.com/api-keys` — статус ключа должен быть `Available · Prepay/Postpay`, НЕ `Unavailable`.
+- Если `Available` → можно делать финальный smoke и закрыть 7.3.
+- Если ещё `Unavailable` → ждать или искать workaround (новый Google аккаунт + новый key).
+
+### ✅ Сделано в Session 35
+**WorkoutScreen — много багфиксов и фич (~15 коммитов):**
+- BUG-3 (камера/демо во время rest) — FIXED. На rest stop tracks камеры, демо unmount.
+- BUG-4 (sync таймера при сворачивании) — FIXED. Wall-clock timer + visibility reconciliation.
+- BUG-5 (закрытие/свайпы Telegram) — частично решено: fullscreen + closing confirmation + BackButton intercept + edge-swipe touchInterceptor. Полностью отключить горизонтальный pager-свайп iOS Telegram **технически невозможно** (research-вердикт: нет такого API в Bot API 9.0). Закрыто **дисклеймером** перед стартом тренировки.
+- Layout: split 60% камера сверху + 40% демо снизу, через CSS Grid (`grid-template-rows: 6fr 4fr`).
+- **Portal rendering**: WorkoutScreen рендерится через `createPortal(..., document.body)` — обходит containing-block trap от `motion.div + backdrop-filter` родителей в `App.tsx → ActionCube`.
+- Safe-area-insets для iPhone status bar / Dynamic Island.
+- Сегментированный progress bar (16 сегментов с exercise+rest sub-fill, плавная заливка, цвет по фазе).
+- Topbar: убран `×`, заменён на «Завершить» с confirm.
+- Переименование «Score» → «XP» в финальной карточке.
+- Камера constraints: `1920×1080 landscape` для широкого FOV; `object-fit: cover`.
+- Демо: `object-fit: contain` (показывает весь фрейм, чёрные полосы по бокам если AR не совпадает).
+- **Word-by-word announcement на rest** — вместо статичной карточки: большие слова по очереди («Сейчас» → «будет» → name → «Положение:» → position → «Работают:» → muscles[] → hint).
+- **Дисклеймер модал** перед стартом — предупреждает про свайпы.
+- **Early camera init** в rest-фазе (за 5 сек до конца) → плавный переход в prepare без задержки.
+- **Demo preload** — скрытый `<video>` следующего упражнения во время rest.
+- HUD compact (countdown 44px, badge 11px), не клиппится.
+
+### 🐛 Найдено + диагностировано (НЕ пофикшено — блокер):
+**Все 16 упражнений последней сессии = ai_score 0, feedback="AI не смог проанализировать".**
+- Логи Railway: `WARNING:backend.services.workout_vision:Gemini gemini-2.5-flash failed: 403 PERMISSION_DENIED. {'error': {'code': 403, 'message': 'Your project has been denied access. Please contact support.', 'status': 'PERMISSION_DENIED'}}` — то же для fallback `gemini-2.0-flash`.
+- Корневая причина: Google AI Studio billing — **карта Visa 4120 declined, $8.39 overdue**. Project denied access до оплаты.
+- Юзер: создал новый проект `workout-bot` (gen-lang-client-0531472359) с ключом `...XNHY`, нажал «Pay now» в Billing.
+- TODO: после подтверждения оплаты — обновить `GEMINI_API_KEY` в Railway env, передеплой, прогон 3 настоящих упражнений → проверить XP > 0 и Stars > 0.
+
+### 📊 Формула XP/Stars (для справки, `backend/api/routers/workout.py:251-255`)
+```python
+TOTAL_EXERCISES = 16
+MAX_STARS_PER_SESSION = 50
+scores = [int(r.get("ai_score") or 0) for r in (ex_res.data or [])]
+total = sum(scores)
+avg = round(total / TOTAL_EXERCISES)         # делим на ВСЕ 16 (даже если часть = 0)
+stars = round(avg * MAX_STARS_PER_SESSION / 100)
+```
+
+**Пример:** 3 упражнения по 70 очков, 13 не сделано → avg = round(210/16) = 13, stars = round(13*50/100) = 6.
+Партиал-сессии штрафуются. Юзер ОК с этим? Или менять формулу (делить на submitted, не на 16)?
+**TODO в новой сессии:** обсудить после первой реальной XP > 0 сессии.
+
+### 🗒️ Заметки про БД и SQL
+- Таблица упражнений сессии называется **`workout_exercises`**, НЕ `workout_clips` (в моих SQL-чеках в старых сессиях была опечатка — поправить если будут writeup'ы).
+- Корректный SQL для проверки скоров последней сессии Cell:
+```sql
+SELECT exercise_idx, ai_score, feedback, created_at
+FROM workout_exercises
+WHERE session_id = (
+  SELECT id FROM workout_sessions
+  WHERE player_id = (SELECT id FROM users WHERE telegram_id = 8777447186)
+  ORDER BY started_at DESC LIMIT 1
+)
+ORDER BY exercise_idx;
+```
+
+### ▶️ Что делать в Session 36
+1. **СПРОСИТЬ ЮЗЕРА**: оплатил overdue? Обновил Railway env? Статус ключа в AI Studio?
+2. Если ОК → попросить прогнать 3 упражнения по-настоящему (приседания / отжимания / планка) → проверить ai_score > 0 в `workout_exercises`.
+3. Если XP > 0 в финале → 7.3 → **CLOSED**.
+4. Перейти в **7.4: Telegram Stars payments** (см. `PLAN.md` / `ROADMAP.md`).
+5. Заглянуть в `BACKLOG.md` — там лежат:
+   - Naming convention для демо-видео (для будущих кастомных демо юзера)
+   - Recovery сессии при случайном свайпе
+
+### 🔑 Ключи / окружение
+- Старый ключ Gemini: `...FNA8` (проект `Default Gemini Project`, gen-lang-client-0677974339) — заблокирован
+- Новый ключ Gemini: `...XNHY` (проект `workout-bot`, gen-lang-client-0531472359) — нужно обновить в Railway env
+- Supabase project: `dlpdwmmfpzfxcelxqvlq`
+- Тестовый аккаунт Player: TG `8777447186` (Cell, standard, спарен с Oil `8580720783`)
+
+---
+
 # SESSION STATUS — Session 34 (2026-04-30) — Задача 7.3 🔄 IN PROGRESS
 
 ## 🔄 Задача 7.3: E2E Smoke Test (Standard Tier) — продолжение

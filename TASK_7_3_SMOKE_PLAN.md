@@ -122,12 +122,12 @@ WHERE u.telegram_id = <TG_NEW_PLAYER>;
 | 2.5 | Не трогай телефон 5 мин (положи на стол) | Экран остаётся включённым | ❗ Главная проверка WakeLock |
 | 2.6 | Сделай 2–3 «упражнения» | Каждые ~30–60 сек видео-клип режется и улетает | Network/Railway: `POST /workout/clip-uploads` → 200 |
 | 2.7 | Свернуть Telegram на 30 сек → вернуть | Таймер показывает реальное прошедшее время | Если застрял — баг smart timer |
-| 2.8 | Дать сессии завершиться (или досрочно «Стоп»→«Закончить») | «Идёт оценка…» → score + Stars | Gemini Vision вернул eval, Stars начислены |
+| 2.8 | Дать сессии завершиться (или досрочно «Стоп»→«Закончить») | «Идёт оценка…» → XP + Капли 💧 | Gemini Vision вернул eval, drops начислены |
 
 **После Phase 2 — БД-чек:**
 ```sql
--- Сессия завершена?
-SELECT id, status, started_at, ended_at, score, stars_awarded
+-- Сессия завершена? (drops_earned после миграции 026, Session 37)
+SELECT id, status, started_at, finished_at, total_score, drops_earned
 FROM workout_sessions
 WHERE player_id = (SELECT id FROM users WHERE telegram_id = <TG_NEW_PLAYER>)
 ORDER BY started_at DESC LIMIT 1;
