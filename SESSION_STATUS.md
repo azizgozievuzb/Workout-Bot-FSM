@@ -1,3 +1,53 @@
+# SESSION STATUS — Session 39 (2026-06-05) — 7.3 заблокирован: Railway trial expired + unpaid invoice
+
+## 🚨 ИНФРА-БЛОКЕР (Session 38 → Session 39)
+**Railway:** Trial Ended + Unpaid Invoice («card has insufficient funds»). Все 3 проекта `0/X services online`, включая наш `affectionate-unity / production` (Workout Bot backend). До восстановления — smoke невозможен, любой push GitHub примет, но Railway проигнорит.
+
+**Что должен сделать юзер (вне Claude Code):**
+1. В Railway → Pay Invoice (если Visa 4120 declined → привязать рабочую карту в Settings → Billing → повторить).
+2. Subscribe → Hobby ($5/mo). Бот в idle ест копейки → ожидаемо $5–8/мес.
+3. `affectionate-unity → production` → дождаться поднятия service или Redeploy.
+4. Проверить env `GEMINI_API_KEY=...XNHY` (могло слететь после простоя).
+5. Проверить Vercel frontend (`vercel.com/dashboard`) — должен быть Ready, free tier не истекает.
+
+## 🟡 ОТКРЫТЫЙ ВОПРОС (спросить юзера в начале сессии)
+1. **Railway оживили?** (Hobby оплачен, `affectionate-unity` поднят, env проверены)
+2. **Vercel жив?**
+3. **Запушил `git push` с мака?** (commit `f6ca824` готов в локальном `main`, sandbox-push упал без credentials)
+4. **Smoke прогнан** на TG `8777447186` (Cell, 3+ настоящих упражнения)?
+
+## ▶️ План Session 39 (как только все ответы = да)
+1. SQL-чек последней сессии: `started_at` ≥ деплою; `drops_earned` сходится с прикидкой ниже.
+2. Финальная карточка показывает «XP {avg}» + **«Капли 💧 {drops}»** (НЕ «Звёзды ⭐»).
+3. Если ОК → 7.3 → **CLOSED**, открыть **7.4 (Telegram Stars payments через test_dc)**.
+
+## 🔒 Codex-аудит Session 38 (репо приватный → не блокер, но в TODO)
+- ⚠️ **Утечка Gemini key** в `research/compare_quality.py:6` и в git history (`PROMPT_AI_PHOTO.md`, старые `SESSION_STATUS.md`). Репо приватный → не критично, но при первом расшаривании ротировать + `git filter-repo`.
+- ⚠️ Webhook логирует ожидаемый секрет при mismatch — `backend/main.py:133`. Фикс одной строкой, отложен.
+- ⚠️ `validate_init_data` не проверяет `auth_date` freshness — `backend/core/security.py:22`. Replay-window. Отложен.
+- ⚠️ `AdminCube.tsx:219` — pre-existing `total_stars_earned` typo (бэк отдаёт `total_xp_earned`). Отложен.
+- ⚠️ `/boosts/buy` активирует буст без оплаты — `backend/api/routers/boosts.py:79`. Гейтится в 7.4 вместе со Stars.
+- ⚠️ `finish_session` не обновляет `global_score/three_day_score`; админ-стата врёт. Отложено в Phase 8.
+- ⚠️ Видео-ретеншн 7 дней — только комментарий в миграции. Отложено в Phase 8 (GDPR).
+- ⚠️ FE FSM reducer принимает поздний `AI_VERDICT` в любом состоянии — `frontend/src/fsm/workoutSessionMachine.ts:73`. БД корректна (upload использует captured `exercise_idx`), но локальный FSM может дрейфить. Отложено.
+
+Все эти пункты добавлены в `BACKLOG.md` секцию «Codex audit · Session 38», читать перед Phase 8.
+
+## 📌 Ожидаемые цифры smoke (по новой формуле)
+- 3@100, streak=0: quality=1.0, completion=(3/16)^0.65≈0.3369 → raw≈16.84 → **drops=17**
+- 8@80, streak=5: → **drops=27**
+- 16@100, streak=0: cap → **50**
+- 16@100, streak=20: raw=65 → cap → **50**
+- 0 упражнений: **0**
+
+## 🔑 Ключи / окружение
+- Supabase: `dlpdwmmfpzfxcelxqvlq` (миграция 026 применена).
+- Gemini: `...XNHY` (project `workout-bot`).
+- Test Player: TG `8777447186` (Cell, standard, спарен с Oil `8580720783`).
+- Local commit ожидающий push: `f6ca824` — `feat(7.3): Stars→Drops rename + new drops formula`.
+
+---
+
 # SESSION STATUS — Session 37 (2026-05-07) — 7.3 = Drops rename + новая формула ✅
 
 ## ✅ Сделано в Session 37
