@@ -20,6 +20,8 @@ venv/
 .env
 .env.local
 .env.production
+# ...but frontend build config holds only public VITE_* (API URL), must be in repo for Vercel build
+!frontend/.env.production
 
 # IDE
 .idea/
