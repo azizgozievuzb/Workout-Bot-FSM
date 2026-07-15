@@ -7,7 +7,15 @@
 - Формула сверена вручную: 6 засчитанных упражнений (98,92,95,98,95,90), quality≈0.947, completion=(6/16)^0.65≈0.529, streak_mult=1.0 → 50×0.947×0.529≈25.02 → 25 ✅. player_stats: current_streak=1, xp_balance=35.
 - ⚠️ Наблюдение: игрок реально сделал **4** упражнения на 30–40% качества, Gemini засчитал **6** с оценками 90–98. Формула честная, лоялен сам Gemini → фикс в 7.3.1 (рубрика), тонкая калибровка экономики — фаза 8 (BACKLOG §8.15).
 
-## ▶️ ЗАДАЧА 7.3.1 — pre-7.4 hardening (СЛЕДУЮЩАЯ, до 7.4)
+## ✅ ЗАДАЧА 7.3.1 — IMPLEMENTED (2026-07-15, CC) — осталось smoke
+Все 3 части сделаны, запушено (`3111835` rename, `7e9219e` gemini models, `c620ec1` rubric).
+- **Часть 1 — rename `xp_balance → drops_balance`:** миграция `027_rename_xp_to_drops_balance.sql` создана + применена через my-supabase (idempotent DO-block). Контроль: `information_schema` → только `drops_balance`, `xp_balance` нет. Код: `backend/api/routers/{workout,stats,admin,shop}.py`, `frontend/src/api/{stats,admin}.ts`, `DashboardSection.tsx`, `DashboardPanel.tsx`, `AdminCube.tsx`. Ярлык «XP» (оценка качества avg) не тронут. `grep -rn xp_balance backend/ frontend/src/` → только миграции 023/027 (история/определение rename), рантайм-код чист.
+- **Часть 2 — модели Gemini:** `workout_vision.py`: primary `gemini-3.5-flash`, fallback `gemini-2.5-flash`. `photo_styler.py`: MODEL `gemini-3.1-flash-image`, FALLBACK `gemini-2.5-flash-image` (мёртвые 2.0-модели убраны).
+- **Часть 3 — строгая рубрика:** `_PROMPT_TMPL` переписан: оценивается только заданное упражнение; нет человека/движения/другое упражнение → 0; шкала 90-100 / 60-89 / 30-59 / 1-29; «при сомнении — нижняя граница». Формат JSON {score, feedback} сохранён.
+- Verify: `py_compile` backend ✅, `tsc --noEmit` ✅, grep чист ✅.
+- **▶️ Осталось:** повторный smoke на Cell (TG `8777447186`) после деплоя Railway/Vercel — проверить что новая рубрика строже (реально сделанные упражнения засчитываются, недоделанные → низкий/0 score) и валюта отображается как Капли 💧. Если ОК → 7.3.1 CLOSED → 7.4.
+
+## 📦 (архив постановки) ЗАДАЧА 7.3.1 — pre-7.4 hardening
 Решение зафиксировано 2026-07-15 (Cowork). Три пункта:
 1. **Rename `xp_balance → drops_balance`** — миграция 027 + весь стек. Валюта = капли, а колонка до сих пор называется xp_balance (историческое: star_balance → 023 → xp_balance). «XP» остаётся только как оценка качества на карточке. Затронуты: `backend/api/routers/{workout,stats,admin,shop}.py`, `frontend/src/api/{stats,admin}.ts`, `DashboardSection.tsx`, `DashboardPanel.tsx`, `AdminCube.tsx`. Делать ДО 7.4 — платёжный код будет писаться поверх этих полей.
 2. **Смена моделей Gemini** в `backend/services/workout_vision.py`: primary `gemini-2.5-flash → gemini-3.5-flash` (stable, лучше видео), fallback `gemini-2.0-flash → gemini-2.5-flash`. **КРИТИЧНО: `gemini-2.0-flash` уже shut down у Google** (проверено по ai.google.dev 2026-07-15) — текущий fallback мёртв, при падении primary все оценки станут 0. Заодно проверить `photo_styler.py` (fallback `gemini-2.0-flash-preview-image-generation` тоже из мёртвого поколения).
