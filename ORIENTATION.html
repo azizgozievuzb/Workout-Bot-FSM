@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Workout Bot — ORIENTATION</title>
+<style>
+  :root{
+    --bg:#0f1117; --card:#181c26; --card2:#1e2330; --line:#2a3040;
+    --text:#e8eaf0; --muted:#9aa3b5; --accent:#4da3ff; --green:#3ecf8e;
+    --amber:#f5b84d; --red:#ff6b6b; --violet:#a98bff;
+    --mono:'SF Mono',Consolas,Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:16px/1.6 -apple-system,'Segoe UI',Roboto,sans-serif;padding:32px 16px 80px}
+  .wrap{max-width:960px;margin:0 auto}
+  header{margin-bottom:28px}
+  h1{font-size:30px;letter-spacing:-.5px}
+  h1 .drop{color:var(--accent)}
+  .stamp{color:var(--muted);font-size:14px;margin-top:6px}
+  .stamp b{color:var(--green)}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:760px){.grid{grid-template-columns:1fr}}
+  section{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px;margin-bottom:16px}
+  section.full{grid-column:1/-1}
+  h2{font-size:15px;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);margin-bottom:14px;display:flex;align-items:center;gap:8px}
+  h2 .ico{font-size:18px}
+  .now{border-left:4px solid var(--green)}
+  .next{border-left:4px solid var(--amber)}
+  .badge{display:inline-block;padding:2px 10px;border-radius:20px;font-size:12px;font-weight:600;vertical-align:middle}
+  .b-done{background:rgba(62,207,142,.15);color:var(--green)}
+  .b-next{background:rgba(245,184,77,.15);color:var(--amber)}
+  .b-later{background:rgba(169,139,255,.15);color:var(--violet)}
+  .b-risk{background:rgba(255,107,107,.15);color:var(--red)}
+  code{font-family:var(--mono);font-size:13.5px;background:var(--card2);padding:2px 7px;border-radius:6px;color:#c8d3f5}
+  ul{list-style:none}
+  li{padding:7px 0 7px 24px;position:relative;border-bottom:1px dashed var(--line)}
+  li:last-child{border-bottom:none}
+  li::before{content:"›";position:absolute;left:6px;color:var(--accent)}
+  li.done::before{content:"✓";color:var(--green)}
+  li.warn::before{content:"⚠";color:var(--amber);font-size:13px}
+  .kv{display:grid;grid-template-columns:190px 1fr;gap:6px 14px;font-size:14.5px}
+  .kv dt{color:var(--muted)}
+  .kv dd{font-family:var(--mono);font-size:13.5px}
+  table{width:100%;border-collapse:collapse;font-size:14.5px}
+  th{text-align:left;color:var(--muted);font-weight:600;padding:8px 10px;border-bottom:1px solid var(--line);font-size:13px;text-transform:uppercase;letter-spacing:.5px}
+  td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  td:first-child{white-space:nowrap;font-family:var(--mono);font-size:13px;color:#c8d3f5}
+  .muted{color:var(--muted)}
+  .formula{background:var(--card2);border-radius:10px;padding:14px 16px;font-family:var(--mono);font-size:13px;line-height:1.8;overflow-x:auto;margin-top:8px;color:#c8d3f5}
+  .flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:14px;margin-top:4px}
+  .flow .step{background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:6px 12px}
+  .flow .arr{color:var(--muted)}
+  .callout{background:rgba(77,163,255,.08);border:1px solid rgba(77,163,255,.3);border-radius:10px;padding:12px 16px;font-size:14.5px;margin-top:12px}
+  footer{color:var(--muted);font-size:13px;text-align:center;margin-top:24px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>💪 Workout Bot (4G) <span class="drop">/ ORIENTATION</span></h1>
+  <div class="stamp">Обновлено: <b>2026-07-15 · Session 41</b> · Скажи Cowork'у «обнови ORIENTATION.html», чтобы актуализировать эту страницу</div>
+</header>
+
+<section class="full">
+  <h2><span class="ico">🚀</span>Что это за проект</h2>
+  <p>Telegram Mini App для 35-минутных тренировок. Игрок тренируется перед камерой → видео каждого упражнения уходит в <b>Gemini Vision</b>, который оценивает технику → за сессию начисляются <b>Капли 💧</b> (внутренняя валюта) → тратятся в магазине. Роли: <b>Player</b> (тренируется), <b>Responsible</b> (наставник, мотивирует/бустит, 1:N через <code>partnerships</code>), <b>Admin</b>.</p>
+  <div class="kv" style="margin-top:12px">
+    <dt>Backend</dt><dd>Python 3.11 + Aiogram 3 + FastAPI · Railway</dd>
+    <dt>Frontend</dt><dd>Vite + React + TS, vanilla CSS · Vercel (auto-deploy от main)</dd>
+    <dt>БД</dt><dd>Supabase PostgreSQL · project dlpdwmmfpzfxcelxqvlq</dd>
+    <dt>Логика</dt><dd>XState FSM — 8 машин в /fsm_blueprints/ (source of truth)</dd>
+    <dt>AI</dt><dd>Gemini Vision (workout_vision.py) · ключ …XNHY, проект workout-bot</dd>
+    <dt>Тест-аккаунты</dt><dd>Player: Cell TG 8777447186 · Responsible: Oil TG 8580720783</dd>
+  </div>
+</section>
+
+<div class="grid">
+
+<section class="now">
+  <h2><span class="ico">📍</span>Где мы сейчас <span class="badge b-done">7.3 CLOSED</span></h2>
+  <p><b>Задача 7.3 закрыта 2026-07-14:</b> валюта переименована Stars ⭐ → Капли 💧 (миграция 026) + новая формула начисления. Smoke-тест прошёл: знакомый из Лондона (Cell) прогнал полную сессию → карточка показала «XP 95 + Капли 💧 25», БД записала <code>drops_earned=25</code>, формула сошлась с ручным расчётом до единицы.</p>
+  <div class="formula">done = упражнения с score&gt;0 (было 6)<br>quality = avg(done)/100 = 0.947<br>completion = (6/16)^0.65 = 0.529<br>streak_mult = 1 + min(streak,20)·0.015 = 1.0<br>drops = round(50·q·c·s) = <b>25</b> · XP = round(q·100) = <b>95</b></div>
+  <p class="muted" style="margin-top:10px">⚠️ Найдено на smoke: игрок реально сделал 4 упражнения на 30–40%, Gemini засчитал 6 с оценками 90–98. Формула честная — лоялен сам Gemini. Фикс → 7.3.1.</p>
+</section>
+
+<section class="next">
+  <h2><span class="ico">▶️</span>Что дальше <span class="badge b-next">7.3.1 — следующая</span></h2>
+  <p><b>7.3.1 — pre-7.4 hardening</b> (решение от 2026-07-15):</p>
+  <ul>
+    <li><b>Rename <code>xp_balance → drops_balance</code></b> — миграция 027 + весь стек (~9 файлов). Валюта = капли, колонка до сих пор с историческим именем.</li>
+    <li><b>Смена моделей Gemini</b>: primary <code>gemini-2.5-flash → gemini-3.5-flash</code>, fallback <code>gemini-2.0-flash → gemini-2.5-flash</code>. Старый fallback <b>отключён Google</b> — сейчас это мёртвая страховка.</li>
+    <li><b>Строгая рубрика в промпте оценки</b> — за что 90+, за что 50, когда 0; затем повторный smoke на Cell.</li>
+  </ul>
+  <p style="margin-top:10px">Потом: <span class="badge b-next">7.4</span> <b>Telegram Stars payments</b> (реальные платежи, test_dc, security-critical → Opus) · затем <span class="badge b-later">Фаза 8</span> — Workout Types &amp; Drops Economy (design-doc готов в BACKLOG §8).</p>
+</section>
+
+</div>
+
+<section class="full">
+  <h2><span class="ico">🗂</span>Карта файлов проекта — кто за что отвечает</h2>
+  <table>
+    <tr><th>Файл</th><th>Назначение</th></tr>
+    <tr><td>CLAUDE.md</td><td>Правила для Claude: экономия токенов, запрет чужих коннекторов (только <code>my-supabase</code>), формат Meta-блока для промптов CC, workflow-протокол. Claude читает его первым автоматически.</td></tr>
+    <tr><td>SESSION_STATUS.md</td><td><b>Главный журнал.</b> Каждая сессия — блок сверху: что сделано, открытые вопросы, что делать дальше. Новая сессия Claude начинается с его чтения. Если сессия зависла и не записалась сюда — восстанавливаем по скринам (как Session 41).</td></tr>
+    <tr><td>ORIENTATION.html</td><td>Эта страница — «панель возвращения» для тебя. Человеческая сводка после перерыва. Команда: «обнови ORIENTATION.html».</td></tr>
+    <tr><td>PLAN.md / ROADMAP.md</td><td>Высокоуровневый чек-лист этапов + детальная схема API/БД. Читается при планировании новых задач.</td></tr>
+    <tr><td>BACKLOG.md</td><td>Парк идей «на потом»: Codex-аудит (утечка ключа в истории, security-мелочи), demo-видео naming, и главное — <b>design-doc фазы 8</b> (§8.1–8.16: типы тренировок, экономика капель, streak, GDPR).</td></tr>
+    <tr><td>fsm_blueprints/</td><td>8 XState-машин — source of truth логики. Backend-хендлеры обязаны маппиться 1:1. Читать только нужную: 000 router, 100 payment, 101 onboarding, 102 admin, 103 workout gate, 104 responsible, 105 shop, 200 workout session.</td></tr>
+    <tr><td>TASK_7_3_SMOKE_PLAN.md</td><td>Пошаговый план smoke-теста 7.3 (исторический, задача закрыта).</td></tr>
+    <tr><td>backend/db/migrations/</td><td>SQL-миграции. Последняя применённая: 026 (stars_earned → drops_earned). Следующая: 027 (xp_balance → drops_balance).</td></tr>
+  </table>
+</section>
+
+<section class="full">
+  <h2><span class="ico">🤝</span>Как мы работаем</h2>
+  <div class="flow">
+    <span class="step">🧠 Cowork (Fable) = архитектор</span><span class="arr">→</span>
+    <span class="step">составляет промпт с Meta-блоком</span><span class="arr">→</span>
+    <span class="step">ты копипастишь в Claude Code CLI</span><span class="arr">→</span>
+    <span class="step">⌨️ CC = руки (код, git, SQL через my-supabase)</span><span class="arr">→</span>
+    <span class="step">результат фиксируется в SESSION_STATUS.md</span>
+  </div>
+  <div class="callout">Meta-блок перед каждым CC-промптом: модель (<code>/model</code>: opus/sonnet/haiku), reasoning effort, ultrathink да/нет, режим транскрипта (Ctrl+O). У Cowork'а прямого доступа к my-supabase нет — все SQL-проверки идут через CC.</div>
+</section>
+
+<section class="full">
+  <h2><span class="ico">⚠️</span>Известные риски и долги <span class="badge b-risk">следить</span></h2>
+  <ul>
+    <li class="warn"><b>Gemini fallback мёртв</b> (<code>gemini-2.0-flash</code> shut down) — чинится в 7.3.1, до этого при сбое primary все оценки станут 0.</li>
+    <li class="warn"><b>Утечка Gemini-ключа в git history</b> — репо приватный, не критично; при первом расшаривании: ротация + git filter-repo (BACKLOG, Codex-аудит).</li>
+    <li class="warn"><b>/boosts/buy активирует буст без оплаты</b> — гейтится в 7.4 вместе со Stars.</li>
+    <li class="warn">Демо-видео местами не совпадают с упражнением (content debt) — заменить до продакшена.</li>
+    <li class="warn">Партнёрка тест-аккаунта Cell продлена до <b>2026-07-31</b> — после этой даты smoke-тесты перестанут работать, продлевать через CC.</li>
+    <li class="warn">Мелочи: AdminCube typo <code>total_stars_earned</code>, webhook логирует секрет, auth_date freshness — всё в BACKLOG (Codex-аудит), фиксится волной в фазе 8.</li>
+  </ul>
+</section>
+
+<footer>Workout Bot FSM · ORIENTATION.html · генерируется и обновляется Claude (Cowork) по команде «обнови ORIENTATION.html»</footer>
+
+</div>
+</body>
+</html>

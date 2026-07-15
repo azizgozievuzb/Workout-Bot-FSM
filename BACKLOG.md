@@ -242,7 +242,7 @@ crunches__easy__cutting__lying-back__front.mp4
 ### 8.15 Прочие задачи в этой фазе
 
 - **Pricing/Drops Economy** — стоимость: unlock light, смена графика, restore streak, gift-pack для Responsible. Зависит от среднего дохода капель за main.
-- **Gemini calibration** (фаза 7.6): ужесточить промпт. Сейчас Gemini раздаёт по 100 слишком легко.
+- **Gemini calibration — тонкая настройка экономики** (остаётся в фазе 8). Базовая строгость вынесена в **задачу 7.3.1** (см. SESSION_STATUS Session 41): смена моделей + строгая рубрика в промпте. Факты из smoke 2026-07-14: игрок реально сделал 4 упражнения на 30–40% качества → Gemini засчитал 6 упражнений с оценками 90–98 (false positives: side_plank_r и lunges под вопросом). В фазе 8: калибровка кривой оценок под экономику капель, пороги «засчитано/не засчитано», антифарм.
 - **Onboarding survey** for schedule (после аватара) — опрос «какие 3 дня?»
 - **Auto-cleanup** старых workout-clips в Supabase Storage (cron).
 - **Responsible-панель** UI — отдельная задача проектирования.

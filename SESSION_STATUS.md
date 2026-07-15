@@ -1,3 +1,23 @@
+# SESSION STATUS — Session 41 (2026-07-15) — 7.3 ✅ CLOSED, открыта 7.3.1 (pre-7.4 hardening)
+
+## ✅ 7.3 CLOSED — smoke пройден (2026-07-14)
+- CC-сессия 14 июля зависла (409) и НЕ обновила этот файл — восстановлено по скринам транскрипта.
+- Партнёрка Cell продлена: `partnerships.id=1497677e-…` → `expires_at=2026-07-31`, status=active.
+- Smoke: сессия `773a809a-1193-422e-8a48-c26541b471f9`, finished, total_score=568, **drops_earned=25**, финальная карточка «XP 95 + Капли 💧 25» (НЕ «Звёзды») ✅.
+- Формула сверена вручную: 6 засчитанных упражнений (98,92,95,98,95,90), quality≈0.947, completion=(6/16)^0.65≈0.529, streak_mult=1.0 → 50×0.947×0.529≈25.02 → 25 ✅. player_stats: current_streak=1, xp_balance=35.
+- ⚠️ Наблюдение: игрок реально сделал **4** упражнения на 30–40% качества, Gemini засчитал **6** с оценками 90–98. Формула честная, лоялен сам Gemini → фикс в 7.3.1 (рубрика), тонкая калибровка экономики — фаза 8 (BACKLOG §8.15).
+
+## ▶️ ЗАДАЧА 7.3.1 — pre-7.4 hardening (СЛЕДУЮЩАЯ, до 7.4)
+Решение зафиксировано 2026-07-15 (Cowork). Три пункта:
+1. **Rename `xp_balance → drops_balance`** — миграция 027 + весь стек. Валюта = капли, а колонка до сих пор называется xp_balance (историческое: star_balance → 023 → xp_balance). «XP» остаётся только как оценка качества на карточке. Затронуты: `backend/api/routers/{workout,stats,admin,shop}.py`, `frontend/src/api/{stats,admin}.ts`, `DashboardSection.tsx`, `DashboardPanel.tsx`, `AdminCube.tsx`. Делать ДО 7.4 — платёжный код будет писаться поверх этих полей.
+2. **Смена моделей Gemini** в `backend/services/workout_vision.py`: primary `gemini-2.5-flash → gemini-3.5-flash` (stable, лучше видео), fallback `gemini-2.0-flash → gemini-2.5-flash`. **КРИТИЧНО: `gemini-2.0-flash` уже shut down у Google** (проверено по ai.google.dev 2026-07-15) — текущий fallback мёртв, при падении primary все оценки станут 0. Заодно проверить `photo_styler.py` (fallback `gemini-2.0-flash-preview-image-generation` тоже из мёртвого поколения).
+3. **Строгая рубрика в промпте оценки** (workout_vision.py): явные критерии — за что 90+, за что 50, когда 0/«не засчитано»; требование видеть выполнение ВСЕГО упражнения, а не присутствие человека в кадре. После — повторный smoke на Cell (TG 8777447186).
+- **Модель для CC:** sonnet + high (multi-file rename + осторожная логика), ultrathink не нужен.
+
+## 🏁 После 7.3.1 → 7.4 (Telegram Stars payments через test_dc) — см. ROADMAP.
+
+---
+
 # SESSION STATUS — Session 40 (2026-06-05) — 7.3 готов к smoke (push сделан, инфра восстановлена)
 
 ## ✅ Сделано в Session 38–39 (sandbox + Claude Code)

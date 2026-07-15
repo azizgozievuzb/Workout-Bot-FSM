@@ -24,6 +24,7 @@
 3. **Lazy File Reading:** Do NOT read all files in a directory. Read ONLY the specific file you are working on. Do not read `ROADMAP.md` or FSM blueprints unless the current task strictly requires it.
 4. **No Code Repetition:** When editing a file, output ONLY the modified functions/blocks with clear comments on where to insert them. Do NOT output the entire file.
 5. **Context Flush:** If a specific task is completed, advise the user to start a "New Chat" to clear the context cache.
+6. **Timestamp:** Каждое сообщение пользователю начинай с метки `🕐 YYYY-MM-DD HH:MM (Ташкент)` — реальное текущее время (через `date`), не выдуманное.
 
 ---
 
@@ -52,6 +53,7 @@
 | `SESSION_STATUS.md` | Current task & last stop point. Update this before ending session. |
 | `PLAN.md` / `ROADMAP.md` | High-level checklist and detailed API/DB schema. |
 | `BACKLOG.md` | Парк идей/фич «на потом». Читается ПОСЛЕ плана. См. Workflow Protocol. |
+| `ORIENTATION.html` | «Панель возвращения» юзера (человеческая сводка проекта в браузере). Команда юзера **«обнови ORIENTATION.html»** = переписать файл под текущее состояние: где мы, что сделано, что дальше (7.x), карта файлов, риски. Также обновлять при закрытии крупной задачи вместе с SESSION_STATUS.md. |
 | `fsm_blueprints/` | Core logic (8 XState machines). *Do not read all at once!* |
 
 **FSM Index (Reference only, read specific file on demand):**
