@@ -254,7 +254,7 @@ async def finish_session(session_id: str = Form(...), user: dict = Depends(get_c
     # Read player_stats up-front: streak BEFORE this workout drives streak_mult.
     stats_res = await (
         db.table("player_stats")
-        .select("xp_balance, current_streak, best_streak, last_workout_date")
+        .select("drops_balance, current_streak, best_streak, last_workout_date")
         .eq("player_id", player_id)
         .maybe_single()
         .execute()
@@ -287,8 +287,8 @@ async def finish_session(session_id: str = Form(...), user: dict = Depends(get_c
         .execute()
     )
 
-    # Credit xp_balance + last_workout_date + streak on player_stats
-    new_balance = int(cur.get("xp_balance") or 0) + drops
+    # Credit drops_balance + last_workout_date + streak on player_stats
+    new_balance = int(cur.get("drops_balance") or 0) + drops
     today = datetime.now(timezone.utc).date().isoformat()
     last = cur.get("last_workout_date")
     streak = current_streak
@@ -302,7 +302,7 @@ async def finish_session(session_id: str = Form(...), user: dict = Depends(get_c
 
     upsert_payload = {
         "player_id": player_id,
-        "xp_balance": new_balance,
+        "drops_balance": new_balance,
         "last_workout_date": today,
         "current_streak": streak,
         "best_streak": best,

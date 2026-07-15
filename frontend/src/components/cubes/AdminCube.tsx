@@ -328,7 +328,7 @@ const ConnectionsPanel: React.FC = () => {
                                                     <td>{p.is_banned ? '🚫 ' : ''}{pName}</td>
                                                     <td>{p.stats?.workouts_done ?? 0}</td>
                                                     <td></td>
-                                                    <td>{p.stats?.xp_balance ?? 0} XP</td>
+                                                    <td>{p.stats?.drops_balance ?? 0} XP</td>
                                                     <td>{lastFmt}</td>
                                                     <td>{p.stats ? <CompletionBar rate={p.stats.completion_rate} /> : '—'}</td>
                                                     <td style={{ position: 'relative' }}>

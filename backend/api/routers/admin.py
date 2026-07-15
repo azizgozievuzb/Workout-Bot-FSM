@@ -71,7 +71,7 @@ class CreateBonusPackResp(BaseModel):
 
 class PlayerStats(BaseModel):
     workouts_done: int
-    xp_balance: int
+    drops_balance: int
     last_workout_at: str | None
     completion_rate: float
 
@@ -367,7 +367,7 @@ async def get_connections(current_user: dict = Depends(get_current_user)):
     if all_player_ids:
         st_res = await (
             db.table("player_stats")
-            .select("player_id, global_score, xp_balance, last_workout_date")
+            .select("player_id, global_score, drops_balance, last_workout_date")
             .in_("player_id", all_player_ids)
             .execute()
         )
@@ -383,7 +383,7 @@ async def get_connections(current_user: dict = Depends(get_current_user)):
 
     def _compute_player_stats(pl: dict, st: dict | None) -> PlayerStats:
         workouts = st["global_score"] if st else 0
-        stars = st["xp_balance"] if st else 0
+        stars = st["drops_balance"] if st else 0
         last_raw = st["last_workout_date"] if st else None
         created_raw = pl.get("created_at")
         days_since_join = 1
@@ -398,7 +398,7 @@ async def get_connections(current_user: dict = Depends(get_current_user)):
         rate = min(1.0, workouts / days_since_join)
         return PlayerStats(
             workouts_done=workouts,
-            xp_balance=stars,
+            drops_balance=stars,
             last_workout_at=last_raw,
             completion_rate=round(rate, 3),
         )
@@ -435,7 +435,7 @@ async def get_connections(current_user: dict = Depends(get_current_user)):
 
         active_count = sum(1 for p in players if not p.is_deactivated and not p.is_banned)
         total_workouts = sum(p.stats.workouts_done for p in players if p.stats)
-        total_xp = sum(p.stats.xp_balance for p in players if p.stats)
+        total_xp = sum(p.stats.drops_balance for p in players if p.stats)
         rates = [p.stats.completion_rate for p in players if p.stats]
         avg_rate = round(sum(rates) / len(rates), 3) if rates else 0.0
 
