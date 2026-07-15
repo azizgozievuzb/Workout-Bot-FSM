@@ -41,8 +41,8 @@ PROMPT_LIGHT = (
     "Think digital art, not Instagram filter. Edge to edge, no borders."
 )
 
-MODEL = "gemini-2.5-flash-image"
-FALLBACK_MODEL = "gemini-2.0-flash-preview-image-generation"
+MODEL = "gemini-3.1-flash-image"
+FALLBACK_MODEL = "gemini-2.5-flash-image"
 
 
 async def _generate_styled(client: genai.Client, photo_bytes: bytes, prompt: str) -> bytes | None:

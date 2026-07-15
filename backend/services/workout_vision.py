@@ -22,8 +22,8 @@ from ..core.workout_config import Exercise
 
 logger = logging.getLogger(__name__)
 
-MODEL_PRIMARY = "gemini-2.5-flash"
-MODEL_FALLBACK = "gemini-2.0-flash"
+MODEL_PRIMARY = "gemini-3.5-flash"
+MODEL_FALLBACK = "gemini-2.5-flash"
 
 _PROMPT_TMPL = (
     "Ты — тренер по фитнесу. На видео человек выполняет упражнение: {name} ({key}).\n"
