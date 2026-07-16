@@ -80,30 +80,31 @@
 
 Когда агент (архитектор-постановщик задач) выдаёт пользователю промпт **именно для Claude Code CLI** (тот что запускается локально через `claude --dangerously-skip-permissions`), **ОБЯЗАТЕЛЬНО** перед самим промптом дать блок **Meta** с 4 полями. Эти настройки — CLI-сторона (пользователь настраивает сессию), НЕ вставлять их внутрь текста промпта.
 
-**Формат Meta-блока (перед промптом):**
+**⚠️ АКТУАЛЬНО с 2026-07-16 (решение юзера):** модели больше НЕ выбираются.
+CC всегда работает на **Opus 4.8** (дефолт, `/model` не трогать), Cowork — на **Fable 5**.
+Старые алиасы haiku/sonnet/opus-4.7 не используются. Meta-блок сокращён:
 
 ```
 **Meta:**
-- 🧠 Model: `/model <alias>`  (opus = 4.7, sonnet = 4.6, haiku = 4.5)
-- ⚙️ Reasoning effort: low | medium | high | xhigh (только opus 4.7) | max
+- ⚙️ Reasoning effort: low | medium | high | xhigh | max
 - 💭 Ultrathink: да / нет  (если да — добавить слово `ultrathink` в конец промпта)
-- 👁 Transcript: Ctrl+O → пикер с 4 режимами: `Normal` (дефолт) / `Thinking` (показывает reasoning) / `Verbose` (все tool-calls + diffs) / `Summary` (только итоги). Для сложных multi-file задач — `Verbose`; для задач с `ultrathink` — `Thinking`.
+- 👁 Transcript: Ctrl+O → `Normal` (дефолт) / `Thinking` (reasoning) / `Verbose` (все tool-calls + diffs) / `Summary` (итоги). Для сложных multi-file задач — `Verbose`; с `ultrathink` — `Thinking`.
 ```
 
-**Правила подбора Model + Effort:**
+**Правила подбора Effort (модель всегда Opus 4.8):**
 
-| Сложность задачи | Model | Effort | Ultrathink |
-|---|---|---|---|
-| Trivial cleanup, dead-code | `haiku` | `medium` | нет |
-| Одно-файловый фикс, средняя логика | `sonnet` | `medium` | нет |
-| Multi-file + осторожная логика | `sonnet` | `high` | нет |
-| Race conditions / security-critical | `sonnet` | `high` | опционально |
-| Multi-file архитектурный рефакторинг + миграция | `opus` | `xhigh` | да |
-| Самые сложные one-shot задачи (новая FSM, сложные алгоритмы) | `opus` | `max` | да |
+| Сложность задачи | Effort | Ultrathink |
+|---|---|---|
+| Trivial: git/docs, dead-code, read-only SQL | `low` | нет |
+| Одно-файловый фикс, средняя логика | `medium` | нет |
+| Multi-file + осторожная логика | `high` | нет |
+| Race conditions / security-critical | `high`–`xhigh` | опционально |
+| Архитектурный рефакторинг + миграция | `xhigh` | да |
+| Самые сложные one-shot (новая FSM, платёжная архитектура) | `max` | да |
 
 **НЕ применяется** к промптам для Cowork-чатов, Claude.ai web, или других интерфейсов — там этих фич нет.
 
-**Источники (актуально на апрель 2026):**
+**Источники:**
 - Effort levels: https://code.claude.com/docs/en/model-config
 - Transcript toggle (Ctrl+O): https://code.claude.com/docs/en/interactive-mode
 - Ultrathink как one-off: https://code.claude.com/docs/en/common-workflows
