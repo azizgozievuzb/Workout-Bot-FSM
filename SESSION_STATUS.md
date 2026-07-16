@@ -1,3 +1,30 @@
+# SESSION STATUS — Session 42 (2026-07-17) — 7.4 постановка ✅ (Cowork) → CC имплементация
+
+## 📐 Задача 7.4 — Telegram Stars payments. ФИНАЛЬНЫЕ решения юзера (2026-07-17)
+
+**Ключевые решения юзера (поверх первой версии постановки):**
+- **test_dc ОТМЕНЁН полностью.** Никакого второго бота/песочницы. Тестируем НАСТОЯЩИМИ Stars в боевом боте на собственных аккаунтах юзера: админ временно ставит цену 1 Star через админку → покупка → refund (Stars возвращаются покупателю) → цены обратно 50/300.
+- **Gemini-ключ в репо НЕ трогаем** (репо приватный, решение юзера). Ротация — только перед расшариванием репо (остаётся в BACKLOG №1).
+- **Все цены в Stars назначает ТОЛЬКО админ из AdminCube** (не хардкод, не env) — таблица `star_products` в БД + редактор в админке. Все платежи видны в AdminCube; refund — только админ. Цены в drops (полка Responsible: цену ставит Responsible в пределах лимита админа; товары админа — цена админа) — фаза 8, сейчас не трогаем.
+
+**Scope:** универсальная платёжная инфраструктура + первый товар — бусты X2. Drop packs / тиры за Stars — позже поверх той же инфраструктуры.
+
+**Архитектура (финал):**
+1. **Миграция 028:** `star_products` (product_type PK, title, description, price_stars CHECK >=1, is_active, updated_at; seed boost_1_day=50, boost_1_week=300) + `payments` ledger (id, buyer_user_id, product_type FK, target_partnership_id, amount_stars — снапшот цены, status pending→paid→fulfilled | failed/refunded, telegram_payment_charge_id UNIQUE, invoice_link, created/paid/fulfilled/refunded_at). Идемпотентность: UNIQUE charge_id + conditional UPDATE по status.
+2. **`payments.py` router:** `POST /payments/invoice` (цена только из star_products), `GET /payments/{id}` (поллинг), `GET /payments/products` (актуальные цены для UI).
+3. **Aiogram `handlers/payments.py`:** pre_checkout_query (сверка со СНАПШОТОМ amount_stars, лимит 10 сек) → successful_payment (идемпотентный fulfill → boost_service.activate_boost → уведомления) + обязательные `/paysupport`, `/terms`.
+4. **Гейтинг:** `/boosts/buy` удаляется; активация буста ТОЛЬКО из successful_payment.
+5. **Admin:** `GET /admin/payments` (все платежи), `POST /admin/payments/{id}/refund` (refundStarPayment + деактивация буста + уведомление), `GET/PATCH /admin/star-products` (цены), `GET /admin/stars-balance` (getMyStarBalance, Bot API 9.1+). AdminCube: секция «⭐ Платежи» + редактор цен.
+6. **Codex-фиксы:** №2 (main.py:133 не логировать секрет), №3 (auth_date max-age 86400), №9 (shop_items.price_stars → price_drops, миграция 029; promo_codes.price_stars не трогать), №5 (гейтинг — ядро задачи).
+7. **FSM:** 100_paymentMachine.ts → creatingInvoice → invoiceOpen → verifying → success/failure.
+8. **aiogram bump:** 3.13.1 → актуальная 3.x (нужны refund_star_payment, get_my_star_balance).
+
+**Проверка актуальности (2026-07-17, Bot API changelog до 10.2 включительно):** ядро флоу XTR/pre_checkout/successful_payment/refundStarPayment не менялось; provider_token для Stars должен быть ОПУЩЕН; с 20 июля 2026 включается origin-защита Mini Apps (мы single-origin Vercel — ок); на будущее для тиров есть нативные Stars-подписки (subscription_period, BotSubscriptionUpdated в 10.2) — заметка в BACKLOG.
+
+**Промпт для CC** выдан в Cowork-чате Session 42. Meta: Opus 4.8 (дефолт), effort `max`, ultrathink да, transcript Thinking.
+
+---
+
 # SESSION STATUS — Session 41 (2026-07-15/16) — 7.3 ✅ CLOSED · 7.3.1 ✅ CLOSED → следующая 7.4
 
 ## ✅ 7.3.1 CLOSED — smoke #2 пройден (2026-07-16)
