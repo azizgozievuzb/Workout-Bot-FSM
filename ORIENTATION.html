@@ -61,7 +61,7 @@
 
 <header>
   <h1>💪 Workout Bot (4G) <span class="drop">/ ORIENTATION</span></h1>
-  <div class="stamp">Обновлено: <b>2026-07-15 · Session 41</b> · Скажи Cowork'у «обнови ORIENTATION.html», чтобы актуализировать эту страницу</div>
+  <div class="stamp">Обновлено: <b>2026-07-16 · Session 41</b> · Скажи Cowork'у «обнови ORIENTATION.html», чтобы актуализировать эту страницу</div>
 </header>
 
 <section class="full">
@@ -80,21 +80,22 @@
 <div class="grid">
 
 <section class="now">
-  <h2><span class="ico">📍</span>Где мы сейчас <span class="badge b-done">7.3 CLOSED</span></h2>
-  <p><b>Задача 7.3 закрыта 2026-07-14:</b> валюта переименована Stars ⭐ → Капли 💧 (миграция 026) + новая формула начисления. Smoke-тест прошёл: знакомый из Лондона (Cell) прогнал полную сессию → карточка показала «XP 95 + Капли 💧 25», БД записала <code>drops_earned=25</code>, формула сошлась с ручным расчётом до единицы.</p>
-  <div class="formula">done = упражнения с score&gt;0 (было 6)<br>quality = avg(done)/100 = 0.947<br>completion = (6/16)^0.65 = 0.529<br>streak_mult = 1 + min(streak,20)·0.015 = 1.0<br>drops = round(50·q·c·s) = <b>25</b> · XP = round(q·100) = <b>95</b></div>
-  <p class="muted" style="margin-top:10px">⚠️ Найдено на smoke: игрок реально сделал 4 упражнения на 30–40%, Gemini засчитал 6 с оценками 90–98. Формула честная — лоялен сам Gemini. Фикс → 7.3.1.</p>
+  <h2><span class="ico">📍</span>Где мы сейчас <span class="badge b-done">7.3 CLOSED</span> <span class="badge b-done">7.3.1 CLOSED</span></h2>
+  <p><b>7.3 (закрыта 14.07):</b> валюта Stars ⭐ → Капли 💧 (миграция 026) + новая формула начисления — smoke подтвердил, расчёт сходится до единицы.</p>
+  <p style="margin-top:8px"><b>7.3.1 pre-7.4 hardening (закрыта 16.07):</b> колонка баланса переименована <code>xp_balance → drops_balance</code> (миграция 027 + 9 файлов); модели Gemini обновлены (primary <code>gemini-3.5-flash</code>, fallback <code>gemini-2.5-flash</code> — старый 2.0 был отключён Google); в промпт оценки добавлена строгая рубрика. Smoke #2: сделанные упражнения — 72–95 баллов, «стояние в кадре» — 0 (раньше 90+), false positives исчезли.</p>
+  <div class="formula">smoke #2 (16.07): done=4 → quality=0.8675 · completion=(4/16)^0.65=0.406 · streak_mult=1.015<br>drops = round(50·q·c·s) = <b>18</b> · XP = <b>87</b> · drops_balance = 35+18 = <b>53</b> ✓</div>
 </section>
 
 <section class="next">
-  <h2><span class="ico">▶️</span>Что дальше <span class="badge b-next">7.3.1 — следующая</span></h2>
-  <p><b>7.3.1 — pre-7.4 hardening</b> (решение от 2026-07-15):</p>
+  <h2><span class="ico">▶️</span>Что дальше <span class="badge b-next">7.4 — следующая</span></h2>
+  <p><b>7.4 — Telegram Stars payments</b> (реальные платежи через test_dc). Скоуп по ROADMAP:</p>
   <ul>
-    <li><b>Rename <code>xp_balance → drops_balance</code></b> — миграция 027 + весь стек (~9 файлов). Валюта = капли, колонка до сих пор с историческим именем.</li>
-    <li><b>Смена моделей Gemini</b>: primary <code>gemini-2.5-flash → gemini-3.5-flash</code>, fallback <code>gemini-2.0-flash → gemini-2.5-flash</code>. Старый fallback <b>отключён Google</b> — сейчас это мёртвая страховка.</li>
-    <li><b>Строгая рубрика в промпте оценки</b> — за что 90+, за что 50, когда 0; затем повторный smoke на Cell.</li>
+    <li>Aiogram pre-checkout handler + webhook successful_payment.</li>
+    <li>Backend endpoint <code>/payments/create-invoice</code> + Pydantic-схемы инвойса.</li>
+    <li>UX в MarketCube: «Купить N Stars» с генерацией инвойса.</li>
+    <li>Гейт <code>/boosts/buy</code> — сейчас активирует буст без оплаты (из Codex-аудита).</li>
   </ul>
-  <p style="margin-top:10px">Потом: <span class="badge b-next">7.4</span> <b>Telegram Stars payments</b> (реальные платежи, test_dc, security-critical → Opus) · затем <span class="badge b-later">Фаза 8</span> — Workout Types &amp; Drops Economy (design-doc готов в BACKLOG §8).</p>
+  <p style="margin-top:10px">Security-critical → промпт готовит Cowork, исполняет CC на <b>Opus + xhigh + ultrathink</b>. Затем: <span class="badge b-later">Фаза 8</span> — Workout Types &amp; Drops Economy (design-doc в BACKLOG §8).</p>
 </section>
 
 </div>
@@ -110,7 +111,7 @@
     <tr><td>BACKLOG.md</td><td>Парк идей «на потом»: Codex-аудит (утечка ключа в истории, security-мелочи), demo-видео naming, и главное — <b>design-doc фазы 8</b> (§8.1–8.16: типы тренировок, экономика капель, streak, GDPR).</td></tr>
     <tr><td>fsm_blueprints/</td><td>8 XState-машин — source of truth логики. Backend-хендлеры обязаны маппиться 1:1. Читать только нужную: 000 router, 100 payment, 101 onboarding, 102 admin, 103 workout gate, 104 responsible, 105 shop, 200 workout session.</td></tr>
     <tr><td>TASK_7_3_SMOKE_PLAN.md</td><td>Пошаговый план smoke-теста 7.3 (исторический, задача закрыта).</td></tr>
-    <tr><td>backend/db/migrations/</td><td>SQL-миграции. Последняя применённая: 026 (stars_earned → drops_earned). Следующая: 027 (xp_balance → drops_balance).</td></tr>
+    <tr><td>backend/db/migrations/</td><td>SQL-миграции. Последняя применённая: 027 (xp_balance → drops_balance). Следующие пишутся как diff, старые не правим.</td></tr>
   </table>
 </section>
 
@@ -129,7 +130,6 @@
 <section class="full">
   <h2><span class="ico">⚠️</span>Известные риски и долги <span class="badge b-risk">следить</span></h2>
   <ul>
-    <li class="warn"><b>Gemini fallback мёртв</b> (<code>gemini-2.0-flash</code> shut down) — чинится в 7.3.1, до этого при сбое primary все оценки станут 0.</li>
     <li class="warn"><b>Утечка Gemini-ключа в git history</b> — репо приватный, не критично; при первом расшаривании: ротация + git filter-repo (BACKLOG, Codex-аудит).</li>
     <li class="warn"><b>/boosts/buy активирует буст без оплаты</b> — гейтится в 7.4 вместе со Stars.</li>
     <li class="warn">Демо-видео местами не совпадают с упражнением (content debt) — заменить до продакшена.</li>
