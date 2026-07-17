@@ -25,7 +25,7 @@ class ShopItem(BaseModel):
     name: str
     description: str | None = ""
     category: str | None = None
-    price_stars: int
+    price_drops: int
     emoji: str | None = ""
     is_active: bool
     item_type: str = "generic"
@@ -47,7 +47,7 @@ class PurchaseResponse(BaseModel):
 class CreateShopItemReq(BaseModel):
     item_type: Literal['streak_freeze']
     freeze_count: int = Field(ge=1, le=50)
-    price_stars: int = Field(ge=1, le=100000)
+    price_drops: int = Field(ge=1, le=100000)
     name: str = Field(min_length=1, max_length=64)
     emoji: str | None = None
     player_id: uuid.UUID
@@ -99,7 +99,7 @@ def _map_shop_item(row: dict) -> ShopItem:
         name=row.get("name") or "",
         description=row.get("description") or "",
         category=row.get("category"),
-        price_stars=int(row.get("price_stars") or 0),
+        price_drops=int(row.get("price_drops") or 0),
         emoji=row.get("emoji") or "",
         is_active=bool(row.get("is_active", True)),
         item_type=row.get("item_type") or "generic",
@@ -183,7 +183,7 @@ async def get_shop_items(
             targeted_rows = tgt_res.data or []
 
     merged = native_rows + targeted_rows
-    merged.sort(key=lambda r: int(r.get("price_stars") or 0))
+    merged.sort(key=lambda r: int(r.get("price_drops") or 0))
     return [_map_shop_item(r) for r in merged]
 
 
@@ -253,7 +253,7 @@ async def create_shop_item(
             "emoji": body.emoji or "",
             "description": "",
             "category": None,
-            "price_stars": body.price_stars,
+            "price_drops": body.price_drops,
             "item_type": body.item_type,
             "freeze_count": body.freeze_count,
             "responsible_id": me_id,
@@ -385,7 +385,7 @@ async def purchase_item(
     if item.get("player_id") and str(item["player_id"]) != str(user_id):
         raise HTTPException(status_code=403, detail={"code": "NOT_YOUR_ITEM"})
 
-    price = int(item["price_stars"])
+    price = int(item["price_drops"])
     item_type = item.get("item_type") or "generic"
     freeze_count = int(item.get("freeze_count") or 0)
 

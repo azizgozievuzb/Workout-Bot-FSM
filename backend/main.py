@@ -26,9 +26,12 @@ from .api.routers.workout import router as workout_router
 from .api.routers.player import router as player_router
 from .api.routers.onboarding import router as onboarding_api_router
 from .api.routers.notifications import router as notifications_router
+from .api.routers.payments import router as payments_router
+from .api.routers.admin_payments import router as admin_payments_router
 from .core.config import settings
 from .core.deps import set_bot
 from .handlers.onboarding import onboarding_router
+from .handlers.payments import payments_router as payments_bot_router
 from .handlers.settings import settings_router
 from .schedulers.promo_lifecycle import create_scheduler
 
@@ -46,6 +49,7 @@ bot = Bot(
 set_bot(bot)
 dp = Dispatcher()
 dp.include_router(settings_router)
+dp.include_router(payments_bot_router)
 dp.include_router(onboarding_router)
 dp.include_router(admin_bot_router)
 
@@ -115,6 +119,8 @@ app.include_router(workout_router)
 app.include_router(player_router)
 app.include_router(onboarding_api_router)
 app.include_router(notifications_router)
+app.include_router(payments_router)
+app.include_router(admin_payments_router)
 
 
 @app.get("/health")
@@ -131,7 +137,7 @@ async def telegram_webhook(request: Request) -> Response:
     # Проверяем secret token от Telegram
     secret = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
     if secret != settings.WEBHOOK_SECRET:
-        logger.warning("Secret token mismatch. Expected %r, got %r", settings.WEBHOOK_SECRET, secret)
+        logger.warning("Webhook secret token mismatch — rejecting update")
         return Response(status_code=403)
 
     data = await request.json()
