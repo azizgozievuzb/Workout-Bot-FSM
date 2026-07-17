@@ -82,7 +82,7 @@ const ShopItemCard: React.FC<CardProps> = ({ item, buyingId, onBuy, onGift, dimm
                 <div className="shop-item-desc">{item.description}</div>
             )}
             <div className="shop-item-price-row">
-                <span className="shop-item-price">{item.price_stars} XP</span>
+                <span className="shop-item-price">{item.price_drops} XP</span>
                 {showQty && <span className="shop-item-qty">×{item.freeze_count}</span>}
             </div>
             {onBuy && (

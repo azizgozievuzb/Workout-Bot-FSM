@@ -5,7 +5,7 @@ export interface ShopItem {
     name: string;
     description: string | null;
     category: string | null;
-    price_stars: number;
+    price_drops: number;
     emoji: string | null;
     is_active: boolean;
     item_type: string;
@@ -23,7 +23,7 @@ export interface PurchaseResponse {
 export interface CreateShopItemRequest {
     item_type: 'streak_freeze';
     freeze_count: number;
-    price_stars: number;
+    price_drops: number;
     name: string;
     emoji?: string;
     player_id: string;

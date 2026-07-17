@@ -8,11 +8,15 @@ import {
 import type { MaintenanceStatus, ResponsibleGroup, BanHistoryEntry, BatchCodeType } from '../../api/admin';
 import { getPromoList } from '../../api/promo';
 import type { AccessTier, DurationDays, PromoListItem } from '../../api/promo';
+import {
+    listPayments, refundPayment, listStarProducts, updateStarProduct, getStarsBalance,
+} from '../../api/adminPayments';
+import type { AdminPaymentRow, AdminStarProduct } from '../../api/adminPayments';
 import TierBadge from '../common/TierBadge';
 import BanUserModal from '../shared/BanUserModal';
 import '../../styles/cubes.css';
 
-type AdminTab = 'promos' | 'connections' | 'settings' | 'bans';
+type AdminTab = 'promos' | 'connections' | 'settings' | 'bans' | 'payments';
 type GeneratorMode = 'responsible' | 'renewal' | 'batch' | 'list';
 
 // ---------------------------------------------------------------------------
@@ -758,6 +762,179 @@ const CodeGeneratorPanel: React.FC = () => {
 const PromosPanel: React.FC = () => <CodeGeneratorPanel />;
 
 // ---------------------------------------------------------------------------
+// PaymentsPanel — ⭐ Stars payments (balance, ledger + refunds, price editor)
+// ---------------------------------------------------------------------------
+
+const PAYMENT_STATUS_LABEL: Record<string, string> = {
+    pending: 'Ожидание', paid: 'Оплачен', fulfilled: 'Выполнен', failed: 'Ошибка', refunded: 'Возврат',
+};
+
+const PaymentsPanel: React.FC = () => {
+    const [balance, setBalance] = useState<number | null>(null);
+    const [payments, setPayments] = useState<AdminPaymentRow[]>([]);
+    const [products, setProducts] = useState<AdminStarProduct[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [toast, setToast] = useState('');
+    const [confirmRefund, setConfirmRefund] = useState<AdminPaymentRow | null>(null);
+    const [refunding, setRefunding] = useState<string | null>(null);
+    const [priceEdits, setPriceEdits] = useState<Record<string, string>>({});
+    const [savingProduct, setSavingProduct] = useState<string | null>(null);
+
+    const showToast = (m: string, ms = 3000) => { setToast(m); setTimeout(() => setToast(''), ms); };
+
+    const reload = useCallback(async () => {
+        setLoading(true);
+        try {
+            const [pmts, prods] = await Promise.all([listPayments(), listStarProducts()]);
+            setPayments(pmts);
+            setProducts(prods);
+            setPriceEdits(Object.fromEntries(prods.map(p => [p.product_type, String(p.price_stars)])));
+        } catch { /* ignore */ } finally {
+            setLoading(false);
+        }
+        getStarsBalance().then(b => setBalance(b.amount)).catch(() => setBalance(null));
+    }, []);
+
+    useEffect(() => { reload(); }, [reload]);
+
+    const doRefund = useCallback(async (row: AdminPaymentRow) => {
+        setConfirmRefund(null);
+        setRefunding(row.id);
+        try {
+            const res = await refundPayment(row.id);
+            hapticNotification('success');
+            showToast(res.boost_deactivated ? 'Возврат оформлен, буст деактивирован' : 'Возврат оформлен');
+            reload();
+        } catch (err: any) {
+            hapticNotification('error');
+            const code = err?.response?.data?.detail?.code;
+            showToast(code === 'NOT_REFUNDABLE' ? 'Платёж нельзя вернуть' : 'Ошибка возврата');
+        } finally {
+            setRefunding(null);
+        }
+    }, [reload]);
+
+    const saveProduct = useCallback(async (pt: string) => {
+        const price = parseInt(priceEdits[pt], 10);
+        if (!Number.isFinite(price) || price < 1) { showToast('Цена должна быть ≥ 1'); return; }
+        setSavingProduct(pt);
+        try {
+            await updateStarProduct(pt, { price_stars: price });
+            hapticNotification('success');
+            showToast('Цена сохранена');
+            reload();
+        } catch { hapticNotification('error'); showToast('Ошибка сохранения'); } finally {
+            setSavingProduct(null);
+        }
+    }, [priceEdits, reload]);
+
+    const toggleActive = useCallback(async (p: AdminStarProduct) => {
+        setSavingProduct(p.product_type);
+        try {
+            await updateStarProduct(p.product_type, { is_active: !p.is_active });
+            reload();
+        } catch { showToast('Ошибка'); } finally {
+            setSavingProduct(null);
+        }
+    }, [reload]);
+
+    if (loading) return <div className="cube-section-title" style={{ textAlign: 'center' }}>Загрузка...</div>;
+
+    return (
+        <>
+            <div className="cube-card">
+                <div className="cube-stat">
+                    <span>Баланс бота</span>
+                    <span className="cube-stat-value" style={{ color: '#FFD700' }}>
+                        {balance === null ? '—' : `${balance} ⭐`}
+                    </span>
+                </div>
+            </div>
+
+            <div className="cube-section-title">Цены (Stars)</div>
+            <div className="cube-card">
+                {products.map(p => (
+                    <div key={p.product_type} className="settings-row" style={{ gap: 8 }}>
+                        <div className="settings-row-info">
+                            <div className="cube-player-name">{p.title}</div>
+                            <div className="cube-player-meta">{p.is_active ? 'активен' : 'выключен'}</div>
+                        </div>
+                        <input
+                            className="admin-generator-select"
+                            style={{ width: 76 }}
+                            type="number"
+                            min={1}
+                            value={priceEdits[p.product_type] ?? ''}
+                            onChange={(e) => setPriceEdits(s => ({ ...s, [p.product_type]: e.target.value }))}
+                            onClick={(e) => e.stopPropagation()}
+                        />
+                        <button className="cube-btn-sm" disabled={savingProduct === p.product_type} onClick={(e) => { e.stopPropagation(); saveProduct(p.product_type); }}>💾</button>
+                        <button className="cube-btn-sm" disabled={savingProduct === p.product_type} onClick={(e) => { e.stopPropagation(); toggleActive(p); }}>{p.is_active ? '🚫' : '✅'}</button>
+                    </div>
+                ))}
+            </div>
+
+            <div className="cube-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>Платежи</span>
+                <button className="cube-btn-sm" onClick={(e) => { e.stopPropagation(); reload(); hapticImpact('light'); }}>↻</button>
+            </div>
+            {payments.length === 0 ? (
+                <div className="cube-locked"><div className="cube-locked-text">Нет платежей</div></div>
+            ) : (
+                <div className="connections-table-wrap cube-card" style={{ padding: 0 }}>
+                    <table className="connections-table">
+                        <thead>
+                            <tr><th>Покупатель</th><th>Продукт</th><th>⭐</th><th>Статус</th><th>Дата</th><th></th></tr>
+                        </thead>
+                        <tbody>
+                            {payments.map(pm => (
+                                <tr key={pm.id}>
+                                    <td>{pm.buyer_name || `#${pm.buyer_telegram_id ?? '?'}`}</td>
+                                    <td>{pm.product_title || pm.product_type}</td>
+                                    <td>{pm.amount_stars}</td>
+                                    <td>{PAYMENT_STATUS_LABEL[pm.status] || pm.status}</td>
+                                    <td>{pm.created_at ? new Date(pm.created_at).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }) : '—'}</td>
+                                    <td>
+                                        {(pm.status === 'paid' || pm.status === 'fulfilled') && (
+                                            <button className="cube-btn-sm" disabled={refunding === pm.id} onClick={(e) => { e.stopPropagation(); setConfirmRefund(pm); }}>↩️</button>
+                                        )}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+
+            {confirmRefund && (
+                <div
+                    style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}
+                    onClick={() => setConfirmRefund(null)}
+                >
+                    <div className="cube-card" style={{ maxWidth: 340, width: '100%' }} onClick={(e) => e.stopPropagation()}>
+                        <div className="settings-confirm-text">
+                            Вернуть {confirmRefund.amount_stars} ⭐ покупателю «{confirmRefund.buyer_name || confirmRefund.buyer_telegram_id}»? Буст будет деактивирован.
+                        </div>
+                        <div className="settings-confirm-btns" style={{ marginTop: 12 }}>
+                            <button className="cube-btn-sm" onClick={(e) => { e.stopPropagation(); setConfirmRefund(null); }}>Отмена</button>
+                            <button
+                                className="cube-btn-sm"
+                                style={{ background: 'rgba(231,76,60,0.2)', color: '#e74c3c' }}
+                                onClick={(e) => { e.stopPropagation(); doRefund(confirmRefund); }}
+                            >
+                                Вернуть
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {toast && <div className="admin-toast">{toast}</div>}
+        </>
+    );
+};
+
+// ---------------------------------------------------------------------------
 // AdminCube
 // ---------------------------------------------------------------------------
 
@@ -776,11 +953,13 @@ const AdminCube: React.FC = () => {
             <div className="tab-selector">
                 <button className={`tab-selector-btn${activeTab === 'promos' ? ' active' : ''}`} onClick={switchTab('promos')}>Промокоды</button>
                 <button className={`tab-selector-btn${activeTab === 'connections' ? ' active' : ''}`} onClick={switchTab('connections')}>Соединения</button>
+                <button className={`tab-selector-btn${activeTab === 'payments' ? ' active' : ''}`} onClick={switchTab('payments')}>⭐ Платежи</button>
                 <button className={`tab-selector-btn${activeTab === 'settings' ? ' active' : ''}`} onClick={switchTab('settings')}>Настройки</button>
                 <button className={`tab-selector-btn${activeTab === 'bans' ? ' active' : ''}`} onClick={switchTab('bans')}>Баны</button>
             </div>
             {activeTab === 'promos' && <PromosPanel />}
             {activeTab === 'connections' && <ConnectionsPanel />}
+            {activeTab === 'payments' && <PaymentsPanel />}
             {activeTab === 'settings' && <SettingsPanel />}
             {activeTab === 'bans' && <BanHistoryPanel />}
         </div>

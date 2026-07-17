@@ -9,8 +9,9 @@ import TierBadge from '../common/TierBadge';
 import { getMyStats } from '../../api/stats';
 import type { PlayerStats } from '../../api/stats';
 import { getActiveBoost } from '../../api/boosts';
-import { buyBoost } from '../../api/boosts';
 import type { ActiveBoost } from '../../api/boosts';
+import { getProducts, createInvoice, getPayment } from '../../api/payments';
+import type { StarProduct } from '../../api/payments';
 import {
     createRenewalRequest,
 } from '../../api/renewal';
@@ -326,6 +327,11 @@ const ResponsibleView: React.FC = () => {
     const [modal, setModal] = useState<{ kind: ModalKind; partnershipId?: string; targetUserId?: string; playerName?: string | null } | null>(null);
     const menuRef = useRef<HTMLDivElement | null>(null);
 
+    // Boost purchase (Telegram Stars)
+    const [boostModal, setBoostModal] = useState<{ playerId: string; playerName: string } | null>(null);
+    const [products, setProducts] = useState<StarProduct[]>([]);
+    const [boostBusy, setBoostBusy] = useState(false);
+
     const fetchCode = useCallback(() => {
         getMyPlayerCode()
             .then((data) => setPlayerCodeData(data))
@@ -386,16 +392,71 @@ const ResponsibleView: React.FC = () => {
         setTimeout(() => setToast(''), 2000);
     }, [playerCodeData]);
 
-    const handleBoost = useCallback(async (e: React.MouseEvent, playerId: string) => {
-        e.stopPropagation();
-        try {
-            const res = await buyBoost(playerId);
-            setToast(res.message);
-        } catch (err: any) {
-            setToast(err?.response?.data?.detail || 'Ошибка');
-        }
-        setTimeout(() => setToast(''), 3000);
+    useEffect(() => {
+        getProducts().then(setProducts).catch(() => {});
     }, []);
+
+    const openBoostModal = useCallback((e: React.MouseEvent, playerId: string, playerName: string) => {
+        e.stopPropagation();
+        hapticImpact('light');
+        setBoostModal({ playerId, playerName });
+    }, []);
+
+    // Poll our own DB — the Telegram callback status is NOT the source of truth.
+    const pollPaymentStatus = useCallback(async (paymentId: string): Promise<string> => {
+        for (let i = 0; i < 15; i++) {
+            await new Promise((r) => setTimeout(r, 2000));
+            try {
+                const { status } = await getPayment(paymentId);
+                if (status === 'fulfilled') return 'fulfilled';
+                if (status === 'failed' || status === 'refunded') return status;
+            } catch { /* keep polling */ }
+        }
+        return 'timeout';
+    }, []);
+
+    const buyBoostProduct = useCallback(async (productType: string) => {
+        if (!boostModal || boostBusy) return;
+        const { playerId } = boostModal;
+        setBoostBusy(true);
+        try {
+            const { payment_id, invoice_link } = await createInvoice(productType, playerId);
+            const tg = (window as any).Telegram?.WebApp;
+            if (!tg?.openInvoice) {
+                setToast('Оплата недоступна в этом клиенте');
+                setBoostBusy(false);
+                setBoostModal(null);
+                setTimeout(() => setToast(''), 3000);
+                return;
+            }
+            tg.openInvoice(invoice_link, async (status: string) => {
+                if (status === 'paid') {
+                    setToast('Оплата получена, активируем буст...');
+                    const result = await pollPaymentStatus(payment_id);
+                    if (result === 'fulfilled') {
+                        hapticNotification('success');
+                        setToast('⚡ Буст X2 активирован!');
+                    } else if (result === 'timeout') {
+                        setToast('Оплата обрабатывается, буст активируется автоматически');
+                    } else {
+                        setToast('Не удалось активировать буст');
+                    }
+                } else if (status === 'cancelled') {
+                    setToast('Покупка отменена');
+                } else {
+                    setToast('Оплата не прошла');
+                }
+                setBoostBusy(false);
+                setBoostModal(null);
+                setTimeout(() => setToast(''), 4000);
+            });
+        } catch {
+            setToast('Не удалось создать счёт');
+            setBoostBusy(false);
+            setBoostModal(null);
+            setTimeout(() => setToast(''), 3000);
+        }
+    }, [boostModal, boostBusy, pollPaymentStatus]);
 
     const openModal = useCallback((kind: ModalKind, p: MyPlayer) => {
         hapticImpact('light');
@@ -523,7 +584,7 @@ const ResponsibleView: React.FC = () => {
                                 </div>
                                 <div className="cube-player-actions" style={{ position: 'relative' }}>
                                     {!isExpired && (
-                                        <button className="cube-btn-sm" onClick={(e) => handleBoost(e, p.id)}>
+                                        <button className="cube-btn-sm" onClick={(e) => openBoostModal(e, p.id, name)}>
                                             ⚡X2
                                         </button>
                                     )}
@@ -597,6 +658,38 @@ const ResponsibleView: React.FC = () => {
             )}
             {modal?.kind === 'tier' && (
                 <TierChangeModal onClose={closeModal} />
+            )}
+
+            {boostModal && (
+                <div
+                    style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}
+                    onClick={() => { if (!boostBusy) setBoostModal(null); }}
+                >
+                    <div
+                        className="cube-card"
+                        style={{ maxWidth: 360, width: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="cube-section-title">⚡ Буст X2 для {boostModal.playerName}</div>
+                        {products.length === 0 ? (
+                            <div className="cube-player-meta">Загрузка цен…</div>
+                        ) : (
+                            products.map((pr) => (
+                                <button
+                                    key={pr.product_type}
+                                    className="cube-btn-primary"
+                                    disabled={boostBusy}
+                                    onClick={() => buyBoostProduct(pr.product_type)}
+                                >
+                                    {pr.product_type === 'boost_1_day' ? 'День' : pr.product_type === 'boost_1_week' ? 'Неделя' : pr.title} — {pr.price_stars} ⭐
+                                </button>
+                            ))
+                        )}
+                        <button className="cube-btn-sm" disabled={boostBusy} onClick={() => setBoostModal(null)}>
+                            {boostBusy ? 'Обработка…' : 'Отмена'}
+                        </button>
+                    </div>
+                </div>
             )}
         </>
     );
