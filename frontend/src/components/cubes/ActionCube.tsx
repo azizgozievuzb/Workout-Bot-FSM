@@ -60,8 +60,8 @@ const ActionCube: React.FC = () => {
                 dual={dual}
                 onToggle={toggleView}
                 lockedMessage={view === 'player'
-                    ? 'Введите промокод чтобы разблокировать'
-                    : 'Вам нужна пригласительная ссылка'}
+                    ? 'Вам нужна пригласительная ссылка от наставника'
+                    : 'Оформите подписку, чтобы приглашать игроков'}
             >
                 {view === 'player' ? (
                     canPlay(user) ? <PlayerView /> : <LockedPlayer />
