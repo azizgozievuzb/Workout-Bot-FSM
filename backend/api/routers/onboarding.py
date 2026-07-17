@@ -5,6 +5,9 @@ Endpoint: POST /onboarding/wake
 Сразу шлёт игроку сообщение в боте с первым вопросом онбординга,
 чтобы после закрытия Mini App не пришлось ничего набирать.
 """
+from datetime import datetime, timezone
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
@@ -18,6 +21,38 @@ router = APIRouter(prefix="/onboarding", tags=["onboarding"])
 
 class WakeResp(BaseModel):
     ok: bool
+
+
+class CompleteReq(BaseModel):
+    gender: Literal["male", "female"]
+    fitness_level: Literal["beginner", "intermediate", "advanced"]
+    age_range: Literal["<18", "18-25", "26-35", "36-45", "46-55", "55+"]
+    goal: Literal["lose_weight", "build_muscle", "endurance", "health", "flexibility"]
+
+
+@router.post("/complete", response_model=WakeResp)
+async def complete_onboarding(body: CompleteReq, user: dict = Depends(get_current_user)) -> WakeResp:
+    """Игрок проходит опрос внутри Mini App (7.5) — сохраняем профиль, снимаем гейт."""
+    db = await get_supabase()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    res = await (
+        db.table("users")
+        .update({
+            "gender": body.gender,
+            "fitness_level": body.fitness_level,
+            "age_range": body.age_range,
+            "goal": body.goal,
+            "goal_last_updated_at": now_iso,
+            "goal_update_required": False,
+            "onboarding_done": True,
+            "onboarding_state": "onboardingComplete",
+        })
+        .eq("telegram_id", user["telegram_id"])
+        .execute()
+    )
+    if not res.data:
+        raise HTTPException(status_code=404, detail={"code": "USER_NOT_FOUND"})
+    return WakeResp(ok=True)
 
 
 @router.post("/wake", response_model=WakeResp)
