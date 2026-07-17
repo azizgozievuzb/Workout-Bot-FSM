@@ -1,3 +1,45 @@
+# SESSION STATUS — Session 43 (2026-07-17) — 7.4 Telegram Stars payments ✅ IMPLEMENTED → ждём ручной smoke
+
+## ✅ Сделано (CC, Session 43)
+
+**Инфраструктура (migrations, применены через my-supabase MCP + верифицированы information_schema):**
+- `028_star_payments.sql`: таблицы `star_products` (seed boost_1_day=50, boost_1_week=300, is_active, CHECK price≥1) + `payments` ledger (pending→paid→fulfilled|failed|refunded, UNIQUE charge_id, снапшот `amount_stars`, 2 индекса). ✅ verified.
+- `029_rename_price_stars_to_price_drops.sql`: `shop_items.price_stars → price_drops` (idempotent DO-block). `promo_codes.price_stars` не тронут. ✅ verified.
+- `aiogram 3.13.1 → 3.29.1` (requirements.txt; для `refund_star_payment` / `get_my_star_balance`).
+
+**Backend:**
+- `services/boost_service.py` — `activate_boost(db, partnership_id, boost_type)` + маппинг product_type→boost_type. Единственный путь активации.
+- `api/routers/payments.py` — `GET /payments/products`, `POST /payments/invoice` (цена только из БД, снапшот, provider_token опущен, currency=XTR), `GET /payments/{id}` (поллинг, только свой).
+- `handlers/payments.py` — `pre_checkout_query` (сверка со снапшотом, <10с), `successful_payment` (идемпотентный mark-paid conditional UPDATE → fulfill → уведомления R+P; при fail fulfill статус остаётся `paid`, без авто-refund), `/paysupport`, `/terms`. Router подключён в dp ДО onboarding.
+- `api/routers/admin_payments.py` (require_admin) — `GET /admin/payments`, `POST /admin/payments/{id}/refund` (refundStarPayment + деактивация буста + уведомление), `GET/PATCH /admin/star-products`, `GET /admin/stars-balance`.
+- Гейтинг: `POST /boosts/buy` УДАЛЁН (Codex №5). `GET /boosts/active` не тронут.
+- Security: `main.py` webhook не логирует секрет (Codex №2); `security.py` + `config.INITDATA_MAX_AGE_SEC=86400` — auth_date freshness (Codex №3).
+- `shop.py` price_stars→price_drops (Codex №9).
+
+**Frontend (tsc --noEmit ✅):**
+- `api/payments.ts` + `api/adminPayments.ts`.
+- `ActionCube.tsx` — кнопка ⚡X2 → модалка «День/Неделя» с живыми ценами (`GET /payments/products`) → `createInvoice` → `window.Telegram.WebApp.openInvoice` → на 'paid' поллинг `GET /payments/{id}` 2с×15 (30с) до 'fulfilled'. Истина = статус БД, не callback.
+- `AdminCube.tsx` — новая вкладка «⭐ Платежи»: баланс бота, редактор цен star_products (инпут+💾+вкл/выкл), таблица платежей с Refund (confirm-модалка).
+- `shop.ts`/`MarketCube.tsx` price_stars→price_drops; `boosts.ts` — `buyBoost` удалён.
+
+**FSM:** `100_paymentMachine.ts` — starsPhase развёрнут: creatingInvoice → invoiceOpen → verifying → success|failure (typecheck ✅).
+
+**Verify:** py_compile backend ✅, tsc ✅, ruff (мои файлы чисты; 2 ошибки — pre-existing в auth.py/onboarding.py, вне scope), grep: `/boosts/buy` и `buyBoost`-вызовов нет, `shop_items.price_stars` нет.
+
+## ⏳ ОСТАЛОСЬ — ручной smoke юзера (реальные Stars, боевой бот)
+1. Задеплоить (Railway backend + Vercel frontend), дождаться зелёного.
+2. В AdminCube → «⭐ Платежи» → поставить цену `boost_1_day` = **1 Star** → 💾.
+3. Со **второго аккаунта** (Responsible с активным игроком) → ⚡X2 у игрока → «День — 1 ⭐» → оплатить.
+4. Проверить: тост «Буст X2 активирован», у игрока `GET /boosts/active` active=true; в AdminCube платёж = `fulfilled`.
+5. В AdminCube → Refund у этого платежа → подтвердить. Проверить: Stars вернулись покупателю (Telegram), платёж = `refunded`, буст деактивирован (`GET /boosts/active` active=false).
+6. Проверить `GET /admin/stars-balance` показывает баланс.
+7. **Вернуть цены** boost_1_day=50, boost_1_week=300.
+8. Если ОК → 7.4 CLOSED, обновить ORIENTATION.html.
+
+**⚠️ Незакоммичены на старте следующей сессии:** нет — всё запушено в Session 43.
+
+---
+
 # SESSION STATUS — Session 42 (2026-07-17) — 7.4 постановка ✅ (Cowork) → CC имплементация
 
 ## 📐 Задача 7.4 — Telegram Stars payments. ФИНАЛЬНЫЕ решения юзера (2026-07-17)

@@ -8,16 +8,26 @@
 
 Найдено внешним аудитом во время Session 38. Репо приватный → не блокеры для 7.3 smoke, но обязательно разгрести до публичного релиза / 7.4.
 
-1. **Утечка Gemini API-ключа** — `research/compare_quality.py:6` содержит реальный ключ, плюс старые `PROMPT_AI_PHOTO.md` и предыдущие версии `SESSION_STATUS.md` в git history. Ротировать в AI Studio + удалить файл + `git filter-repo` для чистки истории. Когда: перед любым расшариванием репо или в начале 7.4.
-2. **Webhook логирует ожидаемый секрет при mismatch** — `backend/main.py:133`. Печатает `X-Telegram-Bot-Api-Secret-Token` сравнение в логах. Заменить на boolean-факт mismatch'а без значения. 1-line fix. Когда: вместе с пунктом 1.
-3. **`validate_init_data` без `auth_date` freshness** — `backend/core/security.py:22`. Replay-window open. Добавить max-age (например 86400s). Когда: 7.4 (там всё про auth/payments).
+1. **Утечка Gemini API-ключа** — `research/compare_quality.py:6` содержит реальный ключ, плюс старые `PROMPT_AI_PHOTO.md` и предыдущие версии `SESSION_STATUS.md` в git history. Ротировать в AI Studio + удалить файл + `git filter-repo` для чистки истории. Когда: перед любым расшариванием репо или в начале 7.4. **(остаётся открытым — решение юзера не трогать в 7.4, репо приватный)**
+2. ✅ **ЗАКРЫТО в 7.4 (Session 43).** Webhook больше не логирует секрет — `backend/main.py:133` печатает только факт mismatch.
+3. ✅ **ЗАКРЫТО в 7.4 (Session 43).** `validate_init_data` отвергает initData старше `INITDATA_MAX_AGE_SEC=86400` (config) — `backend/core/security.py`.
 4. **AdminCube `total_stars_earned`** — уже отдельной секцией ниже, оставить.
-5. **`/boosts/buy` активирует буст без оплаты** — `backend/api/routers/boosts.py:79`. Гейтить через Telegram Stars в 7.4.
+5. ✅ **ЗАКРЫТО в 7.4 (Session 43).** `POST /boosts/buy` удалён; активация буста только через `successful_payment` → `services/boost_service.activate_boost`. Оплата обязательна.
 6. **`finish_session` не апдейтит `global_score`/`three_day_score`** — `backend/api/routers/admin.py:385` показывает workouts-done из устаревших полей. Либо чинить запись в finish_session, либо в admin читать реальный count из workout_sessions. Когда: Phase 8 (там админ-панель пересобирается).
 7. **Видео-ретеншн 7 дней — только комментарий в `017_workout_sessions.sql:65`**. Реализовать APScheduler-таску. Когда: Phase 8 (GDPR-блок).
 8. **FE FSM reducer принимает поздний `AI_VERDICT` в любом состоянии** — `frontend/src/fsm/workoutSessionMachine.ts:73`. БД корректна (upload использует captured `exercise_idx`), но локальный стейт может писать в чужой index если AI вернётся после auto-next. Когда: после первого реального бага из-за этого или вместе с переработкой `200_workoutSessionMachine`.
-9. **`shop_items.price_stars` семантически = drops** (списывается из `xp_balance`), но имя поля врёт — `backend/api/routers/shop.py:388,402`. Либо переименовать в `price_drops` (новая миграция), либо разделить real Stars vs in-game drops. Когда: 7.4, когда Telegram Stars зайдут реально.
+9. ✅ **ЗАКРЫТО в 7.4 (Session 43).** `shop_items.price_stars → price_drops` (миграция 029, idempotent) + весь стек (`shop.py`, `shop.ts`, `MarketCube.tsx`). `promo_codes.price_stars` не тронут. NB: `star_products.price_stars` — намеренно реальная цена в Stars (новая таблица 028).
 10. **`014_tiers_bans_maintenance.sql` / `023_rename_star_balance_to_xp.sql` неидемпотентны** — нет `IF NOT EXISTS`. При повторном применении упадут. Не критично сейчас (применены), но style-guide на новые миграции — всегда idempotent.
+
+---
+
+## ⭐ Тиры/подписки за Telegram Stars (поверх инфры 7.4)
+
+**Контекст:** в 7.4 сделана разовая покупка бустов через Stars (invoice → pre_checkout → successful_payment → fulfill). Для тарифов Responsible (standard/premium/elite) логичнее нативные **Stars-подписки**, а не разовые платежи.
+
+**Что делать:** использовать `subscription_period` в `createInvoiceLink` (Bot API 8.0+, только 30 дней/2500⭐ лимиты Telegram) + обрабатывать `BotSubscriptionUpdated`-апдейты (появились в Bot API 10.2) для авто-продления/отмены. Хранить подписки в отдельной таблице, связать с `responsible_access_tier`.
+
+**Когда:** когда тиры начнут продаваться напрямую за Stars (не промокодами). Инфраструктура `payments`/`star_products` переиспользуется.
 
 ---
 
