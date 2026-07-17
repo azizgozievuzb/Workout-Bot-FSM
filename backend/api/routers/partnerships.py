@@ -12,7 +12,6 @@ from pydantic import BaseModel
 from ...core.deps import get_bot, get_current_user
 from ...db.client import get_supabase
 from ...services.bot_notify import send_bot_message
-from ...services.fsm.onboarding_fsm import OnboardingService
 from ...services.notifications import emit_notification
 
 router = APIRouter(prefix="/partnerships", tags=["partnerships"])
@@ -37,78 +36,12 @@ class DeletePartnershipResp(BaseModel):
     player_hard_deleted: bool
 
 
-class PairingCodeResponse(BaseModel):
-    pairing_code: str
-
-
-class AcceptCodeRequest(BaseModel):
-    code: str
-
-
 class PartnerInfo(BaseModel):
     telegram_id: int
     first_name: str | None
     telegram_username: str | None
     role: str
     profile_photo_url: str | None
-
-
-@router.post("/create-code", response_model=PairingCodeResponse)
-async def create_pairing_code(
-    current_user: dict = Depends(get_current_user),
-) -> PairingCodeResponse:
-    """
-    Player генерирует pairing code.
-    Если код уже существует (pending) — возвращает существующий.
-    """
-    if current_user["role"] != "player":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only players can create codes")
-
-    db = await get_supabase()
-
-    # Ищем user.id
-    user_res = (
-        await db.table("users")
-        .select("id")
-        .eq("telegram_id", current_user["telegram_id"])
-        .single()
-        .execute()
-    )
-    user_id = user_res.data["id"]
-
-    # Проверяем — нет ли уже pending кода
-    existing = (
-        await db.table("partnerships")
-        .select("pairing_code")
-        .eq("player_id", user_id)
-        .eq("status", "pending")
-        .execute()
-    )
-    if existing.data:
-        return PairingCodeResponse(pairing_code=existing.data[0]["pairing_code"])
-
-    svc = OnboardingService(db)
-    code = await svc.generate_pairing_code(current_user["telegram_id"])
-    return PairingCodeResponse(pairing_code=code)
-
-
-@router.post("/accept-code")
-async def accept_pairing_code(
-    body: AcceptCodeRequest,
-    current_user: dict = Depends(get_current_user),
-) -> dict:
-    """Responsible вводит код игрока."""
-    if current_user["role"] != "responsible":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only responsible can accept codes")
-
-    db = await get_supabase()
-    svc = OnboardingService(db)
-    success = await svc.accept_pairing_code(current_user["telegram_id"], body.code)
-
-    if not success:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Code not found or already used")
-
-    return {"status": "paired"}
 
 
 @router.get("/my-partner", response_model=PartnerInfo | None)
