@@ -24,11 +24,41 @@ Job H (daily 03:00 UTC) — increment_active_days:
 import logging
 from datetime import datetime, timedelta, timezone, date
 
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice
+
+from ..core.config import settings
 from ..db.client import get_supabase
 from ..services.notifications import emit_notification
 from ..services.bot_notify import send_bot_message
+from ..services.tier_pricing import (
+    SUBSCRIPTION_GRACE_DAYS,
+    base_price,
+    get_tier_price_row,
+    insert_tier_payment,
+    invoice_description,
+    invoice_title,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _get_bot_safe():
+    try:
+        from ..core.deps import get_bot
+        return get_bot()
+    except Exception as e:  # bot not initialised (e.g. cron before lifespan)
+        logger.info("[sub_lifecycle] bot not available (%s)", e)
+        return None
+
+
+def _parse_dt(iso: str | None) -> datetime | None:
+    if not iso:
+        return None
+    try:
+        dt = datetime.fromisoformat(iso)
+        return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+    except Exception:
+        return None
 
 
 async def consume_streak_freezes() -> None:
@@ -225,6 +255,158 @@ async def increment_active_days() -> None:
             )
 
 
+# ---------------------------------------------------------------------------
+# Jobs A/B — subscription renewal (task 7.5). Money lives on the Responsible.
+# ---------------------------------------------------------------------------
+
+async def _send_renewal_invoice(db, bot, user_row: dict, expired: bool) -> bool:
+    """Send a 1-month renewal invoice (sendInvoice, XTR) to the Responsible's chat.
+
+    Creates a pending tier payment snapshot; the successful_payment handler fulfils it.
+    Returns True if the invoice was sent.
+    """
+    tier = user_row.get("responsible_access_tier") or "standard"
+    tg_id = user_row.get("telegram_id")
+    if not tg_id:
+        return False
+    price_row = await get_tier_price_row(db, tier)
+    price = base_price(price_row, "1m") if price_row else None
+    if not price:
+        logger.error("[sub_lifecycle] no 1m price for tier=%s", tier)
+        return False
+
+    try:
+        payment_id = await insert_tier_payment(db, user_row["id"], tier, "1m", price)
+    except Exception as e:
+        logger.error("[sub_lifecycle] renewal payment insert failed uid=%s: %s", user_row["id"], e)
+        return False
+
+    miniapp_url = f"https://t.me/{settings.BOT_USERNAME}?startapp=renew"
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f"Заплатить {price} ⭐", pay=True)],
+        [InlineKeyboardButton(text="Другие варианты", url=miniapp_url)],
+    ])
+    header = "❗️ Подписка истекла." if expired else "⏳ Подписка скоро истекает."
+    title = invoice_title(tier, "1m")
+    try:
+        await bot.send_invoice(
+            chat_id=tg_id,
+            title=title,
+            description=f"{header} {invoice_description(tier, '1m')}",
+            payload=payment_id,
+            currency="XTR",
+            prices=[LabeledPrice(label=title, amount=price)],
+            reply_markup=kb,
+        )
+        return True
+    except Exception as e:
+        logger.error("[sub_lifecycle] send_invoice failed tg=%s: %s", tg_id, e)
+        try:
+            await (
+                db.table("payments").update({"status": "failed"})
+                .eq("id", payment_id).eq("status", "pending").execute()
+            )
+        except Exception:
+            pass
+        return False
+
+
+async def _responsibles() -> list[dict]:
+    db = await get_supabase()
+    res = await (
+        db.table("users")
+        .select("id, telegram_id, responsible_access_tier, subscription_expires_at, "
+                "last_renewal_reminder_at, pricing_mode")
+        .eq("has_responsible_access", True)
+        .execute()
+    )
+    return res.data or []
+
+
+async def send_renewal_reminders() -> None:
+    """Job A (daily 09:00 UTC) — Ответственным за ≤3 дня до истечения шлём счёт-напоминание.
+
+    Только pricing_mode IS NULL; не чаще одного раза в день (last_renewal_reminder_at).
+    """
+    db = await get_supabase()
+    now = datetime.now(timezone.utc)
+    horizon = now + timedelta(days=3)
+    today = now.date().isoformat()
+
+    rows = await _responsibles()
+    if not rows:
+        return
+    bot = _get_bot_safe()
+    if bot is None:
+        return
+
+    for u in rows:
+        if u.get("pricing_mode") is not None:
+            continue
+        exp = _parse_dt(u.get("subscription_expires_at"))
+        if exp is None or not (now < exp <= horizon):
+            continue
+        last = u.get("last_renewal_reminder_at")
+        if last and str(last)[:10] == today:
+            continue
+        if await _send_renewal_invoice(db, bot, u, expired=False):
+            await (
+                db.table("users").update({"last_renewal_reminder_at": now.isoformat()})
+                .eq("id", u["id"]).execute()
+            )
+            logger.info("[sub_lifecycle] Job A: renewal reminder sent uid=%s", u["id"])
+
+
+async def handle_expired_subscriptions() -> None:
+    """Job B (daily 09:05 UTC) — истечение + grace:
+       * просроченным Ответственным (pricing_mode NULL) — ежедневный счёт-пейволл продления;
+       * игрокам, чей Ответственный перешёл границу grace (3 дня) — уведомление о паузе.
+    """
+    db = await get_supabase()
+    now = datetime.now(timezone.utc)
+    today = now.date().isoformat()
+
+    rows = await _responsibles()
+    if not rows:
+        return
+    bot = _get_bot_safe()
+
+    for u in rows:
+        if u.get("pricing_mode") is not None:
+            continue
+        exp = _parse_dt(u.get("subscription_expires_at"))
+        if exp is None or exp >= now:
+            continue  # not expired
+
+        # 1) daily renewal paywall invoice (throttled once/day)
+        last = u.get("last_renewal_reminder_at")
+        if bot is not None and not (last and str(last)[:10] == today):
+            if await _send_renewal_invoice(db, bot, u, expired=True):
+                await (
+                    db.table("users").update({"last_renewal_reminder_at": now.isoformat()})
+                    .eq("id", u["id"]).execute()
+                )
+
+        # 2) fire the players-paused notice once, at the grace boundary
+        grace_end = exp + timedelta(days=SUBSCRIPTION_GRACE_DAYS)
+        if now - timedelta(days=1) <= grace_end < now:
+            parts = await (
+                db.table("partnerships").select("player_id")
+                .eq("responsible_id", u["id"]).eq("status", "active").execute()
+            )
+            for p in (parts.data or []):
+                pid = p.get("player_id")
+                if not pid:
+                    continue
+                await emit_notification(
+                    db, user_id=pid, type="access_paused",
+                    title="⏸ Доступ на паузе",
+                    message="Подписка вашего наставника истекла. Тренировки на паузе до продления.",
+                    payload={},
+                )
+            logger.info("[sub_lifecycle] Job B: players paused for responsible uid=%s", u["id"])
+
+
 def register_subscription_jobs(scheduler) -> None:
     """Вызывается из promo_lifecycle.create_scheduler (или main lifespan)."""
     scheduler.add_job(
@@ -246,4 +428,15 @@ def register_subscription_jobs(scheduler) -> None:
         cleanup_dead_partnerships,
         trigger="cron", hour=3, minute=30,
         id="cleanup_dead_partnerships", replace_existing=True,
+    )
+    # 7.5 subscription renewal
+    scheduler.add_job(
+        send_renewal_reminders,
+        trigger="cron", hour=9, minute=0,
+        id="send_renewal_reminders", replace_existing=True,
+    )
+    scheduler.add_job(
+        handle_expired_subscriptions,
+        trigger="cron", hour=9, minute=5,
+        id="handle_expired_subscriptions", replace_existing=True,
     )

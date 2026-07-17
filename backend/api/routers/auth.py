@@ -1,6 +1,6 @@
 """POST /auth/telegram — валидирует initData, возвращает JWT."""
 import math
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
@@ -17,8 +17,31 @@ USER_SELECT_COLS = (
     "ban_until, ban_reason, ban_missed_workouts, "
     "responsible_access_tier, player_access_tier, "
     "shop_freeze_balance, gift_freeze_balance, gender, "
-    "goal, goal_update_required"
+    "goal, goal_update_required, "
+    "subscription_expires_at, pricing_mode, custom_price_stars"
 )
+
+# Grace window (days) a Player keeps access after their Responsible's subscription lapses.
+SUBSCRIPTION_GRACE_DAYS = 3
+
+
+def _parse_dt(iso: str | None) -> datetime | None:
+    if not iso:
+        return None
+    try:
+        dt = datetime.fromisoformat(iso)
+        return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+    except Exception:
+        return None
+
+
+def _days_left(iso: str | None, now: datetime) -> int | None:
+    dt = _parse_dt(iso)
+    if dt is None:
+        return None
+    if dt <= now:
+        return 0
+    return max(1, math.ceil((dt - now).total_seconds() / 86400))
 
 
 ONBOARDING_REQUIRED_MESSAGE = "Вернись в бот, ответь на 3 вопроса (/settings)."
@@ -40,6 +63,14 @@ def _is_onboarding_blocked(user_data: dict) -> bool:
 
 class TelegramAuthRequest(BaseModel):
     init_data: str
+
+
+class SubscriptionInfo(BaseModel):
+    active: bool
+    expires_at: str | None = None
+    is_first_payment: bool = True
+    tier: str | None = None
+    pricing_mode: str | None = None
 
 
 class TokenResponse(BaseModel):
@@ -71,10 +102,118 @@ class TokenResponse(BaseModel):
     gender: str | None = None
     onboarding_blocked: bool = False
     onboarding_blocked_message: str | None = None
+    # Subscription v3 (7.5) — источник пейволла/гейтинга
+    subscription: SubscriptionInfo | None = None
+
+
+async def _has_fulfilled_tier_payment(db, user_uuid: str) -> bool:
+    res = await (
+        db.table("payments")
+        .select("id")
+        .eq("buyer_user_id", user_uuid)
+        .like("product_type", "tier_%")
+        .eq("status", "fulfilled")
+        .limit(1)
+        .execute()
+    )
+    return bool(res.data)
+
+
+async def _compute_subscription(db, user_data: dict, now: datetime) -> SubscriptionInfo:
+    """
+    Источник доступа — users.subscription_expires_at Ответственного.
+    Ответственный/Админ: своя подписка. Игрок: подписка его Ответственного + grace 3 дня.
+    pricing_mode='free' → всегда active.
+    """
+    user_uuid = user_data["id"]
+    is_admin = bool(user_data.get("is_admin"))
+    has_resp = bool(user_data.get("has_responsible_access"))
+    has_player = bool(user_data.get("has_player_access"))
+
+    if is_admin or has_resp:
+        pricing_mode = user_data.get("pricing_mode")
+        tier = user_data.get("responsible_access_tier")
+        exp_raw = user_data.get("subscription_expires_at")
+        exp_dt = _parse_dt(exp_raw)
+        active = is_admin or pricing_mode == "free" or (exp_dt is not None and exp_dt > now)
+        is_first = not await _has_fulfilled_tier_payment(db, user_uuid)
+        return SubscriptionInfo(
+            active=active, expires_at=exp_raw, is_first_payment=is_first,
+            tier=tier, pricing_mode=pricing_mode,
+        )
+
+    if has_player:
+        part_res = await (
+            db.table("partnerships")
+            .select("responsible_id")
+            .eq("player_id", user_uuid)
+            .eq("status", "active")
+            .limit(1)
+            .execute()
+        )
+        if part_res.data:
+            resp_res = await (
+                db.table("users")
+                .select("subscription_expires_at, pricing_mode, responsible_access_tier")
+                .eq("id", part_res.data[0]["responsible_id"])
+                .maybe_single()
+                .execute()
+            )
+            rd = resp_res.data if resp_res else None
+            if rd:
+                pm = rd.get("pricing_mode")
+                exp_raw = rd.get("subscription_expires_at")
+                exp_dt = _parse_dt(exp_raw)
+                grace_cutoff = now - timedelta(days=SUBSCRIPTION_GRACE_DAYS)
+                active = pm == "free" or (exp_dt is not None and exp_dt > grace_cutoff)
+                return SubscriptionInfo(
+                    active=active, expires_at=exp_raw, is_first_payment=False,
+                    tier=rd.get("responsible_access_tier"), pricing_mode=pm,
+                )
+        return SubscriptionInfo(active=False, is_first_payment=False)
+
+    # New user without a role → paywall (becomes Responsible after intro payment).
+    return SubscriptionInfo(
+        active=False, is_first_payment=True,
+        pricing_mode=user_data.get("pricing_mode"),
+    )
+
+
+async def _apply_free_pricing_grant(db, user_data: dict) -> None:
+    """pricing_mode='free' аккаунт без роли → бесплатный доступ Ответственного (без оплаты)."""
+    if user_data.get("pricing_mode") != "free":
+        return
+    if user_data.get("is_admin") or user_data.get("has_responsible_access") or user_data.get("has_player_access"):
+        return
+    tier = user_data.get("responsible_access_tier") or "standard"
+    await (
+        db.table("users")
+        .update({
+            "has_responsible_access": True,
+            "primary_role": "responsible",
+            "role": "responsible",
+            "responsible_access_tier": tier,
+            "onboarding_done": True,
+            "onboarding_state": "onboardingComplete",
+        })
+        .eq("id", user_data["id"])
+        .execute()
+    )
+    user_data.update({
+        "has_responsible_access": True,
+        "primary_role": "responsible",
+        "role": "responsible",
+        "responsible_access_tier": tier,
+        "onboarding_done": True,
+    })
 
 
 async def _build_full_token_response(db, telegram_id: int, user_data: dict) -> TokenResponse:
     user_uuid = user_data["id"]
+
+    # pricing_mode='free' аккаунт без роли → бесплатный доступ Ответственного.
+    await _apply_free_pricing_grant(db, user_data)
+
     primary = user_data.get("primary_role")
     is_admin = bool(user_data.get("is_admin", False))
     compat_role = "admin" if is_admin else (primary or user_data.get("role") or SHELL_ROLE)
@@ -86,20 +225,9 @@ async def _build_full_token_response(db, telegram_id: int, user_data: dict) -> T
     has_responsible_access = bool(user_data.get("has_responsible_access", False))
 
     now = datetime.now(timezone.utc)
-    now_iso = now.isoformat()
 
-    # has_promo_code — unused player_code for responsibles
-    has_promo = False
-    promo_res = (
-        await db.table("promo_codes")
-        .select("id")
-        .eq("responsible_id", user_uuid)
-        .eq("code_type", "player")
-        .eq("is_used", False)
-        .limit(1)
-        .execute()
-    )
-    has_promo = bool(promo_res.data)
+    # Subscription (7.5) — источник пейволла/гейтинга.
+    subscription = await _compute_subscription(db, user_data, now)
 
     # Active ban
     ban_until_raw = user_data.get("ban_until")
@@ -121,33 +249,10 @@ async def _build_full_token_response(db, telegram_id: int, user_data: dict) -> T
     elif has_player_access:
         own_access_tier = user_data.get("player_access_tier")
 
-    # player_view_tier — inherited tier from Responsible (stored at P-code activation)
-    player_view_tier: str | None = None
-    days_left: int | None = None
-    if has_player_access:
-        player_view_tier = user_data.get("player_access_tier")
-
-        part_res = (
-            await db.table("partnerships")
-            .select("expires_at")
-            .eq("player_id", user_uuid)
-            .order("expires_at", desc=True)
-            .limit(1)
-            .execute()
-        )
-        part_row = (part_res.data or [None])[0]
-        if part_row:
-            expires_at_raw = part_row.get("expires_at")
-            if expires_at_raw:
-                try:
-                    exp_dt = datetime.fromisoformat(expires_at_raw)
-                    if exp_dt.tzinfo is None:
-                        exp_dt = exp_dt.replace(tzinfo=timezone.utc)
-                    if exp_dt > now:
-                        delta = exp_dt - now
-                        days_left = max(1, math.ceil(delta.total_seconds() / 86400))
-                except Exception:
-                    pass
+    # player_view_tier — inherited tier from the Responsible.
+    player_view_tier: str | None = user_data.get("player_access_tier") if has_player_access else None
+    # days_left — из подписки (Ответственного или своей), больше не из partnerships.expires_at.
+    days_left: int | None = _days_left(subscription.expires_at, now) if subscription.active else None
 
     # Freeze wallets (Responsible) — from user_data
     shop_freeze_balance = int(user_data.get("shop_freeze_balance") or 0)
@@ -175,7 +280,7 @@ async def _build_full_token_response(db, telegram_id: int, user_data: dict) -> T
             await db.table("partnerships")
             .select("id", count="exact")
             .eq("responsible_id", user_uuid)
-            .gt("expires_at", now_iso)
+            .eq("status", "active")
             .execute()
         )
         has_active_partnerships = bool((ap_res.count or 0) > 0)
@@ -204,7 +309,7 @@ async def _build_full_token_response(db, telegram_id: int, user_data: dict) -> T
         has_player_access=has_player_access,
         has_responsible_access=has_responsible_access,
         is_admin=is_admin,
-        has_promo_code=has_promo,
+        has_promo_code=False,
         ban_until=active_ban_until,
         ban_reason=user_data.get("ban_reason") if active_ban_until else None,
         ban_missed=user_data.get("ban_missed_workouts", 0) if active_ban_until else 0,
@@ -220,6 +325,7 @@ async def _build_full_token_response(db, telegram_id: int, user_data: dict) -> T
         gender=user_data.get("gender"),
         onboarding_blocked=blocked,
         onboarding_blocked_message=ONBOARDING_REQUIRED_MESSAGE if blocked else None,
+        subscription=subscription,
     )
 
 
@@ -278,7 +384,6 @@ async def register_user(body: TelegramAuthRequest) -> TokenResponse:
 
     # Уже зарегистрирован — возвращаем профиль v2
     if user_data is not None:
-        _check_onboarding_gate(user_data)
         return await _build_full_token_response(db, telegram_id, user_data)
 
     # Новый пользователь — создаём минимальную запись
