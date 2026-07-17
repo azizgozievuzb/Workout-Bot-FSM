@@ -1,21 +1,7 @@
 import api from './client';
-import type { AccessTier, DurationDays } from './promo';
+import type { AccessTier } from '../stores/authStore';
 
-export interface PromoCodeInfo {
-    id: string;
-    code: string;
-    code_type: string;
-    tier: string;
-    is_used: boolean;
-    used_by: string | null;
-    responsible_id: string | null;
-    created_at: string | null;
-}
-
-export async function listPromoCodes(params?: { code_type?: string; is_used?: boolean; tier?: string }) {
-    const res = await api.get('/admin/promo/list', { params });
-    return res.data as { codes: PromoCodeInfo[] };
-}
+type DurationDays = 7 | 30 | 90 | 180;
 
 export interface PlayerStats {
     workouts_done: number;
@@ -152,27 +138,3 @@ export async function applyTierDowngrade(
     return res.data;
 }
 
-export interface CreateResponsibleCodeResponse {
-    code: string;
-    expires_at: string | null;
-}
-
-export async function createResponsibleCode(
-    tier: AccessTier,
-    durationDays: DurationDays,
-): Promise<CreateResponsibleCodeResponse> {
-    const res = await api.post('/admin/promo/tier', { access_tier: tier, duration_days: durationDays });
-    return res.data;
-}
-
-export interface CreateRenewalCodeResponse {
-    code: string;
-}
-
-export async function createRenewalCode(
-    _tier: AccessTier,
-    durationDays: DurationDays,
-): Promise<CreateRenewalCodeResponse> {
-    const res = await api.post('/admin/promo/renewal', { duration_days: durationDays });
-    return res.data;
-}
