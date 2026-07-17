@@ -3,6 +3,8 @@
 Coupons / tier-prices / user pricing overrides are added to these routers in Phase 6.
 The legacy promo-code generation (R/renewal/bonus-pack/batch) was removed in 7.5.
 """
+import secrets
+import string
 import uuid as _uuid
 from datetime import datetime, timedelta, timezone
 from typing import Literal
@@ -13,6 +15,8 @@ from pydantic import BaseModel, Field
 
 from ...core.deps import get_current_user, require_admin
 from ...db.client import get_supabase
+
+_CODE_ALPHABET = string.ascii_uppercase + string.digits
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 general_router = APIRouter(prefix="/admin", tags=["admin"])
@@ -433,4 +437,173 @@ async def apply_tier_downgrade(
         evicted_count=evicted_count,
         new_tier=new_tier,
         remaining_players=remaining_players_list,
+    )
+
+
+# ===========================================================================
+# Coupons — admin (7.5)
+# ===========================================================================
+
+class CouponRow(BaseModel):
+    id: str
+    code: str
+    discount_pct: int
+    is_active: bool
+    max_uses: int | None = None
+    used_count: int = 0
+    expires_at: str | None = None
+    created_at: str | None = None
+
+
+class CreateCouponReq(BaseModel):
+    code: str | None = None  # None → autogenerate
+    discount_pct: int = Field(ge=1, le=99)
+    max_uses: int | None = Field(default=None, ge=1)
+    expires_at: str | None = None
+
+
+class UpdateCouponReq(BaseModel):
+    is_active: bool
+
+
+@general_router.get("/coupons", response_model=list[CouponRow])
+async def list_coupons(admin: dict = Depends(require_admin)):
+    db = await get_supabase()
+    res = await (
+        db.table("coupons")
+        .select("id, code, discount_pct, is_active, max_uses, used_count, expires_at, created_at")
+        .order("created_at", desc=True)
+        .execute()
+    )
+    return [CouponRow(id=str(r["id"]), **{k: r[k] for k in r if k != "id"}) for r in (res.data or [])]
+
+
+@general_router.post("/coupons", response_model=CouponRow)
+async def create_coupon(body: CreateCouponReq, admin: dict = Depends(require_admin)):
+    db = await get_supabase()
+    code = (body.code or "").strip().upper() or "".join(secrets.choice(_CODE_ALPHABET) for _ in range(8))
+
+    existing = await db.table("coupons").select("id").eq("code", code).maybe_single().execute()
+    if existing and existing.data:
+        raise HTTPException(status_code=409, detail={"code": "CODE_EXISTS"})
+
+    ins = await (
+        db.table("coupons")
+        .insert({
+            "code": code,
+            "discount_pct": body.discount_pct,
+            "max_uses": body.max_uses,
+            "expires_at": body.expires_at,
+            "is_active": True,
+        })
+        .execute()
+    )
+    if not ins.data:
+        raise HTTPException(status_code=500, detail="Failed to create coupon")
+    r = ins.data[0]
+    return CouponRow(id=str(r["id"]), **{k: r[k] for k in r if k != "id"})
+
+
+@general_router.patch("/coupons/{coupon_id}", response_model=CouponRow)
+async def update_coupon(coupon_id: _uuid.UUID, body: UpdateCouponReq, admin: dict = Depends(require_admin)):
+    db = await get_supabase()
+    res = await (
+        db.table("coupons")
+        .update({"is_active": body.is_active})
+        .eq("id", str(coupon_id))
+        .execute()
+    )
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Coupon not found")
+    r = res.data[0]
+    return CouponRow(id=str(r["id"]), **{k: r[k] for k in r if k != "id"})
+
+
+# ===========================================================================
+# Tier prices — admin (7.5)
+# ===========================================================================
+
+class TierPriceRow(BaseModel):
+    tier: str
+    intro_price_stars: int
+    price_1m: int
+    price_3m: int
+    price_12m: int
+    updated_at: str | None = None
+
+
+class UpdateTierPriceReq(BaseModel):
+    intro_price_stars: int | None = Field(default=None, ge=1)
+    price_1m: int | None = Field(default=None, ge=1)
+    price_3m: int | None = Field(default=None, ge=1)
+    price_12m: int | None = Field(default=None, ge=1)
+
+
+@general_router.get("/tier-prices", response_model=list[TierPriceRow])
+async def list_tier_prices(admin: dict = Depends(require_admin)):
+    db = await get_supabase()
+    res = await (
+        db.table("tier_prices")
+        .select("tier, intro_price_stars, price_1m, price_3m, price_12m, updated_at")
+        .execute()
+    )
+    order = {"standard": 0, "premium": 1, "elite": 2}
+    rows = sorted(res.data or [], key=lambda r: order.get(r["tier"], 9))
+    return [TierPriceRow(**r) for r in rows]
+
+
+@general_router.patch("/tier-prices/{tier}", response_model=TierPriceRow)
+async def update_tier_price(
+    tier: Literal["standard", "premium", "elite"],
+    body: UpdateTierPriceReq,
+    admin: dict = Depends(require_admin),
+):
+    db = await get_supabase()
+    update: dict = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    for col in ("intro_price_stars", "price_1m", "price_3m", "price_12m"):
+        val = getattr(body, col)
+        if val is not None:
+            update[col] = val
+    if len(update) == 1:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+
+    res = await db.table("tier_prices").update(update).eq("tier", tier).execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Tier not found")
+    return TierPriceRow(**res.data[0])
+
+
+# ===========================================================================
+# User pricing override — admin (7.5)
+# ===========================================================================
+
+class UserPricingReq(BaseModel):
+    mode: Literal["free", "custom"] | None = None  # null → обычный режим
+    custom_price_stars: int | None = Field(default=None, ge=1)
+
+
+class UserPricingResp(BaseModel):
+    id: str
+    pricing_mode: str | None = None
+    custom_price_stars: int | None = None
+
+
+@general_router.patch("/users/{user_id}/pricing", response_model=UserPricingResp)
+async def set_user_pricing(user_id: _uuid.UUID, body: UserPricingReq, admin: dict = Depends(require_admin)):
+    db = await get_supabase()
+    if body.mode == "custom" and (body.custom_price_stars is None or body.custom_price_stars < 1):
+        raise HTTPException(status_code=400, detail={"code": "CUSTOM_PRICE_REQUIRED"})
+
+    update = {
+        "pricing_mode": body.mode,
+        "custom_price_stars": body.custom_price_stars if body.mode == "custom" else None,
+    }
+    res = await db.table("users").update(update).eq("id", str(user_id)).execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="User not found")
+    r = res.data[0]
+    return UserPricingResp(
+        id=str(r["id"]),
+        pricing_mode=r.get("pricing_mode"),
+        custom_price_stars=r.get("custom_price_stars"),
     )

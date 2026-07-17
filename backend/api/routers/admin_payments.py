@@ -35,6 +35,10 @@ class PaymentRow(BaseModel):
     amount_stars: int
     status: str
     created_at: str | None = None
+    tier: str | None = None
+    period: str | None = None
+    discount_pct: int | None = None
+    coupon_code: str | None = None
 
 
 class RefundResponse(BaseModel):
@@ -74,7 +78,8 @@ async def list_payments(
 ):
     db = await get_supabase()
     q = db.table("payments").select(
-        "id, buyer_user_id, product_type, amount_stars, status, created_at"
+        "id, buyer_user_id, product_type, amount_stars, status, created_at, "
+        "tier, period, discount_pct, coupon_id"
     )
     if status:
         q = q.eq("status", status)
@@ -83,6 +88,7 @@ async def list_payments(
 
     buyer_ids = list({r["buyer_user_id"] for r in rows if r.get("buyer_user_id")})
     product_types = list({r["product_type"] for r in rows if r.get("product_type")})
+    coupon_ids = list({r["coupon_id"] for r in rows if r.get("coupon_id")})
 
     buyers: dict = {}
     if buyer_ids:
@@ -104,6 +110,11 @@ async def list_payments(
         )
         titles = {p["product_type"]: p["title"] for p in (pres.data or [])}
 
+    coupon_codes: dict = {}
+    if coupon_ids:
+        cres = await db.table("coupons").select("id, code").in_("id", coupon_ids).execute()
+        coupon_codes = {str(c["id"]): c["code"] for c in (cres.data or [])}
+
     out = []
     for r in rows:
         b = buyers.get(str(r.get("buyer_user_id")), {})
@@ -116,6 +127,10 @@ async def list_payments(
             amount_stars=int(r["amount_stars"]),
             status=r["status"],
             created_at=r.get("created_at"),
+            tier=r.get("tier"),
+            period=r.get("period"),
+            discount_pct=r.get("discount_pct"),
+            coupon_code=coupon_codes.get(str(r.get("coupon_id"))) if r.get("coupon_id") else None,
         ))
     return out
 
@@ -205,7 +220,7 @@ async def refund_payment(
     await send_bot_message(
         bot,
         buyer_tg,
-        "↩️ Возврат оформлен: звёзды за буст X2 возвращены на ваш баланс Telegram."
+        "↩️ Возврат оформлен: звёзды возвращены на ваш баланс Telegram."
         + (" Буст деактивирован." if boost_deactivated else ""),
     )
 
