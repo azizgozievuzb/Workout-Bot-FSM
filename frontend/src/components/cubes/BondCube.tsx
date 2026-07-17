@@ -7,6 +7,11 @@ import type { FeedItem } from '../../api/activityFeed';
 import { getUnreadCount } from '../../api/notifications';
 import { NotificationList } from '../bond/NotificationList';
 import RoleTransition from '../shared/RoleTransition';
+import { getMyPlayers } from '../../api/partnerships';
+import type { MyPlayer } from '../../api/partnerships';
+import { createInvite, listInvites, deleteInvite } from '../../api/invites';
+import type { Invite } from '../../api/invites';
+import { hapticImpact, hapticNotification } from '../../utils/haptic';
 import '../../styles/cubes.css';
 
 type ActiveView = 'player' | 'responsible';
@@ -105,8 +110,8 @@ const BondCube: React.FC = () => {
                 dual={dual}
                 onToggle={toggleView}
                 lockedMessage={view === 'player'
-                    ? 'Введите промокод чтобы разблокировать'
-                    : 'Вам нужна пригласительная ссылка'}
+                    ? 'Вам нужна пригласительная ссылка от наставника'
+                    : 'Оформите подписку, чтобы приглашать игроков'}
             >
                 {view === 'player' ? (
                     canPlay(user) ? <PlayerBond /> : <LockedPlayer />
@@ -164,6 +169,103 @@ const PlayerBond: React.FC = () => {
     );
 };
 
+/* ---------- INVITES PANEL (Мои игроки) ---------- */
+
+const InvitesPanel: React.FC = () => {
+    const [players, setPlayers] = useState<MyPlayer[]>([]);
+    const [invites, setInvites] = useState<Invite[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [busy, setBusy] = useState(false);
+    const [err, setErr] = useState('');
+    const [toast, setToast] = useState('');
+
+    useEffect(() => {
+        Promise.all([getMyPlayers().catch(() => []), listInvites().catch(() => [])])
+            .then(([p, i]) => { setPlayers(p); setInvites(i); })
+            .finally(() => setLoading(false));
+    }, []);
+
+    const addPlayer = async () => {
+        if (busy) return;
+        setBusy(true);
+        setErr('');
+        try {
+            const inv = await createInvite();
+            setInvites((prev) => [inv, ...prev]);
+            hapticNotification('success');
+            const tg = (window as any).Telegram?.WebApp;
+            const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(inv.link)}&text=${encodeURIComponent('Приглашаю тебя тренироваться в Workout Bot!')}`;
+            if (tg?.openTelegramLink) tg.openTelegramLink(shareUrl);
+            else if (navigator.clipboard) { await navigator.clipboard.writeText(inv.link); setToast('Ссылка скопирована'); }
+        } catch (e: any) {
+            const d = e?.response?.data?.detail;
+            const code = typeof d === 'object' ? d?.code : d;
+            setErr(
+                code === 'SLOT_FULL' ? 'Все слоты тарифа заняты'
+                    : code === 'SUBSCRIPTION_INACTIVE' ? 'Подписка неактивна — продлите её'
+                        : 'Не удалось создать приглашение',
+            );
+            hapticNotification('error');
+        } finally {
+            setBusy(false);
+            setTimeout(() => setToast(''), 2500);
+        }
+    };
+
+    const copyLink = async (link: string) => {
+        try { await navigator.clipboard.writeText(link); setToast('Ссылка скопирована'); setTimeout(() => setToast(''), 2000); } catch { /* ignore */ }
+    };
+
+    const removeInvite = async (id: string) => {
+        hapticImpact('light');
+        try { await deleteInvite(id); setInvites((prev) => prev.filter((x) => x.id !== id)); } catch { /* ignore */ }
+    };
+
+    const pending = invites.filter((i) => i.status === 'pending');
+
+    return (
+        <div style={{ marginBottom: 16 }}>
+            <div className="cube-section-title">Мои игроки</div>
+
+            {loading ? (
+                <div style={{ textAlign: 'center', opacity: 0.6, padding: 8 }}>Загрузка…</div>
+            ) : players.length === 0 ? (
+                <div style={{ opacity: 0.6, fontSize: 13, padding: '4px 0 8px' }}>Пока нет игроков.</div>
+            ) : (
+                players.map((p) => (
+                    <div key={p.id} className="cube-feed-card">
+                        <div className="cube-feed-icon">🏃</div>
+                        <div><div className="cube-feed-text">{p.first_name ?? 'Игрок'}</div></div>
+                    </div>
+                ))
+            )}
+
+            {pending.length > 0 && (
+                <>
+                    <div className="cube-section-title" style={{ marginTop: 10 }}>Приглашения</div>
+                    {pending.map((inv) => (
+                        <div key={inv.id} className="cube-feed-card" style={{ gap: 8 }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                                <div className="cube-feed-text" style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{inv.code}</div>
+                                <div className="cube-feed-time">ожидает</div>
+                            </div>
+                            <button className="cube-btn-secondary" style={{ width: 'auto', padding: '4px 10px' }} onClick={(e) => { e.stopPropagation(); copyLink(inv.link); }}>Копировать</button>
+                            <button className="cube-btn-secondary" style={{ width: 'auto', padding: '4px 10px' }} onClick={(e) => { e.stopPropagation(); removeInvite(inv.id); }}>✕</button>
+                        </div>
+                    ))}
+                </>
+            )}
+
+            {err && <div style={{ color: '#e74c3c', fontSize: 13, marginTop: 6 }}>{err}</div>}
+            {toast && <div style={{ color: '#2ecc71', fontSize: 13, marginTop: 6 }}>{toast}</div>}
+
+            <button className="cube-btn-secondary" onClick={(e) => { e.stopPropagation(); addPlayer(); }} disabled={busy}>
+                ➕ Добавить игрока
+            </button>
+        </div>
+    );
+};
+
 /* ---------- RESPONSIBLE BOND ---------- */
 
 const ResponsibleBond: React.FC = () => {
@@ -183,6 +285,8 @@ const ResponsibleBond: React.FC = () => {
 
     return (
         <>
+            <InvitesPanel />
+
             <div className="cube-section-title">Лента игроков</div>
 
             {loading ? (
@@ -235,7 +339,7 @@ const LockedResponsible: React.FC = () => (
         <div className="cube-locked-icon">R</div>
         <div className="cube-locked-title">Связь Ответственного</div>
         <div className="cube-locked-text">
-            Введите промокод, чтобы следить за активностью ваших игроков.
+            Оформите подписку, чтобы приглашать игроков и следить за их активностью.
         </div>
     </div>
 );

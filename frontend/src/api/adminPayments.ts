@@ -9,6 +9,10 @@ export interface AdminPaymentRow {
     amount_stars: number;
     status: string;
     created_at: string | null;
+    tier: string | null;
+    period: string | null;
+    discount_pct: number | null;
+    coupon_code: string | null;
 }
 
 export interface RefundResponse {
