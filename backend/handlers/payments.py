@@ -8,7 +8,7 @@ No automatic refunds: a fulfill failure leaves the payment 'paid' and asks the u
 to contact support. Refunds are admin-only (admin_payments router).
 """
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from aiogram import F, Router
 from aiogram.filters import Command
@@ -17,6 +17,7 @@ from aiogram.types import Message, PreCheckoutQuery
 from ..db.client import get_supabase
 from ..services.bot_notify import send_bot_message
 from ..services.boost_service import PRODUCT_TO_BOOST_TYPE, activate_boost
+from ..services.tier_pricing import PERIOD_DAYS, PERIOD_LABELS, TIER_TITLES
 
 logger = logging.getLogger(__name__)
 
@@ -27,18 +28,104 @@ SUPPORT_CONTACT = "@conectionWorkout_bot"
 _BOOST_LABEL = {"1_day": "24 часа", "1_week": "7 дней"}
 
 
+def _is_tier(product_type: str | None) -> bool:
+    return bool(product_type) and str(product_type).startswith("tier_")
+
+
+def _parse_dt(iso: str | None) -> datetime | None:
+    if not iso:
+        return None
+    try:
+        dt = datetime.fromisoformat(iso)
+        return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+    except Exception:
+        return None
+
+
 async def _partnership_active(db, partnership_id: str) -> bool:
-    now_iso = datetime.now(timezone.utc).isoformat()
     res = await (
         db.table("partnerships")
         .select("id")
         .eq("id", partnership_id)
         .eq("status", "active")
-        .gt("expires_at", now_iso)
         .maybe_single()
         .execute()
     )
     return bool(res and res.data)
+
+
+# ---------------------------------------------------------------------------
+# Tier subscription fulfilment (7.5)
+# ---------------------------------------------------------------------------
+
+async def _fulfill_tier_payment(db, message: Message, payment: dict) -> None:
+    """Idempotent (mark-paid already won). Extend/activate the Responsible's subscription."""
+    payment_id = payment["id"]
+    buyer_id = payment["buyer_user_id"]
+    tier = payment.get("tier") or "standard"
+    period = payment.get("period") or "1m"
+    days = PERIOD_DAYS.get(period, 30)
+    now = datetime.now(timezone.utc)
+
+    u_res = await (
+        db.table("users")
+        .select("subscription_expires_at, has_player_access")
+        .eq("id", buyer_id)
+        .maybe_single()
+        .execute()
+    )
+    u = (u_res.data if u_res else None) or {}
+    cur = _parse_dt(u.get("subscription_expires_at"))
+    base = cur if (cur and cur > now) else now
+    new_exp = base + timedelta(days=days)
+
+    update = {
+        "subscription_expires_at": new_exp.isoformat(),
+        "responsible_access_tier": tier,
+        "has_responsible_access": True,
+        "last_renewal_reminder_at": None,
+    }
+    # First-time Responsible (not a dual-role player) → set primary role + finish onboarding gate.
+    if not u.get("has_player_access"):
+        update["primary_role"] = "responsible"
+        update["role"] = "responsible"
+        update["onboarding_done"] = True
+        update["onboarding_state"] = "onboardingComplete"
+
+    try:
+        await db.table("users").update(update).eq("id", buyer_id).execute()
+
+        # Increment coupon usage (best-effort, optimistic).
+        coupon_id = payment.get("coupon_id")
+        if coupon_id:
+            c_res = await db.table("coupons").select("used_count").eq("id", coupon_id).maybe_single().execute()
+            cur_uc = int(c_res.data.get("used_count") or 0) if (c_res and c_res.data) else 0
+            await (
+                db.table("coupons").update({"used_count": cur_uc + 1})
+                .eq("id", coupon_id).eq("used_count", cur_uc).execute()
+            )
+
+        await (
+            db.table("payments")
+            .update({"status": "fulfilled", "fulfilled_at": now.isoformat()})
+            .eq("id", payment_id)
+            .execute()
+        )
+    except Exception as e:
+        logger.error("FULFILL TIER FAILED payment=%s: %s", payment_id, e)
+        await message.answer(
+            "✅ Оплата получена. Подписка активируется автоматически. "
+            f"Если возникнут проблемы — напишите {SUPPORT_CONTACT} или отправьте /paysupport."
+        )
+        return
+
+    tier_title = TIER_TITLES.get(tier, tier)
+    period_label = PERIOD_LABELS.get(period, period)
+    date_str = new_exp.strftime("%d.%m.%Y")
+    await message.answer(
+        f"✅ Подписка <b>{tier_title}</b> активна ({period_label}).\n"
+        f"Доступ действует до <b>{date_str}</b>. Спасибо за поддержку!"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -54,7 +141,7 @@ async def handle_pre_checkout(query: PreCheckoutQuery) -> None:
 
         res = await (
             db.table("payments")
-            .select("id, status, amount_stars, target_partnership_id")
+            .select("id, status, amount_stars, target_partnership_id, product_type")
             .eq("id", payment_id)
             .maybe_single()
             .execute()
@@ -73,9 +160,11 @@ async def handle_pre_checkout(query: PreCheckoutQuery) -> None:
         if query.total_amount != int(p["amount_stars"]):
             await query.answer(ok=False, error_message="Цена изменилась. Начните покупку заново.")
             return
-        if not p["target_partnership_id"] or not await _partnership_active(db, p["target_partnership_id"]):
-            await query.answer(ok=False, error_message="Партнёрство больше не активно.")
-            return
+        # Tier payments have no partnership target; boosts require an active partnership.
+        if not _is_tier(p.get("product_type")):
+            if not p["target_partnership_id"] or not await _partnership_active(db, p["target_partnership_id"]):
+                await query.answer(ok=False, error_message="Партнёрство больше не активно.")
+                return
 
         await query.answer(ok=True)
     except Exception as e:
@@ -114,6 +203,12 @@ async def handle_successful_payment(message: Message) -> None:
         return
 
     payment = paid_res.data[0]
+
+    # Tier subscription payment (7.5) — fulfil on the Responsible.
+    if _is_tier(payment.get("product_type")):
+        await _fulfill_tier_payment(db, message, payment)
+        return
+
     partnership_id = payment.get("target_partnership_id")
     boost_type = PRODUCT_TO_BOOST_TYPE.get(payment["product_type"])
 

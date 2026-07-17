@@ -11,6 +11,7 @@ payment row at invoice time so an admin price change can never alter an open inv
 """
 import logging
 from datetime import datetime, timezone
+from typing import Literal
 
 from aiogram.types import LabeledPrice
 from fastapi import APIRouter, Depends, HTTPException
@@ -18,6 +19,14 @@ from pydantic import BaseModel
 
 from ...core.deps import get_bot, get_current_user
 from ...db.client import get_supabase
+from ...services.tier_pricing import (
+    apply_coupon,
+    base_price,
+    get_tier_price_row,
+    insert_tier_payment,
+    invoice_description,
+    invoice_title,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -96,14 +105,13 @@ async def create_invoice(
     buyer_id = await _fetch_user_id(db, user["telegram_id"])
 
     # Authorization: caller must be the Responsible of an ACTIVE partnership with player_id.
-    now_iso = datetime.now(timezone.utc).isoformat()
+    # (Partnerships are indefinite in 7.5 — liveness is status='active', not expires_at.)
     part_res = await (
         db.table("partnerships")
         .select("id")
         .eq("responsible_id", buyer_id)
         .eq("player_id", body.player_id)
         .eq("status", "active")
-        .gt("expires_at", now_iso)
         .maybe_single()
         .execute()
     )
@@ -195,3 +203,125 @@ async def get_payment(
         raise HTTPException(status_code=404, detail="Payment not found")
 
     return PaymentStatusResponse(status=res.data["status"])
+
+
+# ---------------------------------------------------------------------------
+# POST /payments/tier-invoice  — subscription (tier) payments + coupons (7.5)
+# ---------------------------------------------------------------------------
+
+class TierInvoiceRequest(BaseModel):
+    tier: Literal["standard", "premium", "elite"]
+    period: Literal["intro", "1m", "3m", "12m"]
+    coupon_code: str | None = None
+
+
+async def _has_fulfilled_tier_payment(db, buyer_id: str) -> bool:
+    res = await (
+        db.table("payments").select("id")
+        .eq("buyer_user_id", buyer_id).like("product_type", "tier_%")
+        .eq("status", "fulfilled").limit(1).execute()
+    )
+    return bool(res.data)
+
+
+async def _validate_coupon(db, code: str) -> dict:
+    res = await db.table("coupons").select("*").eq("code", code.strip()).maybe_single().execute()
+    c = res.data if res else None
+    if not c or not c.get("is_active"):
+        raise HTTPException(status_code=400, detail={"code": "COUPON_INVALID"})
+    exp = c.get("expires_at")
+    if exp:
+        try:
+            dt = datetime.fromisoformat(exp)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            if dt <= datetime.now(timezone.utc):
+                raise HTTPException(status_code=400, detail={"code": "COUPON_EXPIRED"})
+        except (ValueError, TypeError):
+            pass
+    max_uses = c.get("max_uses")
+    if max_uses is not None and int(c.get("used_count") or 0) >= int(max_uses):
+        raise HTTPException(status_code=400, detail={"code": "COUPON_EXHAUSTED"})
+    return c
+
+
+@router.post("/tier-invoice", response_model=InvoiceResponse)
+async def create_tier_invoice(
+    body: TierInvoiceRequest,
+    user: dict = Depends(get_current_user),
+):
+    db = await get_supabase()
+    buyer_res = await (
+        db.table("users")
+        .select("id, pricing_mode, custom_price_stars")
+        .eq("telegram_id", user["telegram_id"])
+        .maybe_single()
+        .execute()
+    )
+    if not buyer_res or not buyer_res.data:
+        raise HTTPException(status_code=404, detail="User not found")
+    buyer = buyer_res.data
+    buyer_id = buyer["id"]
+    pricing_mode = buyer.get("pricing_mode")
+    tier, period = body.tier, body.period
+    coupon_id: str | None = None
+    discount_pct: int | None = None
+
+    # All price validation is server-side only.
+    if pricing_mode == "free":
+        raise HTTPException(status_code=400, detail={"code": "FREE_NO_INVOICE"})
+
+    if pricing_mode == "custom":
+        if period != "1m":
+            raise HTTPException(status_code=400, detail={"code": "CUSTOM_PERIOD_1M_ONLY"})
+        if body.coupon_code:
+            raise HTTPException(status_code=400, detail={"code": "CUSTOM_NO_COUPON"})
+        amount = int(buyer.get("custom_price_stars") or 0)
+        if amount < 1:
+            raise HTTPException(status_code=400, detail={"code": "CUSTOM_PRICE_UNSET"})
+    else:
+        price_row = await get_tier_price_row(db, tier)
+        if not price_row:
+            raise HTTPException(status_code=400, detail={"code": "TIER_UNAVAILABLE"})
+        is_first = not await _has_fulfilled_tier_payment(db, buyer_id)
+        if is_first:
+            # First payment: intro month only, no coupon.
+            if period != "intro":
+                raise HTTPException(status_code=400, detail={"code": "FIRST_PAYMENT_INTRO_ONLY"})
+            if body.coupon_code:
+                raise HTTPException(status_code=400, detail={"code": "INTRO_NO_COUPON"})
+            amount = base_price(price_row, "intro")
+        else:
+            if period not in ("1m", "3m", "12m"):
+                raise HTTPException(status_code=400, detail={"code": "RENEWAL_PERIOD_INVALID"})
+            amount = base_price(price_row, period)
+            if body.coupon_code:
+                coupon = await _validate_coupon(db, body.coupon_code)
+                coupon_id = str(coupon["id"])
+                discount_pct = int(coupon["discount_pct"])
+                amount = apply_coupon(amount, discount_pct)
+        if not amount or amount < 1:
+            raise HTTPException(status_code=400, detail={"code": "PRICE_UNSET"})
+
+    payment_id = await insert_tier_payment(db, buyer_id, tier, period, amount, coupon_id, discount_pct)
+
+    bot = get_bot()
+    title = invoice_title(tier, period)
+    try:
+        invoice_link = await bot.create_invoice_link(
+            title=title,
+            description=invoice_description(tier, period),
+            payload=payment_id,
+            currency="XTR",
+            prices=[LabeledPrice(label=title, amount=amount)],
+        )
+    except Exception as e:
+        logger.error("create_invoice_link (tier) failed payment=%s: %s", payment_id, e)
+        await (
+            db.table("payments").update({"status": "failed"})
+            .eq("id", payment_id).eq("status", "pending").execute()
+        )
+        raise HTTPException(status_code=502, detail={"code": "INVOICE_FAILED"})
+
+    await db.table("payments").update({"invoice_link": invoice_link}).eq("id", payment_id).execute()
+    return InvoiceResponse(payment_id=payment_id, invoice_link=invoice_link)
