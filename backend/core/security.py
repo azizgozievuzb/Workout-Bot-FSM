@@ -51,6 +51,17 @@ def validate_init_data(init_data: str) -> dict[str, Any]:
     if not hmac.compare_digest(expected_hash, received_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid hash")
 
+    # Freshness / replay guard: reject initData older than INITDATA_MAX_AGE_SEC.
+    auth_date_raw = params.get("auth_date")
+    if auth_date_raw is not None:
+        try:
+            auth_ts = int(auth_date_raw)
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid auth_date")
+        age = datetime.now(timezone.utc).timestamp() - auth_ts
+        if age > settings.INITDATA_MAX_AGE_SEC:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="initData expired")
+
     # Парсим вложенный JSON (user, receiver, etc.)
     parsed: dict[str, Any] = {}
     for k, v in params.items():

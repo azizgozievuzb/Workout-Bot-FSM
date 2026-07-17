@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     LOG_LEVEL: str = "INFO"
 
+    # Security: max age (seconds) of Telegram initData auth_date before it is rejected (replay guard).
+    INITDATA_MAX_AGE_SEC: int = 86400
+
     @property
     def is_production(self) -> bool:
         return self.ENVIRONMENT == "production"
