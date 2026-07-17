@@ -1,122 +1,110 @@
 import { setup, assign } from 'xstate';
 
 /**
- * PAYMENT MACHINE v6 (Strict Vertical Logic)
+ * PAYMENT MACHINE v7 (task 7.5 — «Всё через Stars»)
  *
- * starsPhase expanded 1:1 with the frontend Telegram Stars flow (task 7.4):
- *   creatingInvoice → invoiceOpen → verifying → success | failure
+ * Промокоды как способ оплаты и hotpay удалены. Единственная оплата — Telegram Stars.
+ * Пользователь выбирает тариф + период (первый платёж = intro, без купона; продление =
+ * 1m/3m/12m + необязательный купон), затем идёт разворачиваемый Stars-флоу:
+ *   selecting → creatingInvoice → invoiceOpen → verifying → success | failure
  *
- * The Telegram openInvoice callback status is NOT the source of truth — after 'paid'
- * we poll our own backend (GET /payments/{id}) and only 'fulfilled' means success.
+ * Истина оплаты — статус в нашей БД (GET /payments/{id} === 'fulfilled'), НЕ callback Telegram.
+ * Вся валидация цен/периодов/купонов — только на сервере (POST /payments/tier-invoice).
  */
+
+type Tier = 'standard' | 'premium' | 'elite';
+type Period = 'intro' | '1m' | '3m' | '12m';
 
 export const paymentMachine = setup({
   types: {
     context: {} as {
-      enteredCode: string;
+      tier: Tier | null;
+      period: Period | null;
+      couponCode: string | null;
+      isFirstPayment: boolean;
       errorMessage: string | null;
     },
     events: {} as
-      | { type: 'CHOOSE_PROMO' }
-      | { type: 'CHOOSE_HOTPAY' }
-      | { type: 'CHOOSE_STARS' }
-      | { type: 'TYPE_CODE'; code: string }
-      | { type: 'SUBMIT_PROMO' }
-      | { type: 'HOTPAY_SUCCESS' }
+      | { type: 'SELECT_TIER'; tier: Tier }
+      | { type: 'SELECT_PERIOD'; period: Period }
+      | { type: 'ENTER_COUPON'; code: string }
+      | { type: 'CLEAR_COUPON' }
+      | { type: 'PAY' }                  // POST /payments/tier-invoice
       | { type: 'INVOICE_CREATED' }      // backend returned invoice_link → openInvoice
       | { type: 'INVOICE_PAID' }         // Telegram callback status === 'paid'
       | { type: 'INVOICE_CANCELLED' }    // status === 'cancelled'
       | { type: 'VERIFY_FULFILLED' }     // GET /payments/{id} === 'fulfilled'
       | { type: 'VERIFY_FAILED' }        // status === 'failed' | 'refunded'
-      | { type: 'VERIFY_TIMEOUT' }       // poll exceeded 30s
+      | { type: 'VERIFY_TIMEOUT' }       // poll exceeded ~30s
       | { type: 'RETRY' }
       | { type: 'BACK' }
   },
   actions: {
-    assignCode: assign({ enteredCode: ({ event }) => event.type === 'TYPE_CODE' ? event.code : '' }),
-    setError: assign({ errorMessage: "Error!" }),
+    assignTier: assign({ tier: ({ event }) => event.type === 'SELECT_TIER' ? event.tier : null }),
+    assignPeriod: assign({ period: ({ event }) => event.type === 'SELECT_PERIOD' ? event.period : null }),
+    assignCoupon: assign({ couponCode: ({ event }) => event.type === 'ENTER_COUPON' ? event.code : null }),
+    clearCoupon: assign({ couponCode: null }),
+    setError: assign({ errorMessage: 'Error!' }),
     clearError: assign({ errorMessage: null }),
+  },
+  guards: {
+    canPay: ({ context }) => context.tier !== null && context.period !== null,
   }
 }).createMachine({
   id: 'paymentMachine',
-  initial: 'idle',
+  initial: 'selecting',
   context: {
-    enteredCode: '',
+    tier: null,
+    period: null,
+    couponCode: null,
+    isFirstPayment: true,
     errorMessage: null,
   },
   states: {
-    // 💡 Главный узел ожидания (как в Root)
-    idle: {
+    // Выбор тарифа/периода/купона. Первый платёж — только intro без купона (валидирует сервер).
+    selecting: {
+      entry: 'clearError',
       on: {
-        CHOOSE_PROMO: 'promoPhase',
-        CHOOSE_HOTPAY: 'hotpayPhase',
-        CHOOSE_STARS: 'starsPhase'
+        SELECT_TIER: { actions: 'assignTier' },
+        SELECT_PERIOD: { actions: 'assignPeriod' },
+        ENTER_COUPON: { actions: 'assignCoupon' },
+        CLEAR_COUPON: { actions: 'clearCoupon' },
+        PAY: { target: 'creatingInvoice', guard: 'canPay' },
+        BACK: 'aborted'
       }
     },
-    // ✅ Ветка 1 (Вертикально)
-    promoPhase: {
-      on: {
-        TYPE_CODE: { actions: 'assignCode' },
-        SUBMIT_PROMO: 'validatingPromo',
-        BACK: 'idle'
-      }
-    },
-    validatingPromo: {
+    // POST /payments/tier-invoice — цена/период/купон только с сервера, снапшот на payment.
+    creatingInvoice: {
+      entry: 'clearError',
       invoke: {
         // @ts-ignore
-        src: 'checkPromo',
-        onDone: 'success',
-        onError: { target: 'promoPhase', actions: 'setError' }
+        src: 'createTierInvoice',
+        onDone: 'invoiceOpen',
+        onError: { target: 'failure', actions: 'setError' }
       }
     },
-    // ✅ Ветка 2 (Вертикально)
-    hotpayPhase: {
+    // Telegram WebApp.openInvoice(invoice_link) открыт, ждём callback.
+    invoiceOpen: {
       on: {
-        HOTPAY_SUCCESS: 'success',
-        BACK: 'idle'
+        INVOICE_PAID: 'verifying',
+        INVOICE_CANCELLED: { target: 'failure', actions: 'setError' }
       }
     },
-    // ✅ Ветка 3 — Telegram Stars (развёрнутый флоу)
-    starsPhase: {
-      initial: 'creatingInvoice',
-      on: { BACK: 'idle' },
-      states: {
-        // POST /payments/invoice — цена только из star_products, снапшот на payment
-        creatingInvoice: {
-          entry: 'clearError',
-          invoke: {
-            // @ts-ignore
-            src: 'createInvoice',
-            onDone: 'invoiceOpen',
-            onError: { target: 'failure', actions: 'setError' }
-          }
-        },
-        // Telegram WebApp.openInvoice(invoice_link) открыт, ждём callback
-        invoiceOpen: {
-          on: {
-            INVOICE_PAID: 'verifying',
-            INVOICE_CANCELLED: { target: 'failure', actions: 'setError' }
-          }
-        },
-        // Поллинг GET /payments/{id} каждые 2с до 30с. Истина — только статус в нашей БД.
-        verifying: {
-          on: {
-            VERIFY_FULFILLED: '#paymentMachine.success',
-            VERIFY_FAILED: { target: 'failure', actions: 'setError' },
-            VERIFY_TIMEOUT: { target: 'failure', actions: 'setError' }
-          }
-        },
-        // Оплата не прошла / отменена / таймаут — можно повторить или выйти
-        failure: {
-          on: {
-            RETRY: 'creatingInvoice',
-            BACK: '#paymentMachine.idle'
-          }
-        }
+    // Поллинг GET /payments/{id} до ~30с. Истина — только статус в нашей БД.
+    verifying: {
+      on: {
+        VERIFY_FULFILLED: 'success',
+        VERIFY_FAILED: { target: 'failure', actions: 'setError' },
+        VERIFY_TIMEOUT: { target: 'failure', actions: 'setError' }
       }
     },
-    success: {
-      type: 'final'
-    }
+    failure: {
+      on: {
+        RETRY: 'creatingInvoice',
+        BACK: 'selecting'
+      }
+    },
+    success: { type: 'final' },
+    aborted: { type: 'final' }
   }
 });
