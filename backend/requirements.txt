@@ -1,5 +1,5 @@
 # Bot
-aiogram==3.13.1
+aiogram==3.29.1
 
 # API
 fastapi==0.115.5
