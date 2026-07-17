@@ -1,0 +1,141 @@
+.paywall-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  background: #0b0d12;
+  color: #fff;
+  overflow-y: auto;
+  display: flex;
+  justify-content: center;
+  padding: 24px 16px calc(24px + env(safe-area-inset-bottom));
+}
+
+.paywall-inner {
+  width: 100%;
+  max-width: 420px;
+  margin: auto 0;
+}
+
+.paywall-title {
+  font-size: 26px;
+  font-weight: 700;
+  margin: 8px 0 6px;
+  text-align: center;
+}
+
+.paywall-sub {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.6);
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.paywall-loading {
+  text-align: center;
+  padding: 24px;
+  opacity: 0.6;
+}
+
+.paywall-card {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 14px;
+}
+
+.paywall-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 12px;
+}
+
+.paywall-card-title {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.paywall-card-limit {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.paywall-cta {
+  width: 100%;
+  padding: 14px;
+  border: none;
+  border-radius: 12px;
+  background: #f5c518;
+  color: #111;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.paywall-cta:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.paywall-hint {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.5);
+  text-align: center;
+  margin-top: 18px;
+}
+
+.paywall-status {
+  margin-top: 14px;
+  text-align: center;
+  font-size: 14px;
+  color: #f5c518;
+}
+
+/* Renewal-specific */
+.renew-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.renew-chip {
+  flex: 1;
+  min-width: 90px;
+  padding: 10px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.renew-chip.active {
+  border-color: #f5c518;
+  background: rgba(245, 197, 24, 0.15);
+}
+
+.renew-chip-price {
+  opacity: 0.7;
+  font-size: 12px;
+}
+
+.renew-coupon {
+  width: 100%;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  font-size: 14px;
+  margin-bottom: 14px;
+  box-sizing: border-box;
+}
+
+.renew-warn {
+  font-size: 13px;
+  color: #ffb020;
+  margin-bottom: 12px;
+}

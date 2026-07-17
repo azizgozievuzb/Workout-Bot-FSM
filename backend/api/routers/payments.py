@@ -58,6 +58,14 @@ class ProductInfo(BaseModel):
     price_stars: int
 
 
+class TierPriceInfo(BaseModel):
+    tier: str
+    intro_price_stars: int
+    price_1m: int
+    price_3m: int
+    price_12m: int
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -90,6 +98,20 @@ async def list_products(user: dict = Depends(get_current_user)):
         .execute()
     )
     return [ProductInfo(**row) for row in (res.data or [])]
+
+
+@router.get("/tier-prices", response_model=list[TierPriceInfo])
+async def list_tier_prices_public(user: dict = Depends(get_current_user)):
+    """Витрина тарифов (пейволл/продление) — read-only prices from tier_prices."""
+    db = await get_supabase()
+    res = await (
+        db.table("tier_prices")
+        .select("tier, intro_price_stars, price_1m, price_3m, price_12m")
+        .execute()
+    )
+    order = {"standard": 0, "premium": 1, "elite": 2}
+    rows = sorted(res.data or [], key=lambda r: order.get(r["tier"], 9))
+    return [TierPriceInfo(**r) for r in rows]
 
 
 # ---------------------------------------------------------------------------

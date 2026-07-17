@@ -133,21 +133,22 @@ export async function getBanHistory(): Promise<{ bans: BanHistoryEntry[] }> {
     return res.data;
 }
 
-export interface TierChangeEvictionRequest {
-    new_tier_code: string;
+// Tier downgrade with player eviction (7.5) — no promo codes.
+export interface TierDowngradeRequest {
+    target_tier: AccessTier;
     player_ids_to_evict: string[];
 }
 
-export interface TierChangeEvictionResponse {
+export interface TierDowngradeResponse {
     evicted_count: number;
     new_tier: string;
     remaining_players: { id: string; first_name: string | null }[];
 }
 
-export async function applyTierChangeWithEvictions(
-    req: TierChangeEvictionRequest,
-): Promise<TierChangeEvictionResponse> {
-    const res = await api.post('/admin/promo/apply-tier-change-with-evictions', req);
+export async function applyTierDowngrade(
+    req: TierDowngradeRequest,
+): Promise<TierDowngradeResponse> {
+    const res = await api.post('/admin/apply-tier-downgrade', req);
     return res.data;
 }
 

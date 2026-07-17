@@ -110,6 +110,7 @@ export function useAuth() {
             days_left: data.days_left ?? null,
             unread_notifications: data.unread_notifications ?? 0,
             gender: data.gender ?? null,
+            subscription: data.subscription ?? null,
           });
           // Show BanScreen immediately if user is banned (without waiting for a 403)
           if (data.ban_until) {

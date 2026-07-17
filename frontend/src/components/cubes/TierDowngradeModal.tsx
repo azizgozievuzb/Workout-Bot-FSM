@@ -2,8 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { hapticImpact, hapticNotification } from '../../utils/haptic';
 import { getMyPlayers } from '../../api/partnerships';
 import type { MyPlayer } from '../../api/partnerships';
-import { applyTierChangeWithEvictions } from '../../api/admin';
-import type { AccessTier } from '../../api/promo';
+import { applyTierDowngrade } from '../../api/admin';
+import type { AccessTier } from '../../stores/authStore';
 
 const TIER_PLAYER_LIMITS: Record<AccessTier, number> = {
     standard: 1,
@@ -13,12 +13,11 @@ const TIER_PLAYER_LIMITS: Record<AccessTier, number> = {
 
 interface Props {
     targetTier: AccessTier;
-    promoCode: string;
     onClose: () => void;
     onSuccess: () => void;
 }
 
-const TierDowngradeModal: React.FC<Props> = ({ targetTier, promoCode, onClose, onSuccess }) => {
+const TierDowngradeModal: React.FC<Props> = ({ targetTier, onClose, onSuccess }) => {
     const [players, setPlayers] = useState<MyPlayer[]>([]);
     const [selected, setSelected] = useState<Set<string>>(new Set());
     const [loading, setLoading] = useState(true);
@@ -52,8 +51,8 @@ const TierDowngradeModal: React.FC<Props> = ({ targetTier, promoCode, onClose, o
         setSubmitting(true);
         setError(null);
         try {
-            await applyTierChangeWithEvictions({
-                new_tier_code: promoCode,
+            await applyTierDowngrade({
+                target_tier: targetTier,
                 player_ids_to_evict: Array.from(selected),
             });
             hapticNotification('success');
@@ -69,7 +68,7 @@ const TierDowngradeModal: React.FC<Props> = ({ targetTier, promoCode, onClose, o
         } finally {
             setSubmitting(false);
         }
-    }, [canApply, promoCode, selected, onSuccess]);
+    }, [canApply, targetTier, selected, onSuccess]);
 
     return (
         <div

@@ -15,6 +15,15 @@ const CACHE_KEYS = {
 export type LegacyRole = 'player' | 'responsible' | 'admin' | 'new';
 export type AccessTier = 'standard' | 'premium' | 'elite';
 
+// Subscription v3 (7.5) — источник пейволла/гейтинга.
+export interface SubscriptionInfo {
+  active: boolean;
+  expires_at: string | null;
+  is_first_payment: boolean;
+  tier: AccessTier | null;
+  pricing_mode: 'free' | 'custom' | null;
+}
+
 export interface BanInfo {
     until: string | null;
     reason: string | null;
@@ -61,6 +70,7 @@ interface AuthState {
   unreadNotifications: number;
   daysLeft: number | null;
   gender: string | null;
+  subscription: SubscriptionInfo | null;
   // --- Computed ---
   effectiveTier: () => AccessTier | null;
   // --- Setters ---
@@ -79,6 +89,7 @@ interface AuthState {
   setUnreadNotifications: (v: number) => void;
   setDaysLeft: (v: number | null) => void;
   setGender: (g: string | null) => void;
+  setSubscription: (s: SubscriptionInfo | null) => void;
   setAuth: (data: {
     token: string;
     role: string;
@@ -100,6 +111,7 @@ interface AuthState {
     days_left?: number | null;
     unread_notifications?: number;
     gender?: string | null;
+    subscription?: SubscriptionInfo | null;
   }) => void;
   setPhotoUrl: (url: string) => void;
   setStyledPhotos: (darkUrl: string | null, lightUrl: string | null) => void;
@@ -142,6 +154,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   unreadNotifications: Number(localStorage.getItem(CACHE_KEYS.unreadNotifs) ?? 0),
   daysLeft: null,
   gender: localStorage.getItem(CACHE_KEYS.gender),
+  subscription: null,
   effectiveTier: () => {
     const s = get();
     return s.activeRoleView === 'player' ? s.playerViewTier : s.ownAccessTier;
@@ -177,6 +190,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ unreadNotifications: v });
   },
   setDaysLeft: (v) => set({ daysLeft: v }),
+  setSubscription: (s) => set({ subscription: s }),
   setGender: (g) => {
     if (g) localStorage.setItem(CACHE_KEYS.gender, g);
     else localStorage.removeItem(CACHE_KEYS.gender);
@@ -234,6 +248,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       daysLeft: data.days_left ?? null,
       unreadNotifications: unread,
       gender,
+      subscription: data.subscription ?? null,
     });
   },
   setPhotoUrl: (url) => { localStorage.setItem(CACHE_KEYS.photo, url); set({ photoUrl: url }); },
@@ -286,6 +301,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       unreadNotifications: 0,
       daysLeft: null,
       gender: null,
+      subscription: null,
     });
   },
 }));
