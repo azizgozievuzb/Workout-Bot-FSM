@@ -1,3 +1,54 @@
+# SESSION STATUS — Session 45 (2026-07-18) — 7.5 «Всё через Stars» ✅ IMPLEMENTED → ждём ручной smoke
+
+## ✅ Сделано (CC, Session 45) — все 9 фаз промпта 7.5
+
+**Фаза 1 — Миграция `030_stars_pricing_system.sql`** (применена через my-supabase MCP, idempotent, verified):
+- Таблицы: `tier_prices` (PK tier, intro/1m/3m/12m, CHECK≥1; seed-плейсхолдеры 750/5000/13500/48000 по 3 тирам),
+  `coupons` (code UNIQUE, discount_pct 1..99, is_active, max_uses NULL, used_count, expires_at),
+  `invites` (code VARCHAR(16) UNIQUE, responsible_id FK, used_by/used_at NULL, expires_at +7д).
+- `payments` +tier/period/coupon_id(FK)/discount_pct; **drop FK `payments_product_type_fkey`** (тирные типы не в star_products).
+- `users` +subscription_expires_at/pricing_mode('free'|'custom')/custom_price_stars/last_renewal_reminder_at.
+- **Чистка (решение #9):** `DELETE users WHERE NOT is_admin` (каскады снесли партнёрства/статы/сессии), `DROP TABLE promo_codes CASCADE`.
+  Контроль: users=1 (только админ), tier_prices=3, promo_codes нет.
+
+**Фаза 2 — подписка на Ответственном:** `auth.py` — `subscription {active, expires_at, is_first_payment, tier, pricing_mode}` в токене;
+доступ игрока = подписка его Responsible + grace 3 дня; partnerships больше НЕ источник TTL (status='active'); free-режим авто-грант роли Ответственного.
+`subscription_lifecycle.py` Job A (09:00 UTC, счёт-напоминание ≤3 дн, throttle last_renewal_reminder_at) + Job B (09:05, просрочка+grace → пейволл продления + пауза игрокам).
+
+**Фаза 3 — платежи тарифов + купоны:** `services/tier_pricing.py` (цены/периоды/insert снапшота).
+`POST /payments/tier-invoice` (первый платёж=intro без купона; продление 1m/3m/12m + купон; free→400; custom→1m по custom_price_stars).
+`handlers/payments.py`: pre_checkout и successful_payment ветвятся boost↔tier; fulfill продлевает `subscription_expires_at=max(now,тек)+период`, ставит tier+роль, инкремент купона.
+
+**Фаза 4 — инвайты:** `services/invites.py` + `POST/GET/DELETE /invites` (гейт: активная подписка + свободный слот 1/2/3). Ссылка `t.me/{bot}?start=inv_{code}`.
+
+**Фаза 5 — бот упрощён:** `handlers/onboarding.py` = только `/start` + `/start inv_{code}` (accept_invite); `/settings` deep-link; удалены R/P-коды и опросы.
+Удалены `api/routers/promo.py`, промо-эндпоинты из `admin.py`, `services/fsm/onboarding_fsm.py` (dead). `admin.py`: eviction-эндпоинт → `POST /admin/apply-tier-downgrade` (без кодов).
+
+**Фаза 6 — админка:** `POST/GET/PATCH /admin/coupons`, `GET/PATCH /admin/tier-prices`, `PATCH /admin/users/{id}/pricing`; `/admin/payments` показывает tier/period/coupon.
+Фронт `AdminCube`: вкладка «Купоны» с под-вкладками Купоны/Тарифы/Юзер; таблица платежей с tier/period/coupon.
+
+**Фаза 7 — фронт:** `subscription` в authStore + гейтинг в `App.tsx` (Paywall для новых, Renewal для просроченных). `PaywallScreen`/`RenewalScreen` (openInvoice+поллинг механики 7.4).
+Инвайты в `BondCube` («Мои игроки» + «➕ Добавить игрока» → share). Опрос игрока в `OnboardingFlow` → `POST /onboarding/complete`. `TierDowngradeModal` без кодов. Промо-модалка смены роли убрана (удалены PromoCodeModal/BuyCodesModal).
+
+**Фаза 8 — FSM:** `101_onboardingMachine` (entry→paywall→payment→responsibleSetup | invited→playerSurvey), `100_paymentMachine` (selecting→creatingInvoice→invoiceOpen→verifying, tier/period/coupon).
+
+**Verify:** `py_compile` backend ✅, `ruff -F` ✅, `tsc --noEmit` ✅. Backend: **ноль** promo-остатков. information_schema 030 ✅.
+
+## ⚠️ ОСТАТОК (не блокер, дочистить отдельной сессией)
+`ActionCube.tsx` всё ещё содержит вторичные промо-пути (RenewalModal/BonusPackModal/TierChangeModal/TierMatrixScreen/`getMyPlayerCode`) + `api/promo.ts`/`api/renewal.ts:createRenewalRequest`. Это dead-код (эндпоинты `/promo/*` удалены → 404), компилируется, но требует удаления — вынесено в BACKLOG. ActionCube большой (720 стр.), рип рискован — отложен ради зелёного билда.
+
+## ⏳ ОСТАЛОСЬ — ручной smoke (реальные Stars, боевой бот), после деплоя Railway+Vercel
+1. **Новый аккаунт → пейволл → интро-оплата** (админ ставит intro=1 ⭐ в AdminCube→Купоны→Тарифы) → стал Ответственным.
+2. **Инвайт:** у Ответственного «➕ Добавить игрока» → share → второй аккаунт по ссылке `?start=inv_` стал игроком БЕЗ пейволла → прошёл опрос (пол/fitness/age/goal) в приложении.
+3. **Продление с купоном 99%:** админ создаёт купон 99% → у Ответственного (после первого платежа) Renewal → период 1м + купон → цена ≈1 ⭐ → оплата.
+4. **Особый аккаунт:** админ `PATCH pricing mode=free` на юзере (AdminCube→Юзер) → у него нет пейволла.
+5. **Refund** из AdminCube→⭐ Платежи → звёзды вернулись, статус refunded.
+6. **Вернуть цены** тарифов на реальные (AdminCube→Тарифы).
+
+**⚠️ Незакоммичены на старте следующей сессии:** нет — всё запушено (10 коммитов Session 45).
+
+---
+
 # SESSION STATUS — Session 43 (2026-07-17) — 7.4 Telegram Stars payments ✅ IMPLEMENTED → ждём ручной smoke
 
 ## ✅ Сделано (CC, Session 43)
