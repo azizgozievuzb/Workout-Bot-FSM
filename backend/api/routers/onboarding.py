@@ -32,8 +32,22 @@ class CompleteReq(BaseModel):
 
 @router.post("/complete", response_model=WakeResp)
 async def complete_onboarding(body: CompleteReq, user: dict = Depends(get_current_user)) -> WakeResp:
-    """Игрок проходит опрос внутри Mini App (7.5) — сохраняем профиль, снимаем гейт."""
+    """Игрок проходит опрос внутри Mini App (7.5) — сохраняем профиль, снимаем гейт.
+
+    Опрос — только для приглашённого игрока (has_player_access). Иначе → 403 NOT_PLAYER.
+    """
     db = await get_supabase()
+
+    access_res = await (
+        db.table("users")
+        .select("has_player_access")
+        .eq("telegram_id", user["telegram_id"])
+        .maybe_single()
+        .execute()
+    )
+    if not access_res or not access_res.data or not access_res.data.get("has_player_access"):
+        raise HTTPException(status_code=403, detail={"code": "NOT_PLAYER"})
+
     now_iso = datetime.now(timezone.utc).isoformat()
     res = await (
         db.table("users")

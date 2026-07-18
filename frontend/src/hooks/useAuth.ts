@@ -153,6 +153,8 @@ export function useAuth() {
                   photoUrl: data.profile_photo_url,
                   photoDarkUrl: data.photo_dark_url,
                   photoLightUrl: data.photo_light_url,
+                  days_left: data.days_left ?? null,
+                  subscription: data.subscription ?? null,
                 });
               }
             } catch (regErr: any) {

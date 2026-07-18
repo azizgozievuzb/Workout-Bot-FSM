@@ -212,9 +212,10 @@ const App: React.FC = () => {
                     {/* UI OVERLAY — DOM поверх 3D */}
                     <div className="ui-overlay" style={{ pointerEvents: layoutMode !== 'chaos' || hasOverlay ? 'auto' : 'none' }}>
 
-                        {/* === ONBOARDING === */}
-                        {/* role='new' — новый юзер, показываем без фото (фото придёт после промокода) */}
-                        {!isLoading && !onboardingDone && (isNewUser || !!photoUrl) && <OnboardingFlow />}
+                        {/* === ONBOARDING SURVEY === */}
+                        {/* Опрос — ТОЛЬКО для приглашённого игрока (has_player_access), после селфи.
+                            Новый неприглашённый юзер видит PaywallScreen (см. выше), не опрос. */}
+                        {!isLoading && has_player_access && !onboardingDone && !!photoUrl && <OnboardingFlow />}
 
                         {/* === AUTH ERROR === */}
                         {error && (

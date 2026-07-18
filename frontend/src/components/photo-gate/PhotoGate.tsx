@@ -267,12 +267,12 @@ const PhotoGate: React.FC = () => {
                 <defs>
                   <mask id="oval-mask">
                     <rect width="300" height="400" fill="white" />
-                    <ellipse cx="150" cy="175" rx="95" ry={95 * OVAL_RATIO} fill="black" />
+                    <ellipse cx="150" cy="175" rx="119" ry={119 * OVAL_RATIO} fill="black" />
                   </mask>
                 </defs>
                 <rect width="300" height="400" fill="rgba(0,0,0,0.55)" mask="url(#oval-mask)" />
                 <ellipse
-                  cx="150" cy="175" rx="95" ry={95 * OVAL_RATIO}
+                  cx="150" cy="175" rx="119" ry={119 * OVAL_RATIO}
                   fill="none"
                   stroke={faceDetected ? '#4ade80' : 'rgba(255,255,255,0.5)'}
                   strokeWidth="2.5"

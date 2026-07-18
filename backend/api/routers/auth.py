@@ -1,9 +1,10 @@
 """POST /auth/telegram — валидирует initData, возвращает JWT."""
 import math
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
+from ...core.access import compute_access, parse_dt
 from ...core.security import create_access_token, validate_init_data
 from ...db.client import get_supabase
 
@@ -21,22 +22,8 @@ USER_SELECT_COLS = (
     "subscription_expires_at, pricing_mode, custom_price_stars"
 )
 
-# Grace window (days) a Player keeps access after their Responsible's subscription lapses.
-SUBSCRIPTION_GRACE_DAYS = 3
-
-
-def _parse_dt(iso: str | None) -> datetime | None:
-    if not iso:
-        return None
-    try:
-        dt = datetime.fromisoformat(iso)
-        return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
-    except Exception:
-        return None
-
-
 def _days_left(iso: str | None, now: datetime) -> int | None:
-    dt = _parse_dt(iso)
+    dt = parse_dt(iso)
     if dt is None:
         return None
     if dt <= now:
@@ -120,62 +107,18 @@ async def _has_fulfilled_tier_payment(db, user_uuid: str) -> bool:
 
 
 async def _compute_subscription(db, user_data: dict, now: datetime) -> SubscriptionInfo:
-    """
-    Источник доступа — users.subscription_expires_at Ответственного.
-    Ответственный/Админ: своя подписка. Игрок: подписка его Ответственного + grace 3 дня.
-    pricing_mode='free' → всегда active.
-    """
-    user_uuid = user_data["id"]
-    is_admin = bool(user_data.get("is_admin"))
-    has_resp = bool(user_data.get("has_responsible_access"))
-    has_player = bool(user_data.get("has_player_access"))
-
-    if is_admin or has_resp:
-        pricing_mode = user_data.get("pricing_mode")
-        tier = user_data.get("responsible_access_tier")
-        exp_raw = user_data.get("subscription_expires_at")
-        exp_dt = _parse_dt(exp_raw)
-        active = is_admin or pricing_mode == "free" or (exp_dt is not None and exp_dt > now)
-        is_first = not await _has_fulfilled_tier_payment(db, user_uuid)
-        return SubscriptionInfo(
-            active=active, expires_at=exp_raw, is_first_payment=is_first,
-            tier=tier, pricing_mode=pricing_mode,
-        )
-
-    if has_player:
-        part_res = await (
-            db.table("partnerships")
-            .select("responsible_id")
-            .eq("player_id", user_uuid)
-            .eq("status", "active")
-            .limit(1)
-            .execute()
-        )
-        if part_res.data:
-            resp_res = await (
-                db.table("users")
-                .select("subscription_expires_at, pricing_mode, responsible_access_tier")
-                .eq("id", part_res.data[0]["responsible_id"])
-                .maybe_single()
-                .execute()
-            )
-            rd = resp_res.data if resp_res else None
-            if rd:
-                pm = rd.get("pricing_mode")
-                exp_raw = rd.get("subscription_expires_at")
-                exp_dt = _parse_dt(exp_raw)
-                grace_cutoff = now - timedelta(days=SUBSCRIPTION_GRACE_DAYS)
-                active = pm == "free" or (exp_dt is not None and exp_dt > grace_cutoff)
-                return SubscriptionInfo(
-                    active=active, expires_at=exp_raw, is_first_payment=False,
-                    tier=rd.get("responsible_access_tier"), pricing_mode=pm,
-                )
-        return SubscriptionInfo(active=False, is_first_payment=False)
-
-    # New user without a role → paywall (becomes Responsible after intro payment).
+    """SubscriptionInfo для пейволла/renewal. Расчёт доступа — общий compute_access (core.access)."""
+    acc = await compute_access(db, user_data, now)
+    branch = acc["branch"]
+    if branch == "responsible":
+        is_first = not await _has_fulfilled_tier_payment(db, user_data["id"])
+    elif branch == "player":
+        is_first = False
+    else:  # 'none' — новый юзер без роли → станет Ответственным после интро-оплаты.
+        is_first = True
     return SubscriptionInfo(
-        active=False, is_first_payment=True,
-        pricing_mode=user_data.get("pricing_mode"),
+        active=acc["active"], expires_at=acc["expires_at"], is_first_payment=is_first,
+        tier=acc["tier"], pricing_mode=acc["pricing_mode"],
     )
 
 
@@ -216,13 +159,19 @@ async def _build_full_token_response(db, telegram_id: int, user_data: dict) -> T
 
     primary = user_data.get("primary_role")
     is_admin = bool(user_data.get("is_admin", False))
-    compat_role = "admin" if is_admin else (primary or user_data.get("role") or SHELL_ROLE)
+    has_player_access = bool(user_data.get("has_player_access", False))
+    has_responsible_access = bool(user_data.get("has_responsible_access", False))
+
+    # compat_role: без доступов (не админ) → SHELL_ROLE ('new'). users.role как фолбэк не используем.
+    if is_admin:
+        compat_role = "admin"
+    elif not has_player_access and not has_responsible_access:
+        compat_role = SHELL_ROLE
+    else:
+        compat_role = primary or SHELL_ROLE
 
     raw_done = user_data.get("onboarding_done", False)
     effective_done = True if (is_admin or compat_role in ("responsible", "admin")) else raw_done
-
-    has_player_access = bool(user_data.get("has_player_access", False))
-    has_responsible_access = bool(user_data.get("has_responsible_access", False))
 
     now = datetime.now(timezone.utc)
 

@@ -136,12 +136,16 @@ async def get_current_user(
 
     if role in ("player", "new"):
         from ..db.client import get_supabase
+        from .access import compute_access
         db = await get_supabase()
 
-        # Onboarding fast-path: role='new' or onboarding_done=False → skip TTL
+        # Onboarding fast-path: role='new' or onboarding_done=False → skip доступ-гейт
         user_res = await (
             db.table("users")
-            .select("id, onboarding_done")
+            .select(
+                "id, onboarding_done, is_admin, has_player_access, has_responsible_access, "
+                "pricing_mode, responsible_access_tier, subscription_expires_at"
+            )
             .eq("telegram_id", tg_id)
             .maybe_single()
             .execute()
@@ -157,22 +161,12 @@ async def get_current_user(
                 detail={"code": "NO_ACCESS"},
             )
 
-        user_uuid = user_res.data["id"]
-
-        # Authoritative TTL: live partnership with expires_at > now()
-        now_iso = datetime.now(timezone.utc).isoformat()
-        part_res = await (
-            db.table("partnerships")
-            .select("id")
-            .eq("player_id", user_uuid)
-            .gt("expires_at", now_iso)
-            .limit(1)
-            .execute()
-        )
-
-        if not part_res.data:
+        # Authoritative access (7.5): подписка Ответственного + grace, или своя/free.
+        now = datetime.now(timezone.utc)
+        acc = await compute_access(db, user_res.data, now)
+        if not acc["active"]:
             if _mark_revoked_logged(tg_id):
-                logger.info("player %s revoked: no active partnership", tg_id)
+                logger.info("player %s revoked: no active subscription", tg_id)
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail={"code": "PROMO_EXPIRED"},
