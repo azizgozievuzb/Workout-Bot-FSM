@@ -41,8 +41,12 @@ def _is_onboarding_blocked(user_data: dict) -> bool:
     Возвращает True если Mini App должен показать OnboardingBlockedScreen.
     JWT всё равно выдаётся, чтобы /onboarding/wake мог сработать.
     Гейт только для реального игрока с доступом — не для юзера без ролей (тот идёт в пейволл).
+    Свежий игрок (onboarding_done=false) проходит опрос ВНУТРИ приложения
+    (PhotoGate → OnboardingFlow → POST /onboarding/complete), не через блок-экран.
     """
     if not user_data.get("has_player_access"):
+        return False
+    if not user_data.get("onboarding_done"):
         return False
     goal = user_data.get("goal")
     goal_update_required = bool(user_data.get("goal_update_required"))
