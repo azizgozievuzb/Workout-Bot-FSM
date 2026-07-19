@@ -79,14 +79,14 @@ async def wake_onboarding(
 
     u = await (
         db.table("users")
-        .select("id, role, gender")
+        .select("id, has_player_access, gender")
         .eq("telegram_id", tg_id)
         .maybe_single()
         .execute()
     )
     if not u or not u.data:
         raise HTTPException(status_code=404, detail={"code": "USER_NOT_FOUND"})
-    if u.data.get("role") != "player":
+    if not u.data.get("has_player_access"):
         raise HTTPException(status_code=403, detail={"code": "NOT_PLAYER"})
     if not u.data.get("gender"):
         raise HTTPException(

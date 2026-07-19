@@ -76,14 +76,14 @@ class FinishSessionResponse(BaseModel):
 async def _resolve_player(db, telegram_id: int) -> str:
     res = await (
         db.table("users")
-        .select("id, role")
+        .select("id, has_player_access")
         .eq("telegram_id", telegram_id)
         .maybe_single()
         .execute()
     )
     if not res or not res.data:
         raise HTTPException(status_code=404, detail="User not found")
-    if res.data.get("role") != "player":
+    if not res.data.get("has_player_access"):
         raise HTTPException(status_code=403, detail="Only Players can record workouts")
     return res.data["id"]
 

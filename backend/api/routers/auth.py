@@ -36,12 +36,13 @@ ONBOARDING_REQUIRED_MESSAGE = "Вернись в бот, ответь на 3 в�
 
 def _is_onboarding_blocked(user_data: dict) -> bool:
     """
-    Player завершил P-код активацию и имеет role='player', но цель ещё
-    не проставлена (или сработал Job H → goal_update_required=TRUE).
+    Player имеет has_player_access (модель 7.5), но цель ещё не проставлена
+    (или сработал Job H → goal_update_required=TRUE).
     Возвращает True если Mini App должен показать OnboardingBlockedScreen.
     JWT всё равно выдаётся, чтобы /onboarding/wake мог сработать.
+    Гейт только для реального игрока с доступом — не для юзера без ролей (тот идёт в пейволл).
     """
-    if user_data.get("role") != "player":
+    if not user_data.get("has_player_access"):
         return False
     goal = user_data.get("goal")
     goal_update_required = bool(user_data.get("goal_update_required"))
@@ -342,6 +343,7 @@ async def register_user(body: TelegramAuthRequest) -> TokenResponse:
             "telegram_id": telegram_id,
             "first_name": tg_user.get("first_name", ""),
             "telegram_username": tg_user.get("username"),
+            "role": "new",
             "onboarding_done": False,
             "has_player_access": False,
             "has_responsible_access": False,
