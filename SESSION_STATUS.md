@@ -1,3 +1,32 @@
+# SESSION STATUS — Session 46 (2026-07-19) — 7.5 SMOKE: пункты 1–2 ✅, 4 бага пофикшены по ходу
+
+## ✅ Smoke-прогресс (реальные Stars, боевой бот)
+1. **Пейволл → интро-оплата 1 ⭐** (Oil `8580720783`) — ✅ ПРОЙДЕН (после фиксов #1–#3 + ручного fulfill).
+2. **Инвайт** → Cell `8777447186` стал игроком без пейволла, опрос внутри приложения, партнёрство active, у Oil в «Мои игроки» виден — ✅ ПРОЙДЕН (после фикса #4). Инвайт `FEYV8EHGVJ` used.
+3. **Продление с купоном 99%** — СЛЕДУЮЩИЙ ШАГ. Вход в тест: НЕ через легаси-кнопку «Продлить» в ActionCube (промокодовая, см. остаток ниже), а сдвигом `users.subscription_expires_at` Oil на −1 час (внутри grace 3 дн) → при входе покажется RenewalScreen. Перед тестом проверить в админке: standard 1m = 100 (чтобы −99% = 1 ⭐).
+4. **mode=free** (третий аккаунт) — ждёт.
+5. **Refund** платежа `b6106196` (charge_id восстановлен, 131 символ) — ждёт.
+6. **Цены назад** + обсуждение реальных цен — ждёт.
+
+## 🔧 Фиксы по ходу smoke (все запушены)
+- **#1 `22373f1`**: `deps.py` мигрирован на модель 7.5 (доступ игрока = подписка Responsible + grace 3 дн, вместо `partnerships.expires_at`); `compat_role` — фолбэк на `users.role` убран; `useAuth.ts` register-ветка прокидывает `subscription`; OnboardingFlow гейт `has_player_access && !onboardingDone && !!photoUrl`; `/onboarding/complete` гейт NOT_PLAYER; овал PhotoGate +25% (rx 95→119).
+- **#2 `39dd1e4`**: `_is_onboarding_blocked` и access-гейты (`wake`, workout `_resolve_player`, player rest-day) на `has_player_access` вместо колонки `users.role`; `/auth/register` пишет `role='new'` (глушим DEFAULT 'player').
+- **#3 миграция 031**: `payments.telegram_payment_charge_id` VARCHAR(128)→TEXT. Реальный Stars charge_id = **131 символ** → mark-paid падал 22001 → webhook 500 → Telegram ретраил, ретраи иссякли до фикса. Платёж `b6106196` восстановлен ВРУЧНУЮ (getStarTransactions → charge_id → SQL paid+fulfill): подписка Oil standard до **2026-08-18**. Сообщение «Подписка активна» в чат не приходило (ручной путь) — норма.
+- **#4 `4a2f567`**: `_is_onboarding_blocked` — ранний выход при `onboarding_done=false` (опрос свежего игрока теперь в приложении; блок-экран только для stale goal / Job H).
+
+## ⚠️ Легаси-остаток ActionCube/Market — ПОДТВЕРЖДЁН смоуком → задача 7.5.1
+Oil видит: Market «Нет активных игроков», карточка Cell «Истёк», меню «Продлить» → модалка renewal-КОДОВ (промокоды, мёртвые `/promo` эндпоинты). Причина: ActionCube/Market до сих пор считают активность по `partnerships.expires_at` (см. ОСТАТОК Session 45). **7.5.1 сразу после закрытия smoke:** активность игрока = подписка его Responsible; выпилить RenewalModal/BonusPackModal/TierChangeModal/TierMatrixScreen/`api/promo.ts`/`api/renewal.ts`; «Продлить» из карточки убрать (продление — только RenewalScreen).
+
+## 🆕 BACKLOG пополнен (Session 46)
+- UX инвайтов: не светить код, только «Поделиться/Копировать ссылку».
+- Аватар игрока у Ответственного (Bond/Action): показывать обработанное фото (styled), не сырое селфи.
+
+## 🔒 Процесс (Session 46)
+- CLAUDE.md п.6 (закоммичен): из Cowork Supabase-MCP НЕ вызывать (коннектор Николая) — все SQL через промпт для CC (my-supabase).
+- Для getStarTransactions BOT_TOKEN временно клали в `backend/.env(.rtf)` (вне git). **Проверить, что файл удалён.**
+
+---
+
 # SESSION STATUS — Session 45 (2026-07-18) — 7.5 «Всё через Stars» ✅ IMPLEMENTED → ждём ручной smoke
 
 ## ✅ Сделано (CC, Session 45) — все 9 фаз промпта 7.5
