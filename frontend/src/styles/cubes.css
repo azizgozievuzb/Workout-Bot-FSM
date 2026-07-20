@@ -1424,6 +1424,104 @@
     border-bottom: 1px solid rgba(0,0,0,0.04);
 }
 
+/* --- Payments: mobile card list (no horizontal scroll) --- */
+.pay-list {
+    max-height: 60vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 2px;
+}
+
+.pay-card {
+    border-radius: 12px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.dark-theme .pay-card {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.06);
+}
+
+.light-theme .pay-card {
+    background: rgba(0,0,0,0.03);
+    border: 1px solid rgba(0,0,0,0.05);
+}
+
+.pay-card-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.pay-buyer {
+    font-size: 14px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.dark-theme .pay-buyer { color: rgba(250,245,239,0.9); }
+.light-theme .pay-buyer { color: rgba(44,32,22,0.9); }
+
+.pay-amount {
+    font-size: 14px;
+    font-weight: 700;
+    color: #FFD700;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.pay-product {
+    font-size: 12px;
+    line-height: 1.35;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+.dark-theme .pay-product { color: rgba(250,245,239,0.6); }
+.light-theme .pay-product { color: rgba(44,32,22,0.6); }
+
+.pay-coupon {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 6px;
+    background: rgba(46,204,113,0.16);
+    color: #2ecc71;
+}
+
+.pay-status {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.pay-date {
+    font-size: 11px;
+    font-weight: 400;
+    opacity: 0.6;
+}
+
+.pay-status-fulfilled { color: #2ecc71; }
+.pay-status-paid { color: #f1c40f; }
+.pay-status-pending { color: #95a5a6; }
+.pay-status-failed { color: #e67e22; }
+.pay-status-refunded { color: #e74c3c; text-decoration: line-through; }
+
 .connections-table tr.r-row {
     cursor: pointer;
 }

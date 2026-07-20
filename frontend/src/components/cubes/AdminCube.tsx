@@ -789,30 +789,32 @@ const PaymentsPanel: React.FC = () => {
             {payments.length === 0 ? (
                 <div className="cube-locked"><div className="cube-locked-text">Нет платежей</div></div>
             ) : (
-                <div className="connections-table-wrap cube-card" style={{ padding: 0 }}>
-                    <table className="connections-table">
-                        <thead>
-                            <tr><th>Покупатель</th><th>Продукт</th><th>⭐</th><th>Статус</th><th>Дата</th><th></th></tr>
-                        </thead>
-                        <tbody>
-                            {payments.map(pm => (
-                                <tr key={pm.id}>
-                                    <td>{pm.buyer_name || `#${pm.buyer_telegram_id ?? '?'}`}</td>
-                                    <td>{pm.tier
-                                        ? `${pm.tier}/${pm.period}${pm.coupon_code ? ` · ${pm.coupon_code} −${pm.discount_pct}%` : ''}`
-                                        : (pm.product_title || pm.product_type)}</td>
-                                    <td>{pm.amount_stars}</td>
-                                    <td>{PAYMENT_STATUS_LABEL[pm.status] || pm.status}</td>
-                                    <td>{pm.created_at ? new Date(pm.created_at).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }) : '—'}</td>
-                                    <td>
-                                        {(pm.status === 'paid' || pm.status === 'fulfilled') && (
-                                            <button className="cube-btn-sm" disabled={refunding === pm.id} onClick={(e) => { e.stopPropagation(); setConfirmRefund(pm); }}>↩️</button>
-                                        )}
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                <div className="pay-list">
+                    {payments.map(pm => (
+                        <div key={pm.id} className="pay-card">
+                            <div className="pay-card-row">
+                                <span className="pay-buyer">{pm.buyer_name || `#${pm.buyer_telegram_id ?? '?'}`}</span>
+                                <span className="pay-amount">{pm.amount_stars} ⭐</span>
+                            </div>
+                            <div className="pay-product">
+                                {pm.tier
+                                    ? `${pm.tier} · ${pm.period}`
+                                    : (pm.product_title || pm.product_type)}
+                                {pm.coupon_code && (
+                                    <span className="pay-coupon">{pm.coupon_code} −{pm.discount_pct}%</span>
+                                )}
+                            </div>
+                            <div className="pay-card-row">
+                                <span className={`pay-status pay-status-${pm.status}`}>
+                                    {PAYMENT_STATUS_LABEL[pm.status] || pm.status}
+                                    <span className="pay-date">{pm.created_at ? new Date(pm.created_at).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }) : '—'}</span>
+                                </span>
+                                {(pm.status === 'paid' || pm.status === 'fulfilled') && (
+                                    <button className="cube-btn-sm" disabled={refunding === pm.id} onClick={(e) => { e.stopPropagation(); setConfirmRefund(pm); }}>↩️</button>
+                                )}
+                            </div>
+                        </div>
+                    ))}
                 </div>
             )}
 
