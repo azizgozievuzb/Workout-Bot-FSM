@@ -7,6 +7,7 @@ import type { FeedItem } from '../../api/activityFeed';
 import { getUnreadCount } from '../../api/notifications';
 import { NotificationList } from '../bond/NotificationList';
 import RoleTransition from '../shared/RoleTransition';
+import RenewalScreen from '../shared/RenewalScreen';
 import { getMyPlayers } from '../../api/partnerships';
 import type { MyPlayer } from '../../api/partnerships';
 import { createInvite, listInvites, deleteInvite } from '../../api/invites';
@@ -289,6 +290,7 @@ const InvitesPanel: React.FC = () => {
 const ResponsibleBond: React.FC = () => {
     const [feed, setFeed] = useState<FeedItem[]>([]);
     const [loading, setLoading] = useState(true);
+    const [showBilling, setShowBilling] = useState(false);
 
     useEffect(() => {
         getFeed(20, 0)
@@ -333,9 +335,11 @@ const ResponsibleBond: React.FC = () => {
                 Настройки уведомлений
             </button>
 
-            <button className="cube-btn-secondary" onClick={(e) => e.stopPropagation()}>
+            <button className="cube-btn-secondary" onClick={(e) => { e.stopPropagation(); setShowBilling(true); }}>
                 Подписка и биллинг
             </button>
+
+            {showBilling && <RenewalScreen onClose={() => setShowBilling(false)} />}
         </>
     );
 };

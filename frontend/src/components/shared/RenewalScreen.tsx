@@ -21,7 +21,11 @@ const PERIODS: { key: SubscriptionPeriod; label: string; col: keyof TierPrice }[
   { key: '12m', label: '12 месяцев', col: 'price_12m' },
 ];
 
-const RenewalScreen: React.FC = () => {
+interface RenewalScreenProps {
+  onClose?: () => void;
+}
+
+const RenewalScreen: React.FC<RenewalScreenProps> = ({ onClose }) => {
   const { subscription } = useAuthStore();
   const isCustom = subscription?.pricing_mode === 'custom';
   const [prices, setPrices] = useState<TierPrice[]>([]);
@@ -112,6 +116,9 @@ const RenewalScreen: React.FC = () => {
 
   return (
     <div className="paywall-screen">
+      {onClose && (
+        <button className="paywall-close" onClick={onClose} aria-label="Закрыть">✕</button>
+      )}
       <div className="paywall-inner">
         <h1 className="paywall-title">Продление подписки</h1>
         <p className="paywall-sub">Выберите тариф и период. Оплата — звёздами Telegram.</p>
