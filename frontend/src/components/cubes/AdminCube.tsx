@@ -749,27 +749,20 @@ const PaymentsPanel: React.FC = () => {
     if (loading) return <div className="cube-section-title" style={{ textAlign: 'center' }}>Загрузка...</div>;
 
     return (
-        <>
-            <div className="cube-card">
-                <div className="cube-stat">
-                    <span>Баланс бота</span>
-                    <span className="cube-stat-value" style={{ color: '#FFD700' }}>
-                        {balance === null ? '—' : `${balance} ⭐`}
-                    </span>
-                </div>
+        <div className="pay-panel">
+            <div className="pay-balance">
+                <span>Баланс бота</span>
+                <span className="pay-balance-value">{balance === null ? '—' : `${balance} ⭐`}</span>
             </div>
 
-            <div className="cube-section-title">Цены (Stars)</div>
-            <div className="cube-card">
+            <div className="cube-section-title pay-prices-title">Цены (Stars)</div>
+            <div className="pay-prices">
                 {products.map(p => (
-                    <div key={p.product_type} className="settings-row" style={{ gap: 8 }}>
-                        <div className="settings-row-info">
-                            <div className="cube-player-name">{p.title}</div>
-                            <div className="cube-player-meta">{p.is_active ? 'активен' : 'выключен'}</div>
-                        </div>
+                    <div key={p.product_type} className="pay-price-row">
+                        <span className="pay-price-name">{p.title}</span>
                         <input
                             className="admin-generator-select"
-                            style={{ width: 76 }}
+                            style={{ width: 68 }}
                             type="number"
                             min={1}
                             value={priceEdits[p.product_type] ?? ''}
@@ -782,7 +775,7 @@ const PaymentsPanel: React.FC = () => {
                 ))}
             </div>
 
-            <div className="cube-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="cube-section-title pay-prices-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span>Платежи</span>
                 <button className="cube-btn-sm" onClick={(e) => { e.stopPropagation(); reload(); hapticImpact('light'); }}>↻</button>
             </div>
@@ -842,7 +835,7 @@ const PaymentsPanel: React.FC = () => {
             )}
 
             {toast && <div className="admin-toast">{toast}</div>}
-        </>
+        </div>
     );
 };
 
