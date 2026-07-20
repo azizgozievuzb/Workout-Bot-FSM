@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import type { AccessTier } from '../../stores/authStore';
 import { useAuthStore } from '../../stores/authStore';
-import { getTierPrices, createTierInvoice } from '../../api/payments';
-import type { TierPrice, SubscriptionPeriod } from '../../api/payments';
+import { getTierPrices, createTierInvoice, previewCoupon } from '../../api/payments';
+import type { TierPrice, SubscriptionPeriod, CouponPreview } from '../../api/payments';
 import { getMyPlayers } from '../../api/partnerships';
 import { pollPayment, openStarInvoice } from '../../utils/starPayment';
 import { hapticNotification } from '../../utils/haptic';
+import { TIER_LIMIT_LABEL } from '../../utils/tierText';
 import TierDowngradeModal from '../cubes/TierDowngradeModal';
 
 const TIER_META: Record<AccessTier, { title: string; limit: number }> = {
@@ -27,6 +28,7 @@ const RenewalScreen: React.FC = () => {
   const [tier, setTier] = useState<AccessTier>(subscription?.tier ?? 'standard');
   const [period, setPeriod] = useState<SubscriptionPeriod>('1m');
   const [coupon, setCoupon] = useState('');
+  const [preview, setPreview] = useState<CouponPreview | null>(null);
   const [playerCount, setPlayerCount] = useState(0);
   const [showDowngrade, setShowDowngrade] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -43,10 +45,25 @@ const RenewalScreen: React.FC = () => {
       .finally(() => setLoading(false));
   }, []);
 
+  // Live coupon recalculation — server is the single source of truth for validity.
+  useEffect(() => {
+    if (isCustom) { setPreview(null); return; }
+    const code = coupon.trim();
+    if (!code) { setPreview(null); return; }
+    let cancelled = false;
+    const t = setTimeout(() => {
+      previewCoupon(code, tier, period as '1m' | '3m' | '12m')
+        .then((r) => { if (!cancelled) setPreview(r); })
+        .catch(() => { if (!cancelled) setPreview(null); });
+    }, 400);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [coupon, tier, period, isCustom]);
+
   const priceRow = prices.find((p) => p.tier === tier);
   const selectedPrice = priceRow
     ? Number(priceRow[PERIODS.find((x) => x.key === period)!.col])
     : null;
+  const finalPrice = preview?.valid ? preview.final_price : selectedPrice;
   const targetLimit = TIER_META[tier].limit;
   const overLimit = playerCount > targetLimit;
 
@@ -81,7 +98,13 @@ const RenewalScreen: React.FC = () => {
       if (!opened) { setStatus('Оплата недоступна в этом клиенте'); setBusy(false); }
     } catch (e: any) {
       const detail = e?.response?.data?.detail;
-      setStatus(typeof detail === 'string' ? detail : detail?.code ?? 'Не удалось создать счёт');
+      const code = typeof detail === 'object' ? detail?.code : detail;
+      if (code === 'DOWNGRADE_BLOCKED') {
+        setShowDowngrade(true);
+        setBusy(false);
+        return;
+      }
+      setStatus(typeof detail === 'string' ? detail : code ?? 'Не удалось создать счёт');
       hapticNotification('error');
       setBusy(false);
     }
@@ -114,6 +137,7 @@ const RenewalScreen: React.FC = () => {
                 </button>
               ))}
             </div>
+            <p className="renew-tier-hint">{TIER_LIMIT_LABEL[tier]}</p>
 
             <div className="renew-row">
               {PERIODS.map((pr) => (
@@ -135,6 +159,16 @@ const RenewalScreen: React.FC = () => {
               onChange={(e) => setCoupon(e.target.value.toUpperCase())}
             />
 
+            {coupon.trim() && preview && (
+              preview.valid ? (
+                <div className="renew-coupon-ok">
+                  Купон −{preview.pct}% → итого {preview.final_price} ⭐
+                </div>
+              ) : (
+                <div className="renew-coupon-err">Купон недействителен</div>
+              )
+            )}
+
             {overLimit && (
               <div className="renew-warn">
                 Тариф {TIER_META[tier].title} допускает {targetLimit} игрок(ов), у вас {playerCount}.
@@ -147,7 +181,7 @@ const RenewalScreen: React.FC = () => {
                 ? 'Выбрать, кого удалить'
                 : busy
                   ? 'Открываю оплату…'
-                  : `Оплатить${selectedPrice ? ` · ${selectedPrice} ⭐` : ''}`}
+                  : `Оплатить${finalPrice ? ` · ${finalPrice} ⭐` : ''}`}
             </button>
           </>
         )}

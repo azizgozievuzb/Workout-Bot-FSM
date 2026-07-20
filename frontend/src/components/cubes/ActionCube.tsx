@@ -1,10 +1,8 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import type { DualRoleUser } from '../../stores/authStore';
 import { canPlay, canMonitor, isDualRole } from '../../utils/roles';
 import api from '../../api/client';
-import { getMyPlayerCode } from '../../api/promo';
-import type { AccessTier } from '../../api/promo';
 import TierBadge from '../common/TierBadge';
 import { getMyStats } from '../../api/stats';
 import type { PlayerStats } from '../../api/stats';
@@ -12,24 +10,16 @@ import { getActiveBoost } from '../../api/boosts';
 import type { ActiveBoost } from '../../api/boosts';
 import { getProducts, createInvoice, getPayment } from '../../api/payments';
 import type { StarProduct } from '../../api/payments';
-import {
-    createRenewalRequest,
-} from '../../api/renewal';
-import type { RenewalRequest } from '../../api/renewal';
 import { getMyPlayers } from '../../api/partnerships';
 import type { MyPlayer } from '../../api/partnerships';
+import { createInvite } from '../../api/invites';
+import { playerAvatarUrl } from '../../utils/playerAvatar';
+import { useTheme } from '../../contexts/ThemeContext';
 import { hapticImpact, hapticNotification } from '../../utils/haptic';
 import RoleTransition from '../shared/RoleTransition';
-import RenewalModal from './RenewalModal';
-import BonusPackModal from './BonusPackModal';
 import GiftFreezeModal from './GiftFreezeModal';
-import TierChangeModal from './TierChangeModal';
 import WorkoutScreen from '../workout/WorkoutScreen';
-import TierMatrixScreen from '../shared/TierMatrixScreen';
 import '../../styles/cubes.css';
-
-const RENEWAL_PENDING_KEY = 'wb_renewal_pending_until';
-const RENEWAL_PROMPT_THRESHOLD_DAYS = 7;
 
 type ActiveView = 'player' | 'responsible';
 
@@ -88,15 +78,9 @@ const PlayerView: React.FC = () => {
     const [stats, setStats] = useState<PlayerStats | null>(null);
     const [boost, setBoost] = useState<ActiveBoost | null>(null);
     const [loading, setLoading] = useState(true);
-    const [requestPending, setRequestPending] = useState<boolean>(() => {
-        const until = parseInt(localStorage.getItem(RENEWAL_PENDING_KEY) || '0', 10);
-        return Number.isFinite(until) && until > Date.now();
-    });
-    const [cooldownError, setCooldownError] = useState<string>('');
     const [restDayInFlight, setRestDayInFlight] = useState(false);
     const [restDayToast, setRestDayToast] = useState('');
     const [workoutOpen, setWorkoutOpen] = useState(false);
-    const [tierMatrixOpen, setTierMatrixOpen] = useState(false);
 
     const handleStartWorkout = useCallback((e: React.MouseEvent) => {
         e.stopPropagation();
@@ -110,37 +94,6 @@ const PlayerView: React.FC = () => {
         getMyStats().then(setStats).catch(() => {}).finally(check);
         getActiveBoost().then(setBoost).catch(() => {}).finally(check);
     }, []);
-
-    const handleAskRenewal = useCallback(async (e: React.MouseEvent) => {
-        e.stopPropagation();
-        if (requestPending) return;
-        hapticImpact('medium');
-        try {
-            await createRenewalRequest();
-            const until = Date.now() + 24 * 60 * 60 * 1000;
-            localStorage.setItem(RENEWAL_PENDING_KEY, String(until));
-            setRequestPending(true);
-            setCooldownError('');
-            hapticNotification('success');
-        } catch (err: any) {
-            const detail = err?.response?.data?.detail;
-            if (err?.response?.status === 429) {
-                const createdAt = typeof detail === 'object' ? detail?.created_at : null;
-                if (createdAt) {
-                    const until = new Date(createdAt).getTime() + 24 * 60 * 60 * 1000;
-                    localStorage.setItem(RENEWAL_PENDING_KEY, String(until));
-                    setRequestPending(true);
-                }
-                const msg = (typeof detail === 'object' && detail?.message)
-                    || 'Вы уже отправили запрос. Попробуйте позже.';
-                setCooldownError(msg);
-                hapticNotification('warning');
-            } else {
-                setCooldownError('Не удалось отправить запрос.');
-                hapticNotification('error');
-            }
-        }
-    }, [requestPending]);
 
     const handleUseRestDay = useCallback(async (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -172,8 +125,6 @@ const PlayerView: React.FC = () => {
     if (loading) return <div className="cube-section-title" style={{ textAlign: 'center' }}>Загрузка...</div>;
     if (!stats) return <div className="cube-section-title" style={{ textAlign: 'center' }}>Не удалось загрузить</div>;
 
-    const showRenewalPrompt = daysLeft !== null && daysLeft <= RENEWAL_PROMPT_THRESHOLD_DAYS;
-
     const daysChipVariant = (() => {
         if (daysLeft === null) return null;
         if (daysLeft <= 0) return 'red';
@@ -202,14 +153,6 @@ const PlayerView: React.FC = () => {
                     </div>
                 )}
             </div>
-            <button
-                className="tier-matrix-link"
-                onClick={(e) => { e.stopPropagation(); hapticImpact('light'); setTierMatrixOpen(true); }}
-            >
-                ℹ️ Тарифы
-            </button>
-
-            {tierMatrixOpen && <TierMatrixScreen onClose={() => setTierMatrixOpen(false)} />}
 
             {/* B. Rest-day button */}
             {restDaysRemaining > 0 && gender === 'female' && (
@@ -224,25 +167,6 @@ const PlayerView: React.FC = () => {
                 </button>
             )}
             {restDayToast && <div className="admin-toast">{restDayToast}</div>}
-
-            {/* C. Renewal prompt */}
-            {showRenewalPrompt && (
-                <div className="renewal-prompt">
-                    <p className="renewal-prompt__text">
-                        До окончания доступа: {daysLeft} дн.
-                    </p>
-                    <button
-                        className="renewal-prompt__btn"
-                        onClick={handleAskRenewal}
-                        disabled={requestPending}
-                    >
-                        {requestPending ? '✓ Запрос отправлен' : 'Попросить Ответственного продлить'}
-                    </button>
-                    {cooldownError && (
-                        <p className="renewal-prompt__error">{cooldownError}</p>
-                    )}
-                </div>
-            )}
 
             {/* D. Workout entry point */}
             <button className="cube-btn-primary" onClick={handleStartWorkout}>
@@ -280,63 +204,31 @@ const PlayerView: React.FC = () => {
 
 /* ---------- RESPONSIBLE ---------- */
 
-interface PlayerCodeData {
-    code: string | null;
-    deep_link: string | null;
-    is_used: boolean;
-    duration_days?: number | null;
-    expires_at?: string | null;
-    days_left?: number | null;
-    access_tier?: AccessTier | null;
-}
-
-function relativeTime(iso: string): string {
-    const diff = Date.now() - new Date(iso).getTime();
-    if (diff < 0) return 'только что';
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return 'только что';
-    if (mins < 60) return `${mins} мин назад`;
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return `${hrs} ч назад`;
-    const days = Math.floor(hrs / 24);
-    return `${days} д назад`;
-}
-
 const TIER_PLAYER_LIMITS: Record<string, number> = { standard: 1, premium: 2, elite: 3 };
 
-type ModalKind = 'renewal' | 'bonus' | 'gift' | 'tier';
-
-const daysChipClass = (p: MyPlayer): string => {
-    if (p.is_expired || p.is_deactivated) return 'days-chip days-chip--grey';
-    const d = p.days_left ?? 0;
-    if (d <= 7) return 'days-chip days-chip--red';
-    if (d <= 14) return 'days-chip days-chip--yellow';
-    return 'days-chip days-chip--green';
-};
+type ModalKind = 'gift';
 
 const ResponsibleView: React.FC = () => {
+    const theme = useTheme();
     const ownAccessTier = useAuthStore((s) => s.ownAccessTier);
     const shopFreezeBalance = useAuthStore((s) => s.shopFreezeBalance);
     const giftFreezeBalance = useAuthStore((s) => s.giftFreezeBalance);
-    const [playerCodeData, setPlayerCodeData] = useState<PlayerCodeData | null>(null);
+    const subscription = useAuthStore((s) => s.subscription);
+    const subActive = subscription?.active ?? false;
     const [players, setPlayers] = useState<MyPlayer[]>([]);
-    const [requests, setRequests] = useState<RenewalRequest[]>([]);
     const [loading, setLoading] = useState(true);
     const [toast, setToast] = useState('');
     const [openMenuFor, setOpenMenuFor] = useState<string | null>(null);
     const [modal, setModal] = useState<{ kind: ModalKind; partnershipId?: string; targetUserId?: string; playerName?: string | null } | null>(null);
     const menuRef = useRef<HTMLDivElement | null>(null);
 
+    // Invite (Add player) — same flow as BondCube
+    const [inviteBusy, setInviteBusy] = useState(false);
+
     // Boost purchase (Telegram Stars)
     const [boostModal, setBoostModal] = useState<{ playerId: string; playerName: string } | null>(null);
     const [products, setProducts] = useState<StarProduct[]>([]);
     const [boostBusy, setBoostBusy] = useState(false);
-
-    const fetchCode = useCallback(() => {
-        getMyPlayerCode()
-            .then((data) => setPlayerCodeData(data))
-            .catch(() => {});
-    }, []);
 
     const fetchPlayers = useCallback(() => {
         getMyPlayers()
@@ -345,24 +237,17 @@ const ResponsibleView: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        fetchCode();
-    }, [fetchCode]);
-
-    useEffect(() => {
         getMyPlayers().then(setPlayers).catch(() => {});
         setLoading(false);
     }, []);
 
     useEffect(() => {
         const onVisible = () => {
-            if (document.visibilityState === 'visible') {
-                fetchCode();
-                fetchPlayers();
-            }
+            if (document.visibilityState === 'visible') fetchPlayers();
         };
         document.addEventListener('visibilitychange', onVisible);
         return () => document.removeEventListener('visibilitychange', onVisible);
-    }, [fetchCode, fetchPlayers]);
+    }, [fetchPlayers]);
 
     useEffect(() => {
         if (!openMenuFor) return;
@@ -375,22 +260,35 @@ const ResponsibleView: React.FC = () => {
         return () => document.removeEventListener('mousedown', onDocClick);
     }, [openMenuFor]);
 
-    const requestsByPlayer = useMemo(() => {
-        const map: Record<string, RenewalRequest> = {};
-        for (const r of requests) {
-            const prev = map[r.player_id];
-            if (!prev || r.created_at > prev.created_at) map[r.player_id] = r;
-        }
-        return map;
-    }, [requests]);
+    const showToast = useCallback((msg: string, ms = 2500) => {
+        setToast(msg);
+        setTimeout(() => setToast(''), ms);
+    }, []);
 
-    const copyCode = useCallback((e: React.MouseEvent) => {
+    const addPlayer = useCallback(async (e: React.MouseEvent) => {
         e.stopPropagation();
-        if (!playerCodeData?.code) return;
-        navigator.clipboard.writeText(playerCodeData.code);
-        setToast('Скопировано!');
-        setTimeout(() => setToast(''), 2000);
-    }, [playerCodeData]);
+        if (inviteBusy) return;
+        setInviteBusy(true);
+        try {
+            const inv = await createInvite();
+            hapticNotification('success');
+            const tg = (window as any).Telegram?.WebApp;
+            const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(inv.link)}&text=${encodeURIComponent('Приглашаю тебя тренироваться в Workout Bot!')}`;
+            if (tg?.openTelegramLink) tg.openTelegramLink(shareUrl);
+            else if (navigator.clipboard) { await navigator.clipboard.writeText(inv.link); showToast('Ссылка скопирована'); }
+        } catch (err: any) {
+            const d = err?.response?.data?.detail;
+            const code = typeof d === 'object' ? d?.code : d;
+            showToast(
+                code === 'SLOT_FULL' ? 'Все слоты тарифа заняты'
+                    : code === 'SUBSCRIPTION_INACTIVE' ? 'Подписка неактивна — продлите её'
+                        : 'Не удалось создать приглашение',
+            );
+            hapticNotification('error');
+        } finally {
+            setInviteBusy(false);
+        }
+    }, [inviteBusy, showToast]);
 
     useEffect(() => {
         getProducts().then(setProducts).catch(() => {});
@@ -471,19 +369,6 @@ const ResponsibleView: React.FC = () => {
 
     const closeModal = useCallback(() => setModal(null), []);
 
-    const handleRenewalSuccess = useCallback((addedDays: number) => {
-        setModal(null);
-        setToast(`Продлено на ${addedDays} дн.`);
-        setTimeout(() => setToast(''), 3000);
-        fetchPlayers();
-    }, [fetchPlayers]);
-
-    const handleBonusSuccess = useCallback((msg: string) => {
-        setModal(null);
-        setToast(msg);
-        setTimeout(() => setToast(''), 3000);
-    }, []);
-
     const handleGiftSuccess = useCallback((msg: string) => {
         setModal(null);
         setToast(msg);
@@ -502,34 +387,6 @@ const ResponsibleView: React.FC = () => {
                 </div>
             </div>
 
-            <div className="promo-invite-chip-row">
-                {slotsLeft > 0 && playerCodeData && playerCodeData.code && !playerCodeData.is_used ? (
-                    <>
-                        <div
-                            className="promo-invite-chip"
-                            onClick={copyCode}
-                            title="Нажмите, чтобы скопировать код"
-                        >
-                            <span className="promo-invite-chip-label">Код</span>
-                            <span className="promo-invite-chip-code">{playerCodeData.code}</span>
-                            <span className="promo-invite-chip-copy">📋</span>
-                        </div>
-                        {playerCodeData.access_tier && (
-                            <TierBadge tier={playerCodeData.access_tier} />
-                        )}
-                    </>
-                ) : slotsLeft <= 0 ? (
-                    <div className="player-slots-full">Все слоты заняты</div>
-                ) : (
-                    <button
-                        className="promo-generate-btn"
-                        onClick={(e) => { e.stopPropagation(); fetchCode(); }}
-                    >
-                        Обновить
-                    </button>
-                )}
-            </div>
-
             {toast && <div className="admin-toast">{toast}</div>}
 
             <div className="cube-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -543,29 +400,23 @@ const ResponsibleView: React.FC = () => {
                 <div className="cube-section-title" style={{ textAlign: 'center' }}>Загрузка...</div>
             ) : players.length === 0 ? (
                 <div className="cube-locked">
-                    <div className="cube-locked-text">Нет активных игроков. Выдайте промокод или пригласите нового.</div>
+                    <div className="cube-locked-text">Пока нет игроков. Пригласите нового по ссылке.</div>
                 </div>
             ) : (
                 <div className="cube-card">
                     {players.map(p => {
-                        const req = requestsByPlayer[p.id];
                         const rowClass = [
                             'player-row',
-                            req ? 'player-row--has-request' : '',
-                            (p.is_expired || p.is_deactivated) ? 'player-row--deactivated' : '',
+                            (!subActive || p.is_deactivated) ? 'player-row--deactivated' : '',
                         ].filter(Boolean).join(' ');
                         const name = p.first_name || '—';
-                        const isExpired = p.is_expired || p.is_deactivated;
-                        const daysLabel = isExpired
-                            ? 'Истёк'
-                            : p.days_left !== null
-                                ? `${p.days_left} дн.`
-                                : '—';
+                        const isActive = subActive && !p.is_deactivated;
+                        const avatar = playerAvatarUrl(p, theme);
                         return (
                             <div className={rowClass} key={p.id}>
                                 <div className="cube-avatar">
-                                    {p.profile_photo_url
-                                        ? <img src={p.profile_photo_url} alt={name} />
+                                    {avatar
+                                        ? <img src={avatar} alt={name} />
                                         : name.charAt(0)}
                                 </div>
                                 <div className="cube-player-info">
@@ -573,17 +424,9 @@ const ResponsibleView: React.FC = () => {
                                         {name}
                                         <TierBadge tier={p.access_tier} />
                                     </div>
-                                    <div className="cube-player-meta">
-                                        <span className={daysChipClass(p)}>{daysLabel}</span>
-                                    </div>
-                                    {req && (
-                                        <div className="player-row__request">
-                                            🔔 Просит продлить ({relativeTime(req.created_at)})
-                                        </div>
-                                    )}
                                 </div>
                                 <div className="cube-player-actions" style={{ position: 'relative' }}>
-                                    {!isExpired && (
+                                    {isActive && (
                                         <button className="cube-btn-sm" onClick={(e) => openBoostModal(e, p.id, name)}>
                                             ⚡X2
                                         </button>
@@ -603,27 +446,9 @@ const ResponsibleView: React.FC = () => {
                                         <div ref={menuRef} className="player-context-menu">
                                             <button
                                                 className="player-context-menu-item"
-                                                onClick={(e) => { e.stopPropagation(); openModal('renewal', p); }}
-                                            >
-                                                Продлить
-                                            </button>
-                                            <button
-                                                className="player-context-menu-item"
-                                                onClick={(e) => { e.stopPropagation(); openModal('bonus', p); }}
-                                            >
-                                                Бонус-пак
-                                            </button>
-                                            <button
-                                                className="player-context-menu-item"
                                                 onClick={(e) => { e.stopPropagation(); openModal('gift', p); }}
                                             >
                                                 Подарить заморозку
-                                            </button>
-                                            <button
-                                                className="player-context-menu-item"
-                                                onClick={(e) => { e.stopPropagation(); openModal('tier', p); }}
-                                            >
-                                                Сменить тир
                                             </button>
                                         </div>
                                     )}
@@ -634,20 +459,16 @@ const ResponsibleView: React.FC = () => {
                 </div>
             )}
 
-            {modal?.kind === 'renewal' && modal.partnershipId && (
-                <RenewalModal
-                    partnershipId={modal.partnershipId}
-                    playerName={modal.playerName ?? null}
-                    onClose={closeModal}
-                    onSuccess={handleRenewalSuccess}
-                />
+            {slotsLeft > 0 && (
+                <button
+                    className="cube-btn-secondary"
+                    onClick={addPlayer}
+                    disabled={inviteBusy}
+                >
+                    ➕ Добавить игрока
+                </button>
             )}
-            {modal?.kind === 'bonus' && (
-                <BonusPackModal
-                    onClose={closeModal}
-                    onSuccess={handleBonusSuccess}
-                />
-            )}
+
             {modal?.kind === 'gift' && modal.targetUserId && (
                 <GiftFreezeModal
                     targetUserId={modal.targetUserId}
@@ -655,9 +476,6 @@ const ResponsibleView: React.FC = () => {
                     onClose={closeModal}
                     onSuccess={handleGiftSuccess}
                 />
-            )}
-            {modal?.kind === 'tier' && (
-                <TierChangeModal onClose={closeModal} />
             )}
 
             {boostModal && (

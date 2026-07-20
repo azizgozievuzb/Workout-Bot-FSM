@@ -8,8 +8,19 @@ export interface Coupon {
   is_active: boolean;
   max_uses: number | null;
   used_count: number;
+  once_per_user: boolean;
   expires_at: string | null;
   created_at: string | null;
+}
+
+export interface AdminUserCard {
+  id: string;
+  telegram_id: number;
+  telegram_username: string | null;
+  first_name: string | null;
+  pricing_mode: 'free' | 'custom' | null;
+  custom_price_stars: number | null;
+  responsible_access_tier: AccessTier | null;
 }
 
 export interface AdminTierPrice {
@@ -33,6 +44,7 @@ export async function createCoupon(body: {
   code?: string;
   discount_pct: number;
   max_uses?: number | null;
+  once_per_user?: boolean;
   expires_at?: string | null;
 }): Promise<Coupon> {
   const { data } = await api.post('/admin/coupons', body);
@@ -42,6 +54,10 @@ export async function createCoupon(body: {
 export async function updateCoupon(id: string, isActive: boolean): Promise<Coupon> {
   const { data } = await api.patch(`/admin/coupons/${id}`, { is_active: isActive });
   return data;
+}
+
+export async function deleteCoupon(id: string): Promise<void> {
+  await api.delete(`/admin/coupons/${id}`);
 }
 
 // --- Tier prices ---
@@ -63,10 +79,23 @@ export async function setUserPricing(
   userId: string,
   mode: PricingMode,
   customPriceStars?: number,
-): Promise<{ id: string; pricing_mode: PricingMode; custom_price_stars: number | null }> {
+  tier?: AccessTier,
+): Promise<{ id: string; pricing_mode: PricingMode; custom_price_stars: number | null; responsible_access_tier: AccessTier | null }> {
   const { data } = await api.patch(`/admin/users/${userId}/pricing`, {
     mode,
     custom_price_stars: mode === 'custom' ? customPriceStars : null,
+    tier: mode ? tier : null,
   });
+  return data;
+}
+
+// --- User search / special-mode list ---
+export async function searchUsers(q: string): Promise<AdminUserCard[]> {
+  const { data } = await api.get('/admin/users/search', { params: { q } });
+  return data;
+}
+
+export async function listSpecialUsers(): Promise<AdminUserCard[]> {
+  const { data } = await api.get('/admin/users/special');
   return data;
 }

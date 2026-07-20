@@ -20,6 +20,7 @@ from pydantic import BaseModel
 from ...core.deps import get_bot, get_current_user
 from ...db.client import get_supabase
 from ...services.tier_pricing import (
+    TIER_PLAYER_LIMITS,
     apply_coupon,
     base_price,
     get_tier_price_row,
@@ -27,6 +28,7 @@ from ...services.tier_pricing import (
     invoice_description,
     invoice_title,
 )
+from ...services.invites import count_active_partnerships
 
 logger = logging.getLogger(__name__)
 
@@ -246,7 +248,9 @@ async def _has_fulfilled_tier_payment(db, buyer_id: str) -> bool:
     return bool(res.data)
 
 
-async def _validate_coupon(db, code: str) -> dict:
+async def _validate_coupon(db, code: str, buyer_id: str) -> dict:
+    """Validate a coupon for a specific buyer. Checks identical for invoice + preview:
+    active, not expired, max_uses not exhausted, once_per_user not already used."""
     res = await db.table("coupons").select("*").eq("code", code.strip()).maybe_single().execute()
     c = res.data if res else None
     if not c or not c.get("is_active"):
@@ -264,7 +268,27 @@ async def _validate_coupon(db, code: str) -> dict:
     max_uses = c.get("max_uses")
     if max_uses is not None and int(c.get("used_count") or 0) >= int(max_uses):
         raise HTTPException(status_code=400, detail={"code": "COUPON_EXHAUSTED"})
+    if c.get("once_per_user"):
+        used = await (
+            db.table("payments").select("id")
+            .eq("buyer_user_id", buyer_id).eq("coupon_id", str(c["id"]))
+            .in_("status", ["paid", "fulfilled"]).limit(1).execute()
+        )
+        if used.data:
+            raise HTTPException(status_code=400, detail={"code": "COUPON_ALREADY_USED"})
     return c
+
+
+async def _assert_tier_fits_players(db, buyer_id: str, tier: str) -> None:
+    """Downgrade gate: refuse a tier whose slot limit is below the buyer's active
+    player count. Frontend catches 409 DOWNGRADE_BLOCKED → eviction modal → re-invoice."""
+    limit = TIER_PLAYER_LIMITS.get(tier, 1)
+    active = await count_active_partnerships(db, buyer_id)
+    if limit < active:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "DOWNGRADE_BLOCKED", "excess": active - limit},
+        )
 
 
 @router.post("/tier-invoice", response_model=InvoiceResponse)
@@ -293,6 +317,10 @@ async def create_tier_invoice(
     if pricing_mode == "free":
         raise HTTPException(status_code=400, detail={"code": "FREE_NO_INVOICE"})
 
+    # Downgrade gate — never issue an invoice for a tier that can't hold the
+    # buyer's current active players (applies to custom + standard modes alike).
+    await _assert_tier_fits_players(db, buyer_id, tier)
+
     if pricing_mode == "custom":
         if period != "1m":
             raise HTTPException(status_code=400, detail={"code": "CUSTOM_PERIOD_1M_ONLY"})
@@ -318,7 +346,7 @@ async def create_tier_invoice(
                 raise HTTPException(status_code=400, detail={"code": "RENEWAL_PERIOD_INVALID"})
             amount = base_price(price_row, period)
             if body.coupon_code:
-                coupon = await _validate_coupon(db, body.coupon_code)
+                coupon = await _validate_coupon(db, body.coupon_code, buyer_id)
                 coupon_id = str(coupon["id"])
                 discount_pct = int(coupon["discount_pct"])
                 amount = apply_coupon(amount, discount_pct)
@@ -347,3 +375,47 @@ async def create_tier_invoice(
 
     await db.table("payments").update({"invoice_link": invoice_link}).eq("id", payment_id).execute()
     return InvoiceResponse(payment_id=payment_id, invoice_link=invoice_link)
+
+
+# ---------------------------------------------------------------------------
+# POST /payments/coupon-preview — live coupon recalculation for RenewalScreen
+# ---------------------------------------------------------------------------
+
+class CouponPreviewRequest(BaseModel):
+    code: str
+    tier: Literal["standard", "premium", "elite"]
+    period: Literal["1m", "3m", "12m"]
+
+
+class CouponPreviewResponse(BaseModel):
+    valid: bool
+    pct: int = 0
+    final_price: int = 0
+    base_price: int = 0
+    code: str | None = None  # reason code when valid is false
+
+
+@router.post("/coupon-preview", response_model=CouponPreviewResponse)
+async def coupon_preview(
+    body: CouponPreviewRequest,
+    user: dict = Depends(get_current_user),
+):
+    """Validate a coupon against a tier/period and return the discounted total.
+    Checks are identical to invoice creation (active, expires, max_uses, once_per_user)."""
+    db = await get_supabase()
+    buyer_id = await _fetch_user_id(db, user["telegram_id"])
+
+    price_row = await get_tier_price_row(db, body.tier)
+    base = base_price(price_row, body.period) if price_row else None
+    if not base or base < 1:
+        return CouponPreviewResponse(valid=False, code="PRICE_UNSET")
+
+    try:
+        coupon = await _validate_coupon(db, body.code, buyer_id)
+    except HTTPException as e:
+        reason = e.detail.get("code") if isinstance(e.detail, dict) else "COUPON_INVALID"
+        return CouponPreviewResponse(valid=False, base_price=base, code=reason)
+
+    pct = int(coupon["discount_pct"])
+    final = apply_coupon(base, pct)
+    return CouponPreviewResponse(valid=True, pct=pct, final_price=final, base_price=base)

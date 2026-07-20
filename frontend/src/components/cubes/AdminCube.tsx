@@ -7,10 +7,11 @@ import {
 import type { MaintenanceStatus, ResponsibleGroup, BanHistoryEntry } from '../../api/admin';
 import type { AccessTier } from '../../stores/authStore';
 import {
-    listCoupons, createCoupon, updateCoupon,
+    listCoupons, createCoupon, updateCoupon, deleteCoupon,
     listAdminTierPrices, updateTierPrice, setUserPricing,
+    searchUsers, listSpecialUsers,
 } from '../../api/adminPricing';
-import type { Coupon, AdminTierPrice, PricingMode } from '../../api/adminPricing';
+import type { Coupon, AdminTierPrice, PricingMode, AdminUserCard } from '../../api/adminPricing';
 import {
     listPayments, refundPayment, listStarProducts, updateStarProduct, getStarsBalance,
 } from '../../api/adminPayments';
@@ -505,9 +506,10 @@ const CouponsSection: React.FC = () => {
     const [pct, setPct] = useState('20');
     const [code, setCode] = useState('');
     const [maxUses, setMaxUses] = useState('');
+    const [oncePerUser, setOncePerUser] = useState(true);
     const [creating, setCreating] = useState(false);
     const [toast, setToast] = useState('');
-    const show = (m: string) => { setToast(m); setTimeout(() => setToast(''), 2200); };
+    const show = (m: string) => { setToast(m); setTimeout(() => setToast(''), 2600); };
 
     const reload = useCallback(() => {
         listCoupons().then(setCoupons).catch(() => {}).finally(() => setLoading(false));
@@ -519,7 +521,12 @@ const CouponsSection: React.FC = () => {
         if (!Number.isFinite(p) || p < 1 || p > 99) { show('Скидка 1–99%'); return; }
         setCreating(true);
         try {
-            await createCoupon({ code: code.trim() || undefined, discount_pct: p, max_uses: maxUses ? parseInt(maxUses, 10) : null });
+            await createCoupon({
+                code: code.trim() || undefined,
+                discount_pct: p,
+                max_uses: maxUses ? parseInt(maxUses, 10) : null,
+                once_per_user: oncePerUser,
+            });
             hapticNotification('success'); setCode(''); setMaxUses(''); reload();
         } catch (e: any) {
             show(e?.response?.data?.detail?.code === 'CODE_EXISTS' ? 'Код уже существует' : 'Ошибка');
@@ -528,14 +535,44 @@ const CouponsSection: React.FC = () => {
 
     const toggle = async (c: Coupon) => { try { await updateCoupon(c.id, !c.is_active); reload(); } catch { /* ignore */ } };
 
+    const copyCode = (c: Coupon) => {
+        if (navigator.clipboard) { navigator.clipboard.writeText(c.code); show('Код скопирован'); }
+    };
+
+    const remove = async (c: Coupon) => {
+        try {
+            await deleteCoupon(c.id);
+            hapticNotification('success'); show('Купон удалён'); reload();
+        } catch (e: any) {
+            const codeErr = e?.response?.data?.detail?.code;
+            if (codeErr === 'COUPON_HAS_REFS') {
+                // Referenced coupons can't be deleted — deactivate instead.
+                if (c.is_active) { await updateCoupon(c.id, false).catch(() => {}); reload(); }
+                show('Купон использован — выключен, не удалён');
+            } else {
+                show('Ошибка удаления');
+            }
+        }
+    };
+
     return (
         <>
             <div className="cube-card" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <input className="admin-generator-select" placeholder="Код (пусто = авто)" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} onClick={(e) => e.stopPropagation()} />
                 <div style={{ display: 'flex', gap: 8 }}>
-                    <input className="admin-generator-select" style={{ flex: 1 }} type="number" min={1} max={99} placeholder="Скидка %" value={pct} onChange={(e) => setPct(e.target.value)} onClick={(e) => e.stopPropagation()} />
-                    <input className="admin-generator-select" style={{ flex: 1 }} type="number" min={1} placeholder="Лимит (пусто = ∞)" value={maxUses} onChange={(e) => setMaxUses(e.target.value)} onClick={(e) => e.stopPropagation()} />
+                    <label className="admin-field" style={{ flex: 1 }}>
+                        <span className="admin-field-label">Скидка %</span>
+                        <input className="admin-generator-select" type="number" min={1} max={99} value={pct} onChange={(e) => setPct(e.target.value)} onClick={(e) => e.stopPropagation()} />
+                    </label>
+                    <label className="admin-field" style={{ flex: 1 }}>
+                        <span className="admin-field-label">Лимит применений (пусто = без лимита)</span>
+                        <input className="admin-generator-select" type="number" min={1} value={maxUses} onChange={(e) => setMaxUses(e.target.value)} onClick={(e) => e.stopPropagation()} />
+                    </label>
                 </div>
+                <label className="admin-checkbox-row" onClick={(e) => e.stopPropagation()}>
+                    <input type="checkbox" checked={oncePerUser} onChange={(e) => setOncePerUser(e.target.checked)} />
+                    <span>Одно применение на юзера</span>
+                </label>
                 <button className="cube-btn-primary" disabled={creating} onClick={(e) => { e.stopPropagation(); create(); }}>{creating ? 'Создаём…' : 'Создать купон'}</button>
             </div>
             {loading ? <div className="cube-section-title" style={{ textAlign: 'center' }}>Загрузка…</div> : (
@@ -543,10 +580,18 @@ const CouponsSection: React.FC = () => {
                     {coupons.length === 0 ? <div className="cube-locked-text">Нет купонов</div> : coupons.map(c => (
                         <div key={c.id} className="settings-row" style={{ gap: 8 }}>
                             <div className="settings-row-info">
-                                <div className="cube-player-name">{c.code} · −{c.discount_pct}%</div>
-                                <div className="cube-player-meta">{c.used_count}{c.max_uses != null ? `/${c.max_uses}` : ''} исп. · {c.is_active ? 'активен' : 'выключен'}</div>
+                                <div className="cube-player-name">
+                                    <span className="coupon-code">{c.code}</span>
+                                    <span className="coupon-disc"> · −{c.discount_pct}%</span>
+                                </div>
+                                <div className="cube-player-meta">
+                                    {c.used_count}{c.max_uses != null ? `/${c.max_uses}` : ''} исп.
+                                    {c.once_per_user ? ' · 1/юзер' : ''} · {c.is_active ? 'активен' : 'выключен'}
+                                </div>
                             </div>
+                            <button className="cube-btn-sm" onClick={(e) => { e.stopPropagation(); copyCode(c); }}>📋</button>
                             <button className="cube-btn-sm" onClick={(e) => { e.stopPropagation(); toggle(c); }}>{c.is_active ? '🚫' : '✅'}</button>
+                            <button className="cube-btn-sm" onClick={(e) => { e.stopPropagation(); remove(c); }}>🗑</button>
                         </div>
                     ))}
                 </div>
@@ -612,59 +657,156 @@ const TierPricesSection: React.FC = () => {
     );
 };
 
+const PRICING_TIERS: AccessTier[] = ['standard', 'premium', 'elite'];
+const TIER_LIMIT: Record<AccessTier, number> = { standard: 1, premium: 2, elite: 3 };
+
 const UserPricingSection: React.FC = () => {
-    const [userId, setUserId] = useState('');
+    const [query, setQuery] = useState('');
+    const [results, setResults] = useState<AdminUserCard[]>([]);
+    const [searching, setSearching] = useState(false);
+    const [selected, setSelected] = useState<AdminUserCard | null>(null);
     const [mode, setMode] = useState<PricingMode>(null);
     const [custom, setCustom] = useState('');
+    const [tier, setTier] = useState<AccessTier>('standard');
     const [busy, setBusy] = useState(false);
     const [toast, setToast] = useState('');
     const show = (m: string) => { setToast(m); setTimeout(() => setToast(''), 2500); };
 
+    const runSearch = async () => {
+        const q = query.trim();
+        if (!q) return;
+        setSearching(true);
+        try { setResults(await searchUsers(q)); }
+        catch { show('Ошибка поиска'); } finally { setSearching(false); }
+    };
+
+    const pick = (u: AdminUserCard) => {
+        setSelected(u);
+        setMode(u.pricing_mode);
+        setCustom(u.custom_price_stars ? String(u.custom_price_stars) : '');
+        setTier(u.responsible_access_tier ?? 'standard');
+    };
+
     const apply = async () => {
-        if (!userId.trim()) { show('Укажите user_id'); return; }
+        if (!selected) return;
         if (mode === 'custom' && (!custom || parseInt(custom, 10) < 1)) { show('Цена ≥ 1'); return; }
         setBusy(true);
         try {
-            await setUserPricing(userId.trim(), mode, mode === 'custom' ? parseInt(custom, 10) : undefined);
+            await setUserPricing(
+                selected.id, mode,
+                mode === 'custom' ? parseInt(custom, 10) : undefined,
+                mode ? tier : undefined,
+            );
             hapticNotification('success'); show('Режим применён');
-        } catch { show('Ошибка (проверьте user_id)'); } finally { setBusy(false); }
+            runSearch();
+        } catch { show('Ошибка применения'); } finally { setBusy(false); }
     };
 
     return (
-        <div className="cube-card" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div className="cube-player-meta">Оверрайд цены для пользователя (user_id из «Соединений»)</div>
-            <input className="admin-generator-select" placeholder="user_id (UUID)" value={userId} onChange={(e) => setUserId(e.target.value)} onClick={(e) => e.stopPropagation()} />
-            <div className="tab-selector">
-                {([['normal', 'Обычный'], ['free', 'Бесплатно'], ['custom', 'Персональная']] as const).map(([m, label]) => {
-                    const val: PricingMode = m === 'normal' ? null : m;
-                    return (
-                        <button key={m} className={`tab-selector-btn${mode === val ? ' active' : ''}`} onClick={(e) => { e.stopPropagation(); setMode(val); }}>{label}</button>
-                    );
-                })}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div className="cube-card" style={{ display: 'flex', gap: 8 }}>
+                <input className="admin-generator-select" style={{ flex: 1 }} placeholder="TG ID / username / имя" value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') runSearch(); }}
+                    onClick={(e) => e.stopPropagation()} />
+                <button className="cube-btn-sm" disabled={searching} onClick={(e) => { e.stopPropagation(); runSearch(); }}>🔍</button>
             </div>
-            {mode === 'custom' && (
-                <input className="admin-generator-select" type="number" min={1} placeholder="Цена ⭐ / мес" value={custom} onChange={(e) => setCustom(e.target.value)} onClick={(e) => e.stopPropagation()} />
+
+            {results.length > 0 && !selected && (
+                <div className="cube-card">
+                    {results.map(u => (
+                        <div key={u.id} className="settings-row" style={{ gap: 8 }} onClick={(e) => { e.stopPropagation(); pick(u); }}>
+                            <div className="settings-row-info">
+                                <div className="cube-player-name">{u.first_name || '—'} {u.telegram_username ? `@${u.telegram_username}` : ''}</div>
+                                <div className="cube-player-meta">TG {u.telegram_id} · {u.pricing_mode ?? 'обычный'}{u.responsible_access_tier ? ` · ${u.responsible_access_tier}` : ''}</div>
+                            </div>
+                            <button className="cube-btn-sm">Выбрать</button>
+                        </div>
+                    ))}
+                </div>
             )}
-            <button className="cube-btn-primary" disabled={busy} onClick={(e) => { e.stopPropagation(); apply(); }}>{busy ? 'Применяем…' : 'Применить'}</button>
+            {results.length === 0 && !selected && !searching && query.trim() && (
+                <div className="cube-locked"><div className="cube-locked-text">Ничего не найдено</div></div>
+            )}
+
+            {selected && (
+                <div className="cube-card" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div className="cube-player-name">{selected.first_name || '—'} {selected.telegram_username ? `@${selected.telegram_username}` : ''}</div>
+                    <div className="cube-player-meta">TG {selected.telegram_id}</div>
+                    <div className="tab-selector">
+                        {([['normal', 'Обычный'], ['free', 'Бесплатно'], ['custom', 'Персональная']] as const).map(([m, label]) => {
+                            const val: PricingMode = m === 'normal' ? null : m;
+                            return (
+                                <button key={m} className={`tab-selector-btn${mode === val ? ' active' : ''}`} onClick={(e) => { e.stopPropagation(); setMode(val); }}>{label}</button>
+                            );
+                        })}
+                    </div>
+                    {mode === 'custom' && (
+                        <input className="admin-generator-select" type="number" min={1} placeholder="Цена ⭐ / мес" value={custom} onChange={(e) => setCustom(e.target.value)} onClick={(e) => e.stopPropagation()} />
+                    )}
+                    {mode && (
+                        <label className="admin-field">
+                            <span className="admin-field-label">Тариф (слоты)</span>
+                            <div className="tab-selector">
+                                {PRICING_TIERS.map(t => (
+                                    <button key={t} className={`tab-selector-btn${tier === t ? ' active' : ''}`} onClick={(e) => { e.stopPropagation(); setTier(t); }}>
+                                        {TIER_LABELS[t]} ·{TIER_LIMIT[t]}
+                                    </button>
+                                ))}
+                            </div>
+                        </label>
+                    )}
+                    <div style={{ display: 'flex', gap: 8 }}>
+                        <button className="cube-btn-sm" onClick={(e) => { e.stopPropagation(); setSelected(null); }}>← Назад</button>
+                        <button className="cube-btn-primary" style={{ flex: 1 }} disabled={busy} onClick={(e) => { e.stopPropagation(); apply(); }}>{busy ? 'Применяем…' : 'Применить'}</button>
+                    </div>
+                </div>
+            )}
             {toast && <div className="admin-toast">{toast}</div>}
         </div>
     );
 };
 
+const SpecialUsersSection: React.FC = () => {
+    const [users, setUsers] = useState<AdminUserCard[]>([]);
+    const [loading, setLoading] = useState(true);
+    useEffect(() => {
+        listSpecialUsers().then(setUsers).catch(() => {}).finally(() => setLoading(false));
+    }, []);
+    if (loading) return <div className="cube-section-title" style={{ textAlign: 'center' }}>Загрузка…</div>;
+    return (
+        <div className="cube-card">
+            {users.length === 0 ? <div className="cube-locked-text">Нет особых аккаунтов</div> : users.map(u => (
+                <div key={u.id} className="settings-row" style={{ gap: 8 }}>
+                    <div className="settings-row-info">
+                        <div className="cube-player-name">{u.first_name || '—'} {u.telegram_username ? `@${u.telegram_username}` : ''}</div>
+                        <div className="cube-player-meta">
+                            TG {u.telegram_id} · {u.pricing_mode}
+                            {u.responsible_access_tier ? ` · ${u.responsible_access_tier}` : ''}
+                            {u.pricing_mode === 'custom' && u.custom_price_stars ? ` · ${u.custom_price_stars} ⭐` : ''}
+                        </div>
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+};
+
 const PromosPanel: React.FC = () => {
-    const [sub, setSub] = useState<'coupons' | 'tiers' | 'pricing'>('coupons');
+    const [sub, setSub] = useState<'coupons' | 'tiers' | 'pricing' | 'special'>('coupons');
     return (
         <div className="admin-generator-form">
             <div className="tab-selector">
-                {(['coupons', 'tiers', 'pricing'] as const).map(s => (
+                {(['coupons', 'tiers', 'pricing', 'special'] as const).map(s => (
                     <button key={s} className={`tab-selector-btn${sub === s ? ' active' : ''}`} onClick={(e) => { e.stopPropagation(); setSub(s); hapticImpact('light'); }}>
-                        {s === 'coupons' ? 'Купоны' : s === 'tiers' ? 'Тарифы' : 'Юзер'}
+                        {s === 'coupons' ? 'Купоны' : s === 'tiers' ? 'Тарифы' : s === 'pricing' ? 'Юзер' : 'Особые'}
                     </button>
                 ))}
             </div>
             {sub === 'coupons' && <CouponsSection />}
             {sub === 'tiers' && <TierPricesSection />}
             {sub === 'pricing' && <UserPricingSection />}
+            {sub === 'special' && <SpecialUsersSection />}
         </div>
     );
 };

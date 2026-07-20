@@ -1,5 +1,5 @@
 import React from 'react';
-import type { AccessTier } from '../../api/promo';
+import type { AccessTier } from '../../stores/authStore';
 
 const TIER_STYLES: Record<AccessTier, { bg: string; color: string; label: string }> = {
     standard: { bg: '#e0e0e0', color: '#424242', label: 'STD' },

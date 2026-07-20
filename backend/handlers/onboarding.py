@@ -60,6 +60,21 @@ async def cmd_start(message: types.Message, state: FSMContext) -> None:
         return
 
     # Plain /start (renew/other startapp params are handled inside the Mini App).
+    # Upsert the user so an admin can find them by TG id before they open the app.
+    db = await get_supabase()
+    tg_id = message.from_user.id
+    first_name = message.from_user.first_name
+    existing = await (
+        db.table("users").select("id").eq("telegram_id", tg_id).maybe_single().execute()
+    )
+    if existing and existing.data:
+        # On conflict update only first_name — never touch role/access of a known user.
+        await db.table("users").update({"first_name": first_name}).eq("telegram_id", tg_id).execute()
+    else:
+        await db.table("users").insert(
+            {"telegram_id": tg_id, "first_name": first_name, "role": "new"}
+        ).execute()
+
     await message.answer(
         "👋 Добро пожаловать в Workout Bot!\n\n"
         "Откройте приложение, чтобы выбрать тариф и начать:",

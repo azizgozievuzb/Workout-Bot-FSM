@@ -1,5 +1,5 @@
 import api from './client';
-import type { AccessTier } from './promo';
+import type { AccessTier } from '../stores/authStore';
 
 export interface MyPlayer {
     partnership_id: string;
@@ -7,6 +7,8 @@ export interface MyPlayer {
     telegram_id: number;
     first_name: string | null;
     profile_photo_url: string | null;
+    photo_dark_url: string | null;
+    photo_light_url: string | null;
     access_tier: AccessTier;
     expires_at: string | null;
     is_expired: boolean;

@@ -5,6 +5,7 @@ import { getTierPrices, createTierInvoice } from '../../api/payments';
 import type { TierPrice } from '../../api/payments';
 import { pollPayment, openStarInvoice } from '../../utils/starPayment';
 import { hapticNotification } from '../../utils/haptic';
+import { TIER_LIMIT_LABEL } from '../../utils/tierText';
 
 const TIER_META: Record<AccessTier, { title: string; limit: number }> = {
   standard: { title: 'Standard', limit: 1 },
@@ -88,7 +89,7 @@ const PaywallScreen: React.FC = () => {
             <div key={p.tier} className="paywall-card">
               <div className="paywall-card-head">
                 <span className="paywall-card-title">{meta.title}</span>
-                <span className="paywall-card-limit">до {meta.limit} игрок(ов)</span>
+                <span className="paywall-card-limit">{TIER_LIMIT_LABEL[p.tier]}</span>
               </div>
               <button className="paywall-cta" disabled={busy} onClick={() => pay(p.tier)}>
                 {busy ? '…' : `Оплатить · ${p.intro_price_stars} ⭐ / первый месяц`}

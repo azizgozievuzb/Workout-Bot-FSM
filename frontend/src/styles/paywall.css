@@ -134,6 +134,26 @@
   box-sizing: border-box;
 }
 
+.renew-tier-hint {
+  font-size: 13px;
+  opacity: 0.7;
+  margin: -4px 0 14px;
+  text-align: center;
+}
+
+.renew-coupon-ok {
+  font-size: 13px;
+  font-weight: 600;
+  color: #2ecc71;
+  margin: -8px 0 12px;
+}
+
+.renew-coupon-err {
+  font-size: 13px;
+  color: #e74c3c;
+  margin: -8px 0 12px;
+}
+
 .renew-warn {
   font-size: 13px;
   color: #ffb020;

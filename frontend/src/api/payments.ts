@@ -59,3 +59,20 @@ export async function createTierInvoice(
     });
     return data;
 }
+
+export interface CouponPreview {
+    valid: boolean;
+    pct: number;
+    final_price: number;
+    base_price: number;
+    code: string | null;
+}
+
+export async function previewCoupon(
+    code: string,
+    tier: AccessTier,
+    period: '1m' | '3m' | '12m',
+): Promise<CouponPreview> {
+    const { data } = await api.post('/payments/coupon-preview', { code, tier, period });
+    return data;
+}

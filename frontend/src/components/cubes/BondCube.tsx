@@ -11,6 +11,8 @@ import { getMyPlayers } from '../../api/partnerships';
 import type { MyPlayer } from '../../api/partnerships';
 import { createInvite, listInvites, deleteInvite } from '../../api/invites';
 import type { Invite } from '../../api/invites';
+import { playerAvatarUrl } from '../../utils/playerAvatar';
+import { useTheme } from '../../contexts/ThemeContext';
 import { hapticImpact, hapticNotification } from '../../utils/haptic';
 import '../../styles/cubes.css';
 
@@ -172,6 +174,7 @@ const PlayerBond: React.FC = () => {
 /* ---------- INVITES PANEL (Мои игроки) ---------- */
 
 const InvitesPanel: React.FC = () => {
+    const theme = useTheme();
     const [players, setPlayers] = useState<MyPlayer[]>([]);
     const [invites, setInvites] = useState<Invite[]>([]);
     const [loading, setLoading] = useState(true);
@@ -216,6 +219,13 @@ const InvitesPanel: React.FC = () => {
         try { await navigator.clipboard.writeText(link); setToast('Ссылка скопирована'); setTimeout(() => setToast(''), 2000); } catch { /* ignore */ }
     };
 
+    const shareLink = (link: string) => {
+        const tg = (window as any).Telegram?.WebApp;
+        const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent('Приглашаю тебя тренироваться в Workout Bot!')}`;
+        if (tg?.openTelegramLink) tg.openTelegramLink(shareUrl);
+        else copyLink(link);
+    };
+
     const removeInvite = async (id: string) => {
         hapticImpact('light');
         try { await deleteInvite(id); setInvites((prev) => prev.filter((x) => x.id !== id)); } catch { /* ignore */ }
@@ -232,12 +242,19 @@ const InvitesPanel: React.FC = () => {
             ) : players.length === 0 ? (
                 <div style={{ opacity: 0.6, fontSize: 13, padding: '4px 0 8px' }}>Пока нет игроков.</div>
             ) : (
-                players.map((p) => (
-                    <div key={p.id} className="cube-feed-card">
-                        <div className="cube-feed-icon">🏃</div>
-                        <div><div className="cube-feed-text">{p.first_name ?? 'Игрок'}</div></div>
-                    </div>
-                ))
+                players.map((p) => {
+                    const avatar = playerAvatarUrl(p, theme);
+                    return (
+                        <div key={p.id} className="cube-feed-card">
+                            <div className="cube-avatar">
+                                {avatar
+                                    ? <img src={avatar} alt={p.first_name ?? 'Игрок'} />
+                                    : (p.first_name ?? 'И').charAt(0)}
+                            </div>
+                            <div><div className="cube-feed-text">{p.first_name ?? 'Игрок'}</div></div>
+                        </div>
+                    );
+                })
             )}
 
             {pending.length > 0 && (
@@ -246,9 +263,10 @@ const InvitesPanel: React.FC = () => {
                     {pending.map((inv) => (
                         <div key={inv.id} className="cube-feed-card" style={{ gap: 8 }}>
                             <div style={{ flex: 1, minWidth: 0 }}>
-                                <div className="cube-feed-text" style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{inv.code}</div>
+                                <div className="cube-feed-text">Приглашение</div>
                                 <div className="cube-feed-time">ожидает</div>
                             </div>
+                            <button className="cube-btn-secondary" style={{ width: 'auto', padding: '4px 10px' }} onClick={(e) => { e.stopPropagation(); shareLink(inv.link); }}>Поделиться</button>
                             <button className="cube-btn-secondary" style={{ width: 'auto', padding: '4px 10px' }} onClick={(e) => { e.stopPropagation(); copyLink(inv.link); }}>Копировать</button>
                             <button className="cube-btn-secondary" style={{ width: 'auto', padding: '4px 10px' }} onClick={(e) => { e.stopPropagation(); removeInvite(inv.id); }}>✕</button>
                         </div>

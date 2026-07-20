@@ -2757,3 +2757,39 @@
 
 .dark-theme .notif-empty { color: rgba(250, 245, 239, 0.3); }
 .light-theme .notif-empty { color: rgba(44, 32, 22, 0.3); }
+
+/* --- Admin: labeled fields, checkbox row, coupon code styling (7.5.1) --- */
+.admin-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.admin-field-label {
+    font-size: 11px;
+    opacity: 0.6;
+}
+
+.admin-checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.admin-checkbox-row input {
+    width: 16px;
+    height: 16px;
+    accent-color: #2ecc71;
+}
+
+.coupon-code {
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
+.coupon-disc {
+    opacity: 0.6;
+    font-weight: 400;
+}

@@ -115,11 +115,6 @@ const TierDowngradeModal: React.FC<Props> = ({ targetTier, onClose, onSuccess })
                             />
                             <span style={{ flex: 1 }}>
                                 {p.first_name ?? 'Игрок'}
-                                {p.is_expired && (
-                                    <span style={{ opacity: 0.5, fontSize: 12, marginLeft: 6 }}>
-                                        (истёк)
-                                    </span>
-                                )}
                             </span>
                         </label>
                     ))}

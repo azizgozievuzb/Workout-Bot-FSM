@@ -234,6 +234,8 @@ const PlayerShop: React.FC = () => {
    RESPONSIBLE SHOP
    ============================================================ */
 const ResponsibleShop: React.FC = () => {
+    const subscription = useAuthStore((s) => s.subscription);
+    const subActive = subscription?.active ?? false;
     const [players, setPlayers] = useState<MyPlayer[]>([]);
     const [selectedPlayer, setSelectedPlayer] = useState<MyPlayer | null>(null);
     const [items, setItems] = useState<ShopItem[]>([]);
@@ -248,15 +250,18 @@ const ResponsibleShop: React.FC = () => {
     }, []);
 
     useEffect(() => {
+        // Player activity is driven by the logged-in Responsible's subscription,
+        // not per-player expiry. Individually evicted players are still excluded.
+        if (!subActive) { setLoadingPlayers(false); return; }
         getMyPlayers()
             .then(ps => {
-                const active = ps.filter(p => !p.is_expired && !p.is_deactivated);
+                const active = ps.filter(p => !p.is_deactivated);
                 setPlayers(active);
                 if (active.length > 0) setSelectedPlayer(active[0]);
             })
             .catch(() => {})
             .finally(() => setLoadingPlayers(false));
-    }, []);
+    }, [subActive]);
 
     useEffect(() => {
         if (!selectedPlayer) { setItems([]); return; }

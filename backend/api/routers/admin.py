@@ -451,6 +451,7 @@ class CouponRow(BaseModel):
     is_active: bool
     max_uses: int | None = None
     used_count: int = 0
+    once_per_user: bool = True
     expires_at: str | None = None
     created_at: str | None = None
 
@@ -459,6 +460,7 @@ class CreateCouponReq(BaseModel):
     code: str | None = None  # None → autogenerate
     discount_pct: int = Field(ge=1, le=99)
     max_uses: int | None = Field(default=None, ge=1)
+    once_per_user: bool = True
     expires_at: str | None = None
 
 
@@ -466,12 +468,15 @@ class UpdateCouponReq(BaseModel):
     is_active: bool
 
 
+_COUPON_COLS = "id, code, discount_pct, is_active, max_uses, used_count, once_per_user, expires_at, created_at"
+
+
 @general_router.get("/coupons", response_model=list[CouponRow])
 async def list_coupons(admin: dict = Depends(require_admin)):
     db = await get_supabase()
     res = await (
         db.table("coupons")
-        .select("id, code, discount_pct, is_active, max_uses, used_count, expires_at, created_at")
+        .select(_COUPON_COLS)
         .order("created_at", desc=True)
         .execute()
     )
@@ -493,6 +498,7 @@ async def create_coupon(body: CreateCouponReq, admin: dict = Depends(require_adm
             "code": code,
             "discount_pct": body.discount_pct,
             "max_uses": body.max_uses,
+            "once_per_user": body.once_per_user,
             "expires_at": body.expires_at,
             "is_active": True,
         })
@@ -501,7 +507,7 @@ async def create_coupon(body: CreateCouponReq, admin: dict = Depends(require_adm
     if not ins.data:
         raise HTTPException(status_code=500, detail="Failed to create coupon")
     r = ins.data[0]
-    return CouponRow(id=str(r["id"]), **{k: r[k] for k in r if k != "id"})
+    return CouponRow(id=str(r["id"]), **{k: r[k] for k in r if k in CouponRow.model_fields and k != "id"})
 
 
 @general_router.patch("/coupons/{coupon_id}", response_model=CouponRow)
@@ -516,7 +522,25 @@ async def update_coupon(coupon_id: _uuid.UUID, body: UpdateCouponReq, admin: dic
     if not res.data:
         raise HTTPException(status_code=404, detail="Coupon not found")
     r = res.data[0]
-    return CouponRow(id=str(r["id"]), **{k: r[k] for k in r if k != "id"})
+    return CouponRow(id=str(r["id"]), **{k: r[k] for k in r if k in CouponRow.model_fields and k != "id"})
+
+
+@general_router.delete("/coupons/{coupon_id}")
+async def delete_coupon(coupon_id: _uuid.UUID, admin: dict = Depends(require_admin)):
+    """Delete only when the coupon has no references (used_count=0 AND no payments
+    point at it). Otherwise 409 — the UI offers deactivation instead."""
+    db = await get_supabase()
+    cid = str(coupon_id)
+    cur = await db.table("coupons").select("used_count").eq("id", cid).maybe_single().execute()
+    if not cur or not cur.data:
+        raise HTTPException(status_code=404, detail="Coupon not found")
+    if int(cur.data.get("used_count") or 0) > 0:
+        raise HTTPException(status_code=409, detail={"code": "COUPON_HAS_REFS"})
+    pay = await db.table("payments").select("id").eq("coupon_id", cid).limit(1).execute()
+    if pay.data:
+        raise HTTPException(status_code=409, detail={"code": "COUPON_HAS_REFS"})
+    await db.table("coupons").delete().eq("id", cid).execute()
+    return {"deleted": True}
 
 
 # ===========================================================================
@@ -580,12 +604,14 @@ async def update_tier_price(
 class UserPricingReq(BaseModel):
     mode: Literal["free", "custom"] | None = None  # null → обычный режим
     custom_price_stars: int | None = Field(default=None, ge=1)
+    tier: Literal["standard", "premium", "elite"] | None = None  # slot limit for special accounts
 
 
 class UserPricingResp(BaseModel):
     id: str
     pricing_mode: str | None = None
     custom_price_stars: int | None = None
+    responsible_access_tier: str | None = None
 
 
 @general_router.patch("/users/{user_id}/pricing", response_model=UserPricingResp)
@@ -594,10 +620,14 @@ async def set_user_pricing(user_id: _uuid.UUID, body: UserPricingReq, admin: dic
     if body.mode == "custom" and (body.custom_price_stars is None or body.custom_price_stars < 1):
         raise HTTPException(status_code=400, detail={"code": "CUSTOM_PRICE_REQUIRED"})
 
-    update = {
+    update: dict = {
         "pricing_mode": body.mode,
         "custom_price_stars": body.custom_price_stars if body.mode == "custom" else None,
     }
+    # Special accounts (free/custom) may also pin a slot tier; normal mode leaves it untouched.
+    if body.mode in ("free", "custom") and body.tier is not None:
+        update["responsible_access_tier"] = body.tier
+
     res = await db.table("users").update(update).eq("id", str(user_id)).execute()
     if not res.data:
         raise HTTPException(status_code=404, detail="User not found")
@@ -606,4 +636,63 @@ async def set_user_pricing(user_id: _uuid.UUID, body: UserPricingReq, admin: dic
         id=str(r["id"]),
         pricing_mode=r.get("pricing_mode"),
         custom_price_stars=r.get("custom_price_stars"),
+        responsible_access_tier=r.get("responsible_access_tier"),
     )
+
+
+# ===========================================================================
+# User search + special-mode list — admin (7.5.1)
+# ===========================================================================
+
+class AdminUserCard(BaseModel):
+    id: str
+    telegram_id: int
+    telegram_username: str | None = None
+    first_name: str | None = None
+    pricing_mode: str | None = None
+    custom_price_stars: int | None = None
+    responsible_access_tier: str | None = None
+
+
+_USER_CARD_COLS = (
+    "id, telegram_id, telegram_username, first_name, "
+    "pricing_mode, custom_price_stars, responsible_access_tier"
+)
+
+
+@general_router.get("/users/search", response_model=list[AdminUserCard])
+async def search_users(q: str, admin: dict = Depends(require_admin)):
+    """Find users by exact telegram_id or ilike on username/first_name."""
+    db = await get_supabase()
+    term = (q or "").strip()
+    if not term:
+        return []
+    rows: list[dict] = []
+    if term.lstrip("-").isdigit():
+        res = await (
+            db.table("users").select(_USER_CARD_COLS)
+            .eq("telegram_id", int(term)).limit(20).execute()
+        )
+        rows = res.data or []
+    if not rows:
+        like = f"*{term}*"  # PostgREST logical-operator wildcard is '*', not '%'
+        res = await (
+            db.table("users").select(_USER_CARD_COLS)
+            .or_(f"telegram_username.ilike.{like},first_name.ilike.{like}")
+            .limit(20).execute()
+        )
+        rows = res.data or []
+    return [AdminUserCard(**{k: r.get(k) for k in AdminUserCard.model_fields}) for r in rows]
+
+
+@general_router.get("/users/special", response_model=list[AdminUserCard])
+async def list_special_users(admin: dict = Depends(require_admin)):
+    """All users with a special pricing mode (free/custom)."""
+    db = await get_supabase()
+    res = await (
+        db.table("users").select(_USER_CARD_COLS)
+        .in_("pricing_mode", ["free", "custom"])
+        .order("pricing_mode")
+        .execute()
+    )
+    return [AdminUserCard(**{k: r.get(k) for k in AdminUserCard.model_fields}) for r in (res.data or [])]
