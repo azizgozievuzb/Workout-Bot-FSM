@@ -562,10 +562,12 @@ const CouponsSection: React.FC = () => {
                 <div style={{ display: 'flex', gap: 8 }}>
                     <label className="admin-field" style={{ flex: 1 }}>
                         <span className="admin-field-label">Скидка %</span>
+                        <span className="admin-field-hint">&nbsp;</span>
                         <input className="admin-generator-select" type="number" min={1} max={99} value={pct} onChange={(e) => setPct(e.target.value)} onClick={(e) => e.stopPropagation()} />
                     </label>
                     <label className="admin-field" style={{ flex: 1 }}>
-                        <span className="admin-field-label">Лимит применений (пусто = без лимита)</span>
+                        <span className="admin-field-label">Лимит применений</span>
+                        <span className="admin-field-hint">пусто = без лимита</span>
                         <input className="admin-generator-select" type="number" min={1} value={maxUses} onChange={(e) => setMaxUses(e.target.value)} onClick={(e) => e.stopPropagation()} />
                     </label>
                 </div>
