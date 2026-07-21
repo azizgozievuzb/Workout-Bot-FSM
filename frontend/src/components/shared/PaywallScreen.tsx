@@ -94,6 +94,7 @@ const PaywallScreen: React.FC = () => {
               <button className="paywall-cta" disabled={busy} onClick={() => pay(p.tier)}>
                 {busy ? '…' : `Оплатить · ${p.intro_price_stars} ⭐ / первый месяц`}
               </button>
+              <p className="paywall-card-note">далее {p.price_1m} ⭐/мес</p>
             </div>
           );
         })}
