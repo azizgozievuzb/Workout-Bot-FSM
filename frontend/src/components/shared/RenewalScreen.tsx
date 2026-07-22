@@ -45,6 +45,7 @@ interface RenewalScreenProps {
 const RenewalScreen: React.FC<RenewalScreenProps> = ({ onClose }) => {
   const { subscription } = useAuthStore();
   const isCustom = subscription?.pricing_mode === 'custom';
+  const isFree = subscription?.pricing_mode === 'free';
   const [prices, setPrices] = useState<TierPrice[]>([]);
   const [tier, setTier] = useState<AccessTier>(subscription?.tier ?? 'standard');
   const [period, setPeriod] = useState<SubscriptionPeriod>('1m');
@@ -58,6 +59,8 @@ const RenewalScreen: React.FC<RenewalScreenProps> = ({ onClose }) => {
   const [status, setStatus] = useState('');
 
   useEffect(() => {
+    // Free access: no prices/players needed — just render the info state.
+    if (isFree) { setLoading(false); return; }
     Promise.all([getTierPrices(), getMyPlayers().catch(() => [])])
       .then(([tp, players]) => {
         setPrices(tp);
@@ -65,7 +68,7 @@ const RenewalScreen: React.FC<RenewalScreenProps> = ({ onClose }) => {
       })
       .catch(() => setStatus('Не удалось загрузить данные'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [isFree]);
 
   // Live coupon recalculation — server is the single source of truth for validity.
   useEffect(() => {
@@ -188,13 +191,26 @@ const RenewalScreen: React.FC<RenewalScreenProps> = ({ onClose }) => {
 
         {loading && <div className="paywall-loading">Загрузка…</div>}
 
-        {isCustom && !loading && (
+        {isFree && !loading && (() => {
+          const t = subscription?.tier ?? tier;
+          return (
+            <>
+              <h2 className="paywall-sub" style={{ fontWeight: 600, marginTop: 4 }}>Персональный доступ</h2>
+              <p className="paywall-sub">
+                ✨ Вам предоставлен бесплатный доступ — тариф {TIER_META[t].title} · до {TIER_META[t].limit} игроков.
+                Оплата не требуется.
+              </p>
+            </>
+          );
+        })()}
+
+        {isCustom && !isFree && !loading && (
           <button className="paywall-cta" disabled={busy} onClick={pay}>
             {busy ? 'Открываю оплату…' : 'Продлить (персональная цена) ⭐'}
           </button>
         )}
 
-        {!isCustom && !loading && (
+        {!isCustom && !isFree && !loading && (
           <>
             <div className="renew-row">
               {(['standard', 'premium', 'elite'] as AccessTier[]).map((t) => (
