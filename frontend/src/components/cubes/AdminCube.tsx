@@ -666,6 +666,7 @@ const UserPricingSection: React.FC = () => {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<AdminUserCard[]>([]);
     const [searching, setSearching] = useState(false);
+    const [searched, setSearched] = useState(false);
     const [selected, setSelected] = useState<AdminUserCard | null>(null);
     const [mode, setMode] = useState<PricingMode>(null);
     const [custom, setCustom] = useState('');
@@ -678,9 +679,27 @@ const UserPricingSection: React.FC = () => {
         const q = query.trim();
         if (!q) return;
         setSearching(true);
-        try { setResults(await searchUsers(q)); }
+        try { setResults(await searchUsers(q)); setSearched(true); }
         catch { show('Ошибка поиска'); } finally { setSearching(false); }
     };
+
+    // Auto-search with debounce (~500ms, min 3 chars) — same pattern as coupon-preview.
+    // «Ничего не найдено» is gated on `searched`, so it never flashes while typing.
+    useEffect(() => {
+        const q = query.trim();
+        setSearched(false);
+        if (q.length < 3) { setResults([]); setSearching(false); return; }
+        let cancelled = false;
+        const t = setTimeout(() => {
+            setSearching(true);
+            searchUsers(q)
+                .then((r) => { if (!cancelled) { setResults(r); setSearched(true); } })
+                .catch(() => { if (!cancelled) { setResults([]); setSearched(true); show('Ошибка поиска'); } })
+                .finally(() => { if (!cancelled) setSearching(false); });
+        }, 500);
+        return () => { cancelled = true; clearTimeout(t); };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [query]);
 
     const pick = (u: AdminUserCard) => {
         setSelected(u);
@@ -727,7 +746,10 @@ const UserPricingSection: React.FC = () => {
                     ))}
                 </div>
             )}
-            {results.length === 0 && !selected && !searching && query.trim() && (
+            {searching && !selected && (
+                <div className="cube-locked"><div className="cube-locked-text">Ищу…</div></div>
+            )}
+            {results.length === 0 && !selected && !searching && searched && (
                 <div className="cube-locked"><div className="cube-locked-text">Ничего не найдено</div></div>
             )}
 
