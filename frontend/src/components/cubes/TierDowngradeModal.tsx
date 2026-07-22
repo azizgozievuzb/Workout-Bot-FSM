@@ -65,6 +65,14 @@ const TierDowngradeModal: React.FC<Props> = ({ targetTier, onClose, onSuccess })
                     ? detail
                     : detail?.code ?? 'Ошибка при смене тарифа',
             );
+            // The server may have partially evicted before failing — resync the list
+            // and prune the selection so mustEvict/selected reflect reality.
+            try {
+                const fresh = await getMyPlayers();
+                setPlayers(fresh);
+                const stillHere = new Set(fresh.map(p => p.id));
+                setSelected(prev => new Set(Array.from(prev).filter(id => stillHere.has(id))));
+            } catch { /* keep the original error visible */ }
         } finally {
             setSubmitting(false);
         }

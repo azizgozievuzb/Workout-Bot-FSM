@@ -33,6 +33,7 @@ const RenewalScreen: React.FC<RenewalScreenProps> = ({ onClose }) => {
   const [period, setPeriod] = useState<SubscriptionPeriod>('1m');
   const [coupon, setCoupon] = useState('');
   const [preview, setPreview] = useState<CouponPreview | null>(null);
+  const [couponChecking, setCouponChecking] = useState(false);
   const [playerCount, setPlayerCount] = useState(0);
   const [showDowngrade, setShowDowngrade] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -51,14 +52,15 @@ const RenewalScreen: React.FC<RenewalScreenProps> = ({ onClose }) => {
 
   // Live coupon recalculation — server is the single source of truth for validity.
   useEffect(() => {
-    if (isCustom) { setPreview(null); return; }
+    if (isCustom) { setPreview(null); setCouponChecking(false); return; }
     const code = coupon.trim();
-    if (!code) { setPreview(null); return; }
+    if (!code) { setPreview(null); setCouponChecking(false); return; }
     let cancelled = false;
+    setCouponChecking(true);
     const t = setTimeout(() => {
       previewCoupon(code, tier, period as '1m' | '3m' | '12m')
-        .then((r) => { if (!cancelled) setPreview(r); })
-        .catch(() => { if (!cancelled) setPreview(null); });
+        .then((r) => { if (!cancelled) { setPreview(r); setCouponChecking(false); } })
+        .catch(() => { if (!cancelled) { setPreview(null); setCouponChecking(false); } });
     }, 400);
     return () => { cancelled = true; clearTimeout(t); };
   }, [coupon, tier, period, isCustom]);
@@ -172,7 +174,11 @@ const RenewalScreen: React.FC<RenewalScreenProps> = ({ onClose }) => {
                   Купон −{preview.pct}% → итого {preview.final_price} ⭐
                 </div>
               ) : (
-                <div className="renew-coupon-err">Купон недействителен</div>
+                <div className="renew-coupon-err">
+                  {preview.code === 'COUPON_ALREADY_USED'
+                    ? 'Купон уже использован'
+                    : 'Купон недействителен'}
+                </div>
               )
             )}
 
@@ -183,12 +189,14 @@ const RenewalScreen: React.FC<RenewalScreenProps> = ({ onClose }) => {
               </div>
             )}
 
-            <button className="paywall-cta" disabled={busy} onClick={pay}>
+            <button className="paywall-cta" disabled={busy || couponChecking} onClick={pay}>
               {overLimit
                 ? 'Выбрать, кого удалить'
-                : busy
-                  ? 'Открываю оплату…'
-                  : `Оплатить${finalPrice ? ` · ${finalPrice} ⭐` : ''}`}
+                : couponChecking
+                  ? 'Проверяю купон…'
+                  : busy
+                    ? 'Открываю оплату…'
+                    : `Оплатить${finalPrice ? ` · ${finalPrice} ⭐` : ''}`}
             </button>
           </>
         )}

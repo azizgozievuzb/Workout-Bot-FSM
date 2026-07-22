@@ -3,6 +3,7 @@
 Coupons / tier-prices / user pricing overrides are added to these routers in Phase 6.
 The legacy promo-code generation (R/renewal/bonus-pack/batch) was removed in 7.5.
 """
+import logging
 import secrets
 import string
 import uuid as _uuid
@@ -15,6 +16,8 @@ from pydantic import BaseModel, Field
 
 from ...core.deps import get_current_user, require_admin
 from ...db.client import get_supabase
+
+logger = logging.getLogger(__name__)
 
 _CODE_ALPHABET = string.ascii_uppercase + string.digits
 
@@ -299,7 +302,9 @@ async def get_ban_history(admin: dict = Depends(require_admin)):
 
 
 # ---------------------------------------------------------------------------
-# POST /admin/apply-tier-downgrade  — evict players + set tier (no promo codes, 7.5)
+# POST /admin/apply-tier-downgrade  — evict players only (7.5.1)
+# The tier itself is applied ONLY on payment (fulfill sets responsible_access_tier,
+# Session 47 decision #4). This endpoint evicts and returns remaining_players.
 # ---------------------------------------------------------------------------
 
 class TierDowngradeReq(BaseModel):
@@ -363,15 +368,14 @@ async def apply_tier_downgrade(
         )
 
     pair_player_ids = {p["player_id"] for p in all_pairs}
-    for eid in evict_ids:
-        if eid not in pair_player_ids:
-            raise HTTPException(
-                status_code=400,
-                detail={"code": "PLAYER_NOT_IN_YOUR_TEAM", "player_id": eid},
-            )
 
     evicted_count = 0
     for player_id in evict_ids:
+        # Idempotent: a player already evicted (double-click / retry) is skipped,
+        # not treated as an error.
+        if player_id not in pair_player_ids:
+            continue
+
         await (
             db.table("partnerships")
             .delete()
@@ -395,22 +399,21 @@ async def apply_tier_downgrade(
             .maybe_single()
             .execute()
         )
-        player_user = player_user_res.data if player_user_res else {}
+        player_user = (player_user_res.data if player_user_res else None) or {}
         has_dual_role = player_user.get("has_responsible_access") or player_user.get("is_admin")
         has_other_partnerships = (other_pairs_res.count or 0) > 0
 
         if not has_dual_role and not has_other_partnerships:
-            await db.table("player_stats").delete().eq("player_id", player_id).execute()
-            await db.table("shop_items").delete().eq("player_id", player_id).execute()
-            await db.table("boosts").delete().eq("player_id", player_id).execute()
-            await db.table("workout_sessions").delete().eq("player_id", player_id).execute()
-
-    await (
-        db.table("users")
-        .update({"responsible_access_tier": new_tier})
-        .eq("id", user_id)
-        .execute()
-    )
+            # Best-effort cleanup: a failure here must not abort the eviction.
+            # NB: boosts cascade on the partnership delete above (boosts.partnership_id
+            # FK is ON DELETE CASCADE) — they are gone already, no player_id column.
+            for tbl in ("player_stats", "shop_items", "workout_sessions"):
+                try:
+                    await db.table(tbl).delete().eq("player_id", player_id).execute()
+                except Exception:
+                    logger.exception(
+                        "tier-downgrade cleanup failed: table=%s player_id=%s", tbl, player_id
+                    )
 
     remaining_res = await (
         db.table("partnerships")
