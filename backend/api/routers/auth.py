@@ -131,8 +131,24 @@ async def _apply_free_pricing_grant(db, user_data: dict) -> None:
     """pricing_mode='free' аккаунт без роли → бесплатный доступ Ответственного (без оплаты)."""
     if user_data.get("pricing_mode") != "free":
         return
-    if user_data.get("is_admin") or user_data.get("has_responsible_access") or user_data.get("has_player_access"):
+    if user_data.get("is_admin") or user_data.get("has_responsible_access"):
         return
+    if user_data.get("has_player_access"):
+        # Real active player — leave untouched (behaviour unchanged).
+        active_res = await (
+            db.table("partnerships").select("id", count="exact")
+            .eq("player_id", user_data["id"]).eq("status", "active").execute()
+        )
+        if (active_res.count or 0) > 0:
+            return
+        # Stale flag left by an eviction: no partnership remains. Clear it and grant.
+        await (
+            db.table("users")
+            .update({"has_player_access": False, "player_access_tier": None})
+            .eq("id", user_data["id"])
+            .execute()
+        )
+        user_data.update({"has_player_access": False, "player_access_tier": None})
     tier = user_data.get("responsible_access_tier") or "standard"
     await (
         db.table("users")

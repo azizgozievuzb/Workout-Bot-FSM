@@ -404,6 +404,22 @@ async def apply_tier_downgrade(
         has_other_partnerships = (other_pairs_res.count or 0) > 0
 
         if not has_dual_role and not has_other_partnerships:
+            # No partnership and no other role left → revert the player-access fields
+            # that accept_invite (services/invites.py) sets, mirroring them. Otherwise
+            # a stale has_player_access makes auth._apply_free_pricing_grant bail and the
+            # user sees «вы не зарегистрированы».
+            await (
+                db.table("users")
+                .update({
+                    "has_player_access": False,
+                    "player_access_tier": None,
+                    "primary_role": None,
+                    "role": None,
+                })
+                .eq("id", player_id)
+                .execute()
+            )
+
             # Best-effort cleanup: a failure here must not abort the eviction.
             # NB: boosts cascade on the partnership delete above (boosts.partnership_id
             # FK is ON DELETE CASCADE) — they are gone already, no player_id column.
