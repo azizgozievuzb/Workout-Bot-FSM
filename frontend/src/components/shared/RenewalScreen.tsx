@@ -22,6 +22,22 @@ const PERIODS: { key: SubscriptionPeriod; label: string; col: keyof TierPrice }[
   { key: '12m', label: '12 месяцев', col: 'price_12m' },
 ];
 
+// Map backend error codes (coupon-preview + tier-invoice) to Russian text —
+// never surface a raw code to the user.
+function couponErrText(code?: string | null): string {
+  switch (code) {
+    case 'COUPON_ALREADY_USED':
+      return 'Купон уже использован';
+    case 'COUPON_INVALID':
+    case 'COUPON_EXPIRED':
+    case 'COUPON_EXHAUSTED':
+    case 'PRICE_UNSET':
+      return 'Купон недействителен';
+    default:
+      return 'Не удалось создать счёт';
+  }
+}
+
 interface RenewalScreenProps {
   onClose?: () => void;
 }
@@ -106,6 +122,7 @@ const RenewalScreen: React.FC<RenewalScreenProps> = ({ onClose }) => {
   const finalPrice = preview?.valid ? preview.final_price : selectedPrice;
   const targetLimit = TIER_META[tier].limit;
   const overLimit = playerCount > targetLimit;
+  const couponRejected = !!coupon.trim() && !!preview && !preview.valid;
 
   const pay = async () => {
     if (busy) return;
@@ -154,7 +171,7 @@ const RenewalScreen: React.FC<RenewalScreenProps> = ({ onClose }) => {
         setBusy(false);
         return;
       }
-      setStatus(typeof detail === 'string' ? detail : code ?? 'Не удалось создать счёт');
+      setStatus(typeof detail === 'string' ? detail : couponErrText(code));
       hapticNotification('error');
       setBusy(false);
     }
@@ -209,7 +226,7 @@ const RenewalScreen: React.FC<RenewalScreenProps> = ({ onClose }) => {
               className="renew-coupon"
               placeholder="Промокод (необязательно)"
               value={coupon}
-              onChange={(e) => setCoupon(e.target.value.toUpperCase())}
+              onChange={(e) => { setCoupon(e.target.value.toUpperCase()); setStatus(''); }}
             />
 
             {coupon.trim() && preview && (
@@ -219,9 +236,7 @@ const RenewalScreen: React.FC<RenewalScreenProps> = ({ onClose }) => {
                 </div>
               ) : (
                 <div className="renew-coupon-err">
-                  {preview.code === 'COUPON_ALREADY_USED'
-                    ? 'Купон уже использован'
-                    : 'Купон недействителен'}
+                  {couponErrText(preview.code)}
                 </div>
               )
             )}
@@ -233,7 +248,7 @@ const RenewalScreen: React.FC<RenewalScreenProps> = ({ onClose }) => {
               </div>
             )}
 
-            <button className="paywall-cta" disabled={busy || couponChecking} onClick={pay}>
+            <button className="paywall-cta" disabled={busy || couponChecking || couponRejected} onClick={pay}>
               {overLimit
                 ? 'Выбрать, кого удалить'
                 : couponChecking

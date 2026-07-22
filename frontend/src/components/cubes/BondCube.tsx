@@ -174,8 +174,16 @@ const PlayerBond: React.FC = () => {
 
 /* ---------- INVITES PANEL (Мои игроки) ---------- */
 
-const InvitesPanel: React.FC = () => {
+// Slot-full upsell by the Responsible's own tier (elite is the ceiling).
+const SLOT_FULL_MSG: Record<string, string> = {
+    standard: 'Все слоты заняты. Больше игроков — на тарифе Premium (до 2) или Elite (до 3)',
+    premium: 'Все слоты заняты. Больше игроков — на тарифе Elite (до 3)',
+    elite: 'Все слоты тарифа заняты',
+};
+
+const InvitesPanel: React.FC<{ refreshKey?: number }> = ({ refreshKey = 0 }) => {
     const theme = useTheme();
+    const ownAccessTier = useAuthStore((s) => s.ownAccessTier);
     const [players, setPlayers] = useState<MyPlayer[]>([]);
     const [invites, setInvites] = useState<Invite[]>([]);
     const [loading, setLoading] = useState(true);
@@ -187,7 +195,7 @@ const InvitesPanel: React.FC = () => {
         Promise.all([getMyPlayers().catch(() => []), listInvites().catch(() => [])])
             .then(([p, i]) => { setPlayers(p); setInvites(i); })
             .finally(() => setLoading(false));
-    }, []);
+    }, [refreshKey]);
 
     const addPlayer = async () => {
         if (busy) return;
@@ -205,7 +213,7 @@ const InvitesPanel: React.FC = () => {
             const d = e?.response?.data?.detail;
             const code = typeof d === 'object' ? d?.code : d;
             setErr(
-                code === 'SLOT_FULL' ? 'Все слоты тарифа заняты'
+                code === 'SLOT_FULL' ? (SLOT_FULL_MSG[ownAccessTier ?? 'standard'] ?? 'Все слоты тарифа заняты')
                     : code === 'SUBSCRIPTION_INACTIVE' ? 'Подписка неактивна — продлите её'
                         : 'Не удалось создать приглашение',
             );
@@ -291,6 +299,9 @@ const ResponsibleBond: React.FC = () => {
     const [feed, setFeed] = useState<FeedItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [showBilling, setShowBilling] = useState(false);
+    // Bumped when the billing overlay closes → InvitesPanel refetches «Мои игроки»
+    // (a downgrade with eviction changes the list).
+    const [playersRefreshKey, setPlayersRefreshKey] = useState(0);
 
     useEffect(() => {
         getFeed(20, 0)
@@ -305,7 +316,7 @@ const ResponsibleBond: React.FC = () => {
 
     return (
         <>
-            <InvitesPanel />
+            <InvitesPanel refreshKey={playersRefreshKey} />
 
             <div className="cube-section-title">Лента игроков</div>
 
@@ -339,7 +350,7 @@ const ResponsibleBond: React.FC = () => {
                 Подписка и биллинг
             </button>
 
-            {showBilling && <RenewalScreen onClose={() => setShowBilling(false)} />}
+            {showBilling && <RenewalScreen onClose={() => { setShowBilling(false); setPlayersRefreshKey((k) => k + 1); }} />}
         </>
     );
 };

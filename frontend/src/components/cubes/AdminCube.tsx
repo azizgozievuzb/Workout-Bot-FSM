@@ -505,7 +505,7 @@ const CouponsSection: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [pct, setPct] = useState('20');
     const [code, setCode] = useState('');
-    const [maxUses, setMaxUses] = useState('');
+    const [maxUses, setMaxUses] = useState('1'); // default 1; empty = без лимита
     const [oncePerUser, setOncePerUser] = useState(true);
     const [creating, setCreating] = useState(false);
     const [toast, setToast] = useState('');
@@ -527,7 +527,7 @@ const CouponsSection: React.FC = () => {
                 max_uses: maxUses ? parseInt(maxUses, 10) : null,
                 once_per_user: oncePerUser,
             });
-            hapticNotification('success'); setCode(''); setMaxUses(''); reload();
+            hapticNotification('success'); setCode(''); setMaxUses('1'); reload();
         } catch (e: any) {
             show(e?.response?.data?.detail?.code === 'CODE_EXISTS' ? 'Код уже существует' : 'Ошибка');
         } finally { setCreating(false); }
