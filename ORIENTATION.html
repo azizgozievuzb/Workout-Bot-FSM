@@ -61,7 +61,7 @@
 
 <header>
   <h1>💪 Workout Bot (4G) <span class="drop">/ ORIENTATION</span></h1>
-  <div class="stamp">Обновлено: <b>2026-07-20 · Session 46</b> · Скажи Cowork'у «обнови ORIENTATION.html», чтобы актуализировать эту страницу</div>
+  <div class="stamp">Обновлено: <b>2026-07-23 · Session 49</b> · Скажи Cowork'у «обнови ORIENTATION.html», чтобы актуализировать эту страницу</div>
 </header>
 
 <section class="full">
@@ -73,28 +73,29 @@
     <dt>БД</dt><dd>Supabase PostgreSQL · project dlpdwmmfpzfxcelxqvlq</dd>
     <dt>Логика</dt><dd>XState FSM — 8 машин в /fsm_blueprints/ (source of truth)</dd>
     <dt>AI</dt><dd>Gemini Vision (workout_vision.py) · ключ …XNHY, проект workout-bot</dd>
-    <dt>Тест-аккаунты</dt><dd>Player: Cell TG 8777447186 · Responsible: Oil TG 8580720783 · Free-акк: GMDLT TG 156453252</dd>
+    <dt>Тест-аккаунты</dt><dd>Player: Cell TG 8777447186 · Responsible: Oil TG 8580720783 (standard, до 16.12.2026) · Free: GMDLT TG 156453252 (standard) · Free: Mr. TG 7278081310 (elite)</dd>
   </div>
 </section>
 
 <div class="grid">
 
 <section class="now">
-  <h2><span class="ico">📍</span>Где мы сейчас <span class="badge b-done">7.4 CLOSED</span> <span class="badge b-done">7.5 CLOSED</span></h2>
-  <p><b>7.4 — Telegram Stars payments (закрыта в составе 7.5):</b> платёжная инфраструктура на Stars — таблица <code>payments</code>, invoice → pre_checkout → successful_payment → fulfill, админ-refund, цены только из БД.</p>
-  <p style="margin-top:8px"><b>7.5 — «Всё через Stars» (закрыта 20.07, smoke реальными Stars):</b> промокоды выпилены. Новый юзер → пейволл → intro-платёж → становится Ответственным; игроки подключаются <b>инвайт-ссылками</b> (t.me/…?start=inv_, 7 дней); продление 1/3/12 мес разовыми платежами + <b>купоны-скидки</b> (1–99%); особые аккаунты «Бесплатно»/«Персональная цена»; подписка живёт на Ответственном (<code>users.subscription_expires_at</code>), игрок жив пока жива подписка наставника (+grace 3 дня). Smoke прошёл все 6 пунктов; по ходу — 5 хотфиксов (легаси-гейты ролей, VARCHAR(128) под charge_id, CHECK-констрейнт роли 'new').</p>
-  <div class="formula">smoke 7.5: пейволл → intro 1⭐ ✓ · инвайт → опрос в приложении ✓ · renewal + купон −99% = 1⭐ ✓ · mode=free без пейволла ✓ · refund (звезда вернулась, подписка остаётся) ✓</div>
+  <h2><span class="ico">📍</span>Где мы сейчас <span class="badge b-done">7.5 CLOSED</span> <span class="badge b-done">7.5.1 CLOSED</span></h2>
+  <p><b>Платёжная модель работает целиком и просмоучена реальными Stars (Session 49, 22–23.07):</b> пейволл с интро-ценой и раскрытием «далее N ⭐/мес» → Ответственный; инвайт-ссылки без видимых кодов; продление/смена тира с экрана «Подписка и биллинг» (вход из Bond в любой момент); <b>апгрейд</b> — сразу, остаток дней докатывается; <b>даунгрейд</b> — эвикция лишних игроков, тир меняется только при оплате; купоны 1–99% с live-пересчётом и once_per_user; админ: поиск юзера по TG ID (авто), «Особые» (free/custom), редактор цен; plain /start кладёт юзера в БД до входа в приложение.</p>
+  <div class="formula">smoke 7.5.1: тексты+цены ✓ · апгрейд 13⭐ (докатка 18.08→17.09) ✓ · эвикция+даунгрейд 10⭐ ✓ · повторный купон → отказ ✓ · free-вход (Mr., elite 0/3) ✓ · /start upsert ✓ — итог: Oil standard до 16.12.2026</div>
+  <p style="margin-top:8px"><b>По ходу смоука — 9 хотфиксов</b>, главные: кнопка «Подписка и биллинг» ожила (входа в Renewal при активной подписке не было); 500 в эвикции (cleanup по несуществующей <code>boosts.player_id</code>) + идемпотентность; тир вынесен из эвикции в оплату; протухший <code>has_player_access</code> ломал free-грант эвикнутым; купон-UX (блокировка кнопки, русские сообщения); free-юзерам — экран «Персональный доступ» вместо оплаты.</p>
 </section>
 
 <section class="next">
-  <h2><span class="ico">▶️</span>Что дальше <span class="badge b-next">дизайн-сессия</span> <span class="badge b-next">7.5.1</span></h2>
-  <p><b>1. Дизайн-сессия (Cowork, промпт выдан):</b> жёсткость гейта (пускать ли внутрь без оплаты — «вариант B»), семантика подписки и старт отсчёта 30 дней, идея «сгорания» неиспользованного периода, <b>реальная сетка цен</b> (сейчас плейсхолдеры).</p>
-  <p style="margin-top:8px"><b>2. 7.5.1 — дочистка после smoke:</b></p>
+  <h2><span class="ico">▶️</span>Что дальше <span class="badge b-later">Фаза 8</span> <span class="badge b-next">перед запуском</span></h2>
+  <p><b>1. Фаза 8 — Workout Types &amp; Drops Economy</b> (design-doc в BACKLOG §8.1–8.16: типы тренировок, экономика капель, streak, GDPR) — подтвердить приоритет в начале следующей сессии.</p>
+  <p style="margin-top:8px"><b>2. Чек-лист перед публичным запуском:</b></p>
   <ul>
-    <li>ActionCube/Market ещё живут промо-эпохой: «Истёк», «Продлить» → renewal-коды, «Нет активных игроков» — перевести на подписочную модель, выпилить мёртвые модалки/api.</li>
-    <li>Админ-UX пакет из BACKLOG: поиск юзера (вместо UUID), тир для «Бесплатно», список особых аккаунтов, купоны (копирование кода, пересчёт цены при вводе, удаление), styled-аватары игроков.</li>
+    <li class="warn"><b>Вернуть боевую сетку цен</b> — сейчас заградительная (от посторонних): std intro 800…elt 12m 9900. Эталон — «средняя» сетка Session 47.</li>
+    <li>Вариант B гейта (витрина до оплаты, A/B на конверсию) — BACKLOG.</li>
+    <li>Ротация Gemini-ключа + чистка git history — BACKLOG.</li>
+    <li>Живой smoke Job A/B (счета-напоминания за ≤3 дня) — не проверялся.</li>
   </ul>
-  <p style="margin-top:10px">Затем: <span class="badge b-later">Фаза 8</span> — Workout Types &amp; Drops Economy (design-doc в BACKLOG §8).</p>
 </section>
 
 </div>
@@ -110,7 +111,7 @@
     <tr><td>BACKLOG.md</td><td>Парк идей «на потом»: Codex-аудит (утечка ключа в истории, security-мелочи), demo-видео naming, и главное — <b>design-doc фазы 8</b> (§8.1–8.16: типы тренировок, экономика капель, streak, GDPR).</td></tr>
     <tr><td>fsm_blueprints/</td><td>8 XState-машин — source of truth логики. Backend-хендлеры обязаны маппиться 1:1. Читать только нужную: 000 router, 100 payment, 101 onboarding, 102 admin, 103 workout gate, 104 responsible, 105 shop, 200 workout session.</td></tr>
     <tr><td>TASK_7_3_SMOKE_PLAN.md</td><td>Пошаговый план smoke-теста 7.3 (исторический, задача закрыта).</td></tr>
-    <tr><td>backend/db/migrations/</td><td>SQL-миграции. Последняя применённая: 032 (users_role_check + 'new'; до неё 030 тарифы/купоны/инвайты, 031 charge_id → TEXT). Следующие пишутся как diff, старые не правим.</td></tr>
+    <tr><td>backend/db/migrations/</td><td>SQL-миграции. Последняя применённая: 033 (coupons.once_per_user; до неё 032 role 'new', 031 charge_id → TEXT, 030 тарифы/купоны/инвайты). Следующие пишутся как diff, старые не правим.</td></tr>
   </table>
 </section>
 
@@ -129,11 +130,11 @@
 <section class="full">
   <h2><span class="ico">⚠️</span>Известные риски и долги <span class="badge b-risk">следить</span></h2>
   <ul>
-    <li class="warn"><b>ActionCube/Market — легаси промо-эпохи</b>: «Истёк», «Продлить» открывает мёртвые renewal-коды, активность считается по старому полю партнёрства. Не баг новой системы, но пользователю видно — чинится первым в 7.5.1.</li>
-    <li class="warn"><b>Цены тарифов — плейсхолдеры</b> (standard 750/5000/7500/10000). Реальную сетку утвердить в дизайн-сессии, потом выставить в AdminCube → Тарифы.</li>
+    <li class="warn"><b>Цены — заградительные, не боевые</b> (решение S49: посторонние находят бота — отсекаем ценой вместо бана). Перед запуском вернуть «среднюю» сетку S47 через AdminCube → Тарифы или SQL.</li>
     <li class="warn"><b>Утечка Gemini-ключа в git history</b> — репо приватный, не критично; при расшаривании: ротация + git filter-repo (BACKLOG).</li>
     <li class="warn">Демо-видео местами не совпадают с упражнением (content debt) — заменить до продакшена.</li>
-    <li class="warn">Купоны: лимит общий (не per-user), удаления нет — политика в BACKLOG; тест-купон ELVGLOP0 исчерпан и выключен.</li>
+    <li class="warn">Job A/B (счета-напоминания в чат за ≤3 дня до конца подписки) — код есть, живьём не смоучен.</li>
+    <li class="warn">Мелкие хвосты S49: подзаголовок «Выберите тариф…» над free-экраном «Персональный доступ»; мигание главного экрана до ответа auth; CSS-хвосты промо-эпохи.</li>
   </ul>
 </section>
 
