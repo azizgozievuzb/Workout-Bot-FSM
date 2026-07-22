@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import api, { setToken } from '../../api/client';
 import type { AccessTier } from '../../stores/authStore';
 import { useAuthStore } from '../../stores/authStore';
 import { getTierPrices, createTierInvoice, previewCoupon } from '../../api/payments';
@@ -65,6 +66,39 @@ const RenewalScreen: React.FC<RenewalScreenProps> = ({ onClose }) => {
     return () => { cancelled = true; clearTimeout(t); };
   }, [coupon, tier, period, isCustom]);
 
+  // Overlay mode (entered from BondCube): refresh subscription/tier in place —
+  // same auth request App uses at start — instead of reloading the whole app,
+  // which would drop the user back to the main screen.
+  const refreshAuthInPlace = async (): Promise<void> => {
+    const initData = window.Telegram?.WebApp?.initData;
+    if (!initData) return;
+    const { data } = await api.post('/auth/telegram', { init_data: initData });
+    setToken(data.access_token);
+    useAuthStore.getState().setAuth({
+      token: data.access_token,
+      role: data.role,
+      primary_role: data.primary_role,
+      has_player_access: data.has_player_access,
+      has_responsible_access: data.has_responsible_access,
+      is_admin: data.is_admin,
+      onboardingDone: data.onboarding_done,
+      photoUrl: data.profile_photo_url,
+      photoDarkUrl: data.photo_dark_url,
+      photoLightUrl: data.photo_light_url,
+      own_access_tier: data.own_access_tier ?? null,
+      player_view_tier: data.player_view_tier ?? null,
+      shop_freeze_balance: data.shop_freeze_balance ?? 0,
+      gift_freeze_balance: data.gift_freeze_balance ?? 0,
+      streak_freeze_balance: data.streak_freeze_balance ?? 0,
+      rest_days_remaining: data.rest_days_remaining ?? 0,
+      has_active_partnerships: data.has_active_partnerships ?? false,
+      days_left: data.days_left ?? null,
+      unread_notifications: data.unread_notifications ?? 0,
+      gender: data.gender ?? null,
+      subscription: data.subscription ?? null,
+    });
+  };
+
   const priceRow = prices.find((p) => p.tier === tier);
   const selectedPrice = priceRow
     ? Number(priceRow[PERIODS.find((x) => x.key === period)!.col])
@@ -89,11 +123,21 @@ const RenewalScreen: React.FC<RenewalScreenProps> = ({ onClose }) => {
           if (res === 'fulfilled') {
             hapticNotification('success');
             setStatus('✅ Подписка продлена!');
-            setTimeout(() => window.location.reload(), 1200);
+            if (onClose) {
+              await refreshAuthInPlace().catch(() => {});
+              setTimeout(() => onClose(), 1200);
+            } else {
+              setTimeout(() => window.location.reload(), 1200);
+            }
             return;
           }
           setStatus('Оплата обрабатывается — подписка активируется автоматически.');
-          setTimeout(() => window.location.reload(), 2500);
+          if (onClose) {
+            await refreshAuthInPlace().catch(() => {});
+            setTimeout(() => onClose(), 2500);
+          } else {
+            setTimeout(() => window.location.reload(), 2500);
+          }
         } else if (st === 'cancelled') {
           setStatus('Покупка отменена');
         } else {
