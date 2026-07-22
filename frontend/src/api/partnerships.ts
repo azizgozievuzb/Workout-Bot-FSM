@@ -1,5 +1,4 @@
 import api from './client';
-import type { AccessTier } from '../stores/authStore';
 
 export interface MyPlayer {
     partnership_id: string;
@@ -9,7 +8,6 @@ export interface MyPlayer {
     profile_photo_url: string | null;
     photo_dark_url: string | null;
     photo_light_url: string | null;
-    access_tier: AccessTier;
     expires_at: string | null;
     is_expired: boolean;
     days_left: number | null;

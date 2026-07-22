@@ -3,7 +3,6 @@ import { useAuthStore } from '../../stores/authStore';
 import type { DualRoleUser } from '../../stores/authStore';
 import { canPlay, canMonitor, isDualRole } from '../../utils/roles';
 import api from '../../api/client';
-import TierBadge from '../common/TierBadge';
 import { getMyStats } from '../../api/stats';
 import type { PlayerStats } from '../../api/stats';
 import { getActiveBoost } from '../../api/boosts';
@@ -386,9 +385,8 @@ const ResponsibleView: React.FC = () => {
                                         : name.charAt(0)}
                                 </div>
                                 <div className="cube-player-info">
-                                    <div className="cube-player-name" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    <div className="cube-player-name">
                                         {name}
-                                        <TierBadge tier={p.access_tier} />
                                     </div>
                                 </div>
                                 <div className="cube-player-actions" style={{ position: 'relative' }}>
