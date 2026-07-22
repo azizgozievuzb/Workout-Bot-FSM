@@ -414,7 +414,7 @@ async def apply_tier_downgrade(
                     "has_player_access": False,
                     "player_access_tier": None,
                     "primary_role": None,
-                    "role": None,
+                    "role": "new",  # users.role is NOT NULL; 'new' allowed by migration 032
                 })
                 .eq("id", player_id)
                 .execute()
