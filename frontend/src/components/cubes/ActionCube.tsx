@@ -12,7 +12,6 @@ import { getProducts, createInvoice, getPayment } from '../../api/payments';
 import type { StarProduct } from '../../api/payments';
 import { getMyPlayers } from '../../api/partnerships';
 import type { MyPlayer } from '../../api/partnerships';
-import { createInvite } from '../../api/invites';
 import { playerAvatarUrl } from '../../utils/playerAvatar';
 import { useTheme } from '../../contexts/ThemeContext';
 import { hapticImpact, hapticNotification } from '../../utils/haptic';
@@ -222,9 +221,6 @@ const ResponsibleView: React.FC = () => {
     const [modal, setModal] = useState<{ kind: ModalKind; partnershipId?: string; targetUserId?: string; playerName?: string | null } | null>(null);
     const menuRef = useRef<HTMLDivElement | null>(null);
 
-    // Invite (Add player) — same flow as BondCube
-    const [inviteBusy, setInviteBusy] = useState(false);
-
     // Boost purchase (Telegram Stars)
     const [boostModal, setBoostModal] = useState<{ playerId: string; playerName: string } | null>(null);
     const [products, setProducts] = useState<StarProduct[]>([]);
@@ -259,36 +255,6 @@ const ResponsibleView: React.FC = () => {
         document.addEventListener('mousedown', onDocClick);
         return () => document.removeEventListener('mousedown', onDocClick);
     }, [openMenuFor]);
-
-    const showToast = useCallback((msg: string, ms = 2500) => {
-        setToast(msg);
-        setTimeout(() => setToast(''), ms);
-    }, []);
-
-    const addPlayer = useCallback(async (e: React.MouseEvent) => {
-        e.stopPropagation();
-        if (inviteBusy) return;
-        setInviteBusy(true);
-        try {
-            const inv = await createInvite();
-            hapticNotification('success');
-            const tg = (window as any).Telegram?.WebApp;
-            const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(inv.link)}&text=${encodeURIComponent('Приглашаю тебя тренироваться в Workout Bot!')}`;
-            if (tg?.openTelegramLink) tg.openTelegramLink(shareUrl);
-            else if (navigator.clipboard) { await navigator.clipboard.writeText(inv.link); showToast('Ссылка скопирована'); }
-        } catch (err: any) {
-            const d = err?.response?.data?.detail;
-            const code = typeof d === 'object' ? d?.code : d;
-            showToast(
-                code === 'SLOT_FULL' ? 'Все слоты тарифа заняты'
-                    : code === 'SUBSCRIPTION_INACTIVE' ? 'Подписка неактивна — продлите её'
-                        : 'Не удалось создать приглашение',
-            );
-            hapticNotification('error');
-        } finally {
-            setInviteBusy(false);
-        }
-    }, [inviteBusy, showToast]);
 
     useEffect(() => {
         getProducts().then(setProducts).catch(() => {});
@@ -400,7 +366,7 @@ const ResponsibleView: React.FC = () => {
                 <div className="cube-section-title" style={{ textAlign: 'center' }}>Загрузка...</div>
             ) : players.length === 0 ? (
                 <div className="cube-locked">
-                    <div className="cube-locked-text">Пока нет игроков. Пригласите нового по ссылке.</div>
+                    <div className="cube-locked-text">Игроки добавляются в кубе Bond → ➕ Добавить игрока</div>
                 </div>
             ) : (
                 <div className="cube-card">
@@ -457,16 +423,6 @@ const ResponsibleView: React.FC = () => {
                         );
                     })}
                 </div>
-            )}
-
-            {slotsLeft > 0 && (
-                <button
-                    className="cube-btn-secondary"
-                    onClick={addPlayer}
-                    disabled={inviteBusy}
-                >
-                    ➕ Добавить игрока
-                </button>
             )}
 
             {modal?.kind === 'gift' && modal.targetUserId && (
