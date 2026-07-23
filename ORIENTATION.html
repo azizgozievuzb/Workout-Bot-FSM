@@ -61,7 +61,7 @@
 
 <header>
   <h1>💪 Workout Bot (4G) <span class="drop">/ ORIENTATION</span></h1>
-  <div class="stamp">Обновлено: <b>2026-07-23 · Session 49</b> · Скажи Cowork'у «обнови ORIENTATION.html», чтобы актуализировать эту страницу</div>
+  <div class="stamp">Обновлено: <b>2026-07-23 · Session 51</b> · Скажи Cowork'у «обнови ORIENTATION.html», чтобы актуализировать эту страницу</div>
 </header>
 
 <section class="full">
@@ -80,21 +80,25 @@
 <div class="grid">
 
 <section class="now">
-  <h2><span class="ico">📍</span>Где мы сейчас <span class="badge b-done">7.5 CLOSED</span> <span class="badge b-done">7.5.1 CLOSED</span></h2>
+  <h2><span class="ico">📍</span>Где мы сейчас <span class="badge b-done">7.5.1 CLOSED</span> <span class="badge b-next">Фаза 8 СТАРТОВАЛА · 8a</span></h2>
+  <p><b>Фаза 8 стартовала — подфаза 8a реализована (Session 51):</b> фундамент расписания/стрика/заморозок/уведомлений + timezone. Игрок на онбординге выбирает <b>3 main-дня</b> (существующим — гейт довыбора); TZ детектится и тихо сохраняется; <b>стрик</b> закрывается только тренировкой в плановый main-день по локальной TZ (капли — за любую тренировку); почасовой TZ-джоб в локальную полночь списывает <b>заморозку</b> (Ж3/М1 в месяц, авто) или обнуляет стрик; утреннее (выбор времени) + вечернее (20:00) напоминания с тихим окном 22:00–09:00. Миграция 034 применена. Verify зелёный (py_compile / ruff F / tsc). Живой smoke Job A/B — <b>раннер готов</b> (<code>backend/scripts/smoke_jobs_ab.py</code>), ждёт прогона с юзером.</p>
+  <div class="formula">8a: миграция 034 ✓ · /players/me/schedule + /users/me/timezone + /players/me/reminder-time ✓ · джобы close_streak_day / grant_monthly_freezes / send_workout_reminders ✓ · онбординг-шаг дней + гейт + дашборд-индикатор недели ✓ · хвосты S49 (RenewalScreen free, лоадер, CSS промо) ✓</div>
+  <hr style="border:none;border-top:1px solid rgba(255,255,255,.1);margin:14px 0">
+  <p><b>Платёжная модель (7.5.1 CLOSED, Session 49) работает целиком и просмоучена реальными Stars:</b></p>
   <p><b>Платёжная модель работает целиком и просмоучена реальными Stars (Session 49, 22–23.07):</b> пейволл с интро-ценой и раскрытием «далее N ⭐/мес» → Ответственный; инвайт-ссылки без видимых кодов; продление/смена тира с экрана «Подписка и биллинг» (вход из Bond в любой момент); <b>апгрейд</b> — сразу, остаток дней докатывается; <b>даунгрейд</b> — эвикция лишних игроков, тир меняется только при оплате; купоны 1–99% с live-пересчётом и once_per_user; админ: поиск юзера по TG ID (авто), «Особые» (free/custom), редактор цен; plain /start кладёт юзера в БД до входа в приложение.</p>
   <div class="formula">smoke 7.5.1: тексты+цены ✓ · апгрейд 13⭐ (докатка 18.08→17.09) ✓ · эвикция+даунгрейд 10⭐ ✓ · повторный купон → отказ ✓ · free-вход (Mr., elite 0/3) ✓ · /start upsert ✓ — итог: Oil standard до 16.12.2026</div>
   <p style="margin-top:8px"><b>По ходу смоука — 9 хотфиксов</b>, главные: кнопка «Подписка и биллинг» ожила (входа в Renewal при активной подписке не было); 500 в эвикции (cleanup по несуществующей <code>boosts.player_id</code>) + идемпотентность; тир вынесен из эвикции в оплату; протухший <code>has_player_access</code> ломал free-грант эвикнутым; купон-UX (блокировка кнопки, русские сообщения); free-юзерам — экран «Персональный доступ» вместо оплаты.</p>
 </section>
 
 <section class="next">
-  <h2><span class="ico">▶️</span>Что дальше <span class="badge b-later">Фаза 8</span> <span class="badge b-next">перед запуском</span></h2>
-  <p><b>1. Фаза 8 — Workout Types &amp; Drops Economy</b> (design-doc в BACKLOG §8.1–8.16: типы тренировок, экономика капель, streak, GDPR) — подтвердить приоритет в начале следующей сессии.</p>
+  <h2><span class="ico">▶️</span>Что дальше <span class="badge b-next">8b</span> <span class="badge b-next">перед запуском</span></h2>
+  <p><b>1. Подфаза 8b — light-режим</b> (BACKLOG §8.16: 4 упражнения, light-сессия 30💧, unlock/lock за капли, стрик «любой день» со след. пн, дисклеймер-тесты). Далее 8c (магазин игрока) → 8d (полка наставника) → 8e (полировка). Живой Job A/B — прогнать с юзером (раннер готов).</p>
   <p style="margin-top:8px"><b>2. Чек-лист перед публичным запуском:</b></p>
   <ul>
     <li class="warn"><b>Вернуть боевую сетку цен</b> — сейчас заградительная (от посторонних): std intro 800…elt 12m 9900. Эталон — «средняя» сетка Session 47.</li>
     <li>Вариант B гейта (витрина до оплаты, A/B на конверсию) — BACKLOG.</li>
     <li>Ротация Gemini-ключа + чистка git history — BACKLOG.</li>
-    <li>Живой smoke Job A/B (счета-напоминания за ≤3 дня) — не проверялся.</li>
+    <li>Живой smoke Job A/B (счета-напоминания за ≤3 дня) — раннер готов (<code>smoke_jobs_ab.py</code>), прогнать с юзером.</li>
   </ul>
 </section>
 

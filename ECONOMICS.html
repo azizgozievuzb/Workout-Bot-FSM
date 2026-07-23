@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Workout Bot — экономическая модель</title>
+<style>
+  :root{
+    --bg:#0d1117; --card:#161b22; --card2:#1c2330; --border:#2d3748;
+    --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950;
+    --red:#f85149; --gold:#e3b341; --drop:#4cc9f0;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{background:linear-gradient(160deg,#0d1117 0%,#131a26 100%); color:var(--text);
+    font-family:'Segoe UI',system-ui,sans-serif; min-height:100vh; padding:24px 16px 60px;}
+  .wrap{max-width:1100px; margin:0 auto;}
+  h1{font-size:26px; margin-bottom:4px;}
+  .sub{color:var(--muted); font-size:14px; margin-bottom:20px;}
+  .scenarios{display:flex; gap:8px; margin-bottom:20px; flex-wrap:wrap; align-items:center;}
+  .scenarios span{color:var(--muted); font-size:13px; margin-right:4px;}
+  .scen-btn{background:var(--card2); border:1px solid var(--border); color:var(--text);
+    padding:8px 18px; border-radius:8px; cursor:pointer; font-size:14px; transition:.15s;}
+  .scen-btn:hover{border-color:var(--accent); color:var(--accent);}
+  .reset-btn{margin-left:auto; background:none; border:1px solid var(--border); color:var(--muted);
+    padding:8px 14px; border-radius:8px; cursor:pointer; font-size:13px;}
+  .reset-btn:hover{color:var(--red); border-color:var(--red);}
+  .grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:16px; margin-bottom:16px;}
+  .card{background:var(--card); border:1px solid var(--border); border-radius:12px; padding:18px;}
+  .card h2{font-size:15px; margin-bottom:14px; color:var(--accent); text-transform:uppercase;
+    letter-spacing:.5px; font-weight:600;}
+  .row{display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px;}
+  .row label{font-size:13.5px; color:var(--text); flex:1; line-height:1.3;}
+  .row .hint{display:block; color:var(--muted); font-size:11.5px; margin-top:1px;}
+  input[type=number]{width:92px; background:var(--card2); border:1px solid var(--border);
+    color:var(--text); padding:7px 9px; border-radius:7px; font-size:14px; text-align:right;}
+  input[type=number]:focus{outline:none; border-color:var(--accent);}
+  .results{background:linear-gradient(135deg,#1a2332,#161b22); border:1px solid var(--border);
+    border-radius:14px; padding:22px; margin-bottom:16px;}
+  .results h2{font-size:16px; margin-bottom:16px; color:var(--gold);}
+  .kpis{display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; margin-bottom:18px;}
+  .kpi{background:var(--card2); border-radius:10px; padding:14px;}
+  .kpi .label{font-size:12px; color:var(--muted); margin-bottom:6px;}
+  .kpi .val{font-size:22px; font-weight:700;}
+  .kpi .sub2{font-size:12px; color:var(--muted); margin-top:4px;}
+  .pos{color:var(--green);} .neg{color:var(--red);}
+  table{width:100%; border-collapse:collapse; font-size:13.5px;}
+  th,td{padding:8px 10px; text-align:right; border-bottom:1px solid var(--border);}
+  th:first-child, td:first-child{text-align:left;}
+  th{color:var(--muted); font-weight:600; font-size:12px;}
+  .note{color:var(--muted); font-size:12px; margin-top:12px; line-height:1.5;}
+  .drops-title{color:var(--drop) !important;}
+  .badge{display:inline-block; background:var(--card2); border:1px solid var(--border);
+    border-radius:6px; padding:2px 8px; font-size:12px; color:var(--muted); margin-left:8px;}
+  .scen-save{display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;}
+  .scen-save input[type=text]{flex:1; min-width:200px; background:var(--card2);
+    border:1px solid var(--border); color:var(--text); padding:8px 12px; border-radius:8px; font-size:14px;}
+  .scen-save input[type=text]:focus{outline:none; border-color:var(--accent);}
+  .mini{background:var(--card2); border:1px solid var(--border); color:var(--text);
+    padding:4px 10px; border-radius:6px; cursor:pointer; font-size:13px;}
+  .mini:hover{border-color:var(--accent);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>💰 Workout Bot — экономическая модель</h1>
+  <div class="sub">Меняй входные числа — всё пересчитывается мгновенно и запоминается в браузере. Цены в приложении — плейсхолдеры, эта модель — где решается, «что сколько должно стоить». (Session 50, 2026-07-23)</div>
+
+  <div class="scenarios">
+    <span>Сценарии:</span>
+    <button class="scen-btn" onclick="setScenario(10)">10 наставников</button>
+    <button class="scen-btn" onclick="setScenario(100)">100 наставников</button>
+    <button class="scen-btn" onclick="setScenario(1000)">1000 наставников</button>
+    <button class="reset-btn" onclick="resetAll()">Сбросить к дефолтам</button>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Аудитория</h2>
+      <div class="row"><label>Наставников (платящих R)</label><input type="number" id="nR" value="100" min="0"></div>
+      <div class="row"><label>Доля standard, %<span class="hint">остальное делится на premium/elite</span></label><input type="number" id="pStd" value="60" min="0" max="100"></div>
+      <div class="row"><label>Доля premium, %</label><input type="number" id="pPrm" value="30" min="0" max="100"></div>
+      <div class="row"><label>Игроков на R: standard<span class="hint">лимит 1</span></label><input type="number" id="plStd" value="1" step="0.1" min="0" max="1"></div>
+      <div class="row"><label>Игроков на R: premium<span class="hint">лимит 2</span></label><input type="number" id="plPrm" value="1.7" step="0.1" min="0" max="2"></div>
+      <div class="row"><label>Игроков на R: elite<span class="hint">лимит 3</span></label><input type="number" id="plElt" value="2.4" step="0.1" min="0" max="3"></div>
+      <div class="row"><label>Игроков с light-режимом, %</label><input type="number" id="lightShare" value="40" min="0" max="100"></div>
+    </div>
+
+    <div class="card">
+      <h2>Выручка (Stars)</h2>
+      <div class="row"><label>Тариф standard, ⭐/мес</label><input type="number" id="prStd" value="500" min="1"></div>
+      <div class="row"><label>Тариф premium, ⭐/мес</label><input type="number" id="prPrm" value="850" min="1"></div>
+      <div class="row"><label>Тариф elite, ⭐/мес</label><input type="number" id="prElt" value="1150" min="1"></div>
+      <div class="row"><label>Drop packs: ⭐/мес с одного R<span class="hint">усреднённые траты на подарки-капли и Stars-предметы</span></label><input type="number" id="packStars" value="40" min="0"></div>
+      <div class="row"><label>$ за 1 ⭐ (нетто тебе)<span class="hint">~0.013 web-покупка Stars, ~0.009 in-app</span></label><input type="number" id="usdPerStar" value="0.013" step="0.001" min="0"></div>
+    </div>
+
+    <div class="card">
+      <h2>Себестоимость</h2>
+      <div class="row"><label>Gemini Vision: $ за main-сессию<span class="hint">16 клипов × ~60 сек</span></label><input type="number" id="cMain" value="0.10" step="0.01" min="0"></div>
+      <div class="row"><label>Gemini Vision: $ за light-сессию<span class="hint">4 × ~3 мин</span></label><input type="number" id="cLight" value="0.08" step="0.01" min="0"></div>
+      <div class="row"><label>Main-сессий/нед на игрока (факт)<span class="hint">план 3, реально меньше</span></label><input type="number" id="sMain" value="2.4" step="0.1" min="0" max="3"></div>
+      <div class="row"><label>Light-сессий/нед (у кого light)</label><input type="number" id="sLight" value="2.8" step="0.1" min="0" max="4"></div>
+      <div class="row"><label>Gemini image: $ за генерацию<span class="hint">фото-карточка, 2 варианта = 2 генерации</span></label><input type="number" id="cImg" value="0.06" step="0.01" min="0"></div>
+      <div class="row"><label>Генераций на игрока/мес</label><input type="number" id="nImg" value="0.5" step="0.1" min="0"></div>
+      <div class="row"><label>Хостинг фикс, $/мес<span class="hint">Railway + Supabase + Vercel</span></label><input type="number" id="hostFix" value="30" min="0"></div>
+      <div class="row"><label>Хостинг переменный, $/юзер/мес<span class="hint">сторедж видео, трафик</span></label><input type="number" id="hostVar" value="0.03" step="0.01" min="0"></div>
+    </div>
+  </div>
+
+  <div class="results">
+    <h2>📊 Итог в месяц</h2>
+    <div class="kpis">
+      <div class="kpi"><div class="label">Юзеров всего</div><div class="val" id="outUsers">—</div><div class="sub2" id="outUsersSub">—</div></div>
+      <div class="kpi"><div class="label">Выручка</div><div class="val" id="outRev">—</div><div class="sub2" id="outRevStars">—</div></div>
+      <div class="kpi"><div class="label">Себестоимость</div><div class="val" id="outCogs">—</div><div class="sub2" id="outCogsSub">—</div></div>
+      <div class="kpi"><div class="label">Прибыль</div><div class="val" id="outProfit">—</div><div class="sub2" id="outMargin">—</div></div>
+    </div>
+    <table>
+      <thead><tr><th>Разбивка</th><th>⭐/мес</th><th>$/мес</th></tr></thead>
+      <tbody id="breakdown"></tbody>
+    </table>
+    <div class="note" id="unitNote"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <h2>🗂 Сценарии для сравнения</h2>
+    <div class="scen-save">
+      <input type="text" id="scenName" placeholder="Название сценария (например: «100 R, цены выше»)">
+      <button class="scen-btn" onclick="saveScenario()">💾 Сохранить текущий</button>
+      <button class="scen-btn" onclick="exportCsv()">⬇ Скачать таблицу (CSV)</button>
+    </div>
+    <div id="scenWrap"></div>
+  </div>
+
+  <div class="card">
+    <h2 class="drops-title">💧 Справка: капли (внутренняя валюта, денег не приносит)</h2>
+    <table>
+      <thead><tr><th>Показатель</th><th>Значение</th></tr></thead>
+      <tbody id="dropsTable"></tbody>
+    </table>
+    <div class="note">Цены стоков (плейсхолдеры S50): Unlock light 300 · Lock light 500 · Заморозка 50 · Фото-карточка 200 · Реролл 60 · Смена графика 100 · Restore 20×дней (мин 60, кап 400) · Обещания R: лимиты 50–2000. Packs: 100💧=100⭐, 300💧=250⭐, 1000💧=700⭐.</div>
+  </div>
+</div>
+
+<script>
+const IDS = ["nR","pStd","pPrm","plStd","plPrm","plElt","lightShare","prStd","prPrm","prElt",
+  "packStars","usdPerStar","cMain","cLight","sMain","sLight","cImg","nImg","hostFix","hostVar"];
+const DEFAULTS = {};
+IDS.forEach(id => DEFAULTS[id] = document.getElementById(id).value);
+
+function num(id){ const v = parseFloat(document.getElementById(id).value); return isNaN(v) ? 0 : v; }
+function fmt(n, dec=0){ return n.toLocaleString("ru-RU", {maximumFractionDigits:dec, minimumFractionDigits:0}); }
+function usd(n){ return "$" + fmt(n, n < 100 ? 1 : 0); }
+
+function calc(){
+  const nR = num("nR");
+  let pStd = num("pStd")/100, pPrm = num("pPrm")/100;
+  if (pStd + pPrm > 1) { pPrm = Math.max(0, 1 - pStd); }
+  const pElt = Math.max(0, 1 - pStd - pPrm);
+
+  const rStd = nR*pStd, rPrm = nR*pPrm, rElt = nR*pElt;
+  const players = rStd*num("plStd") + rPrm*num("plPrm") + rElt*num("plElt");
+  const users = nR + players;
+
+  // Выручка
+  const subsStars = rStd*num("prStd") + rPrm*num("prPrm") + rElt*num("prElt");
+  const packsStars = nR*num("packStars");
+  const totalStars = subsStars + packsStars;
+  const usdStar = num("usdPerStar");
+  const revenue = totalStars * usdStar;
+
+  // COGS
+  const W = 4.33; // недель в месяце
+  const mainSess = players * num("sMain") * W;
+  const lightSess = players * (num("lightShare")/100) * num("sLight") * W;
+  const cogsVision = mainSess*num("cMain") + lightSess*num("cLight");
+  const cogsImg = players * num("nImg") * num("cImg");
+  const cogsHost = num("hostFix") + users*num("hostVar");
+  const cogs = cogsVision + cogsImg + cogsHost;
+
+  const profit = revenue - cogs;
+  const margin = revenue > 0 ? (profit/revenue*100) : 0;
+  LAST = {nR, users, totalStars, revenue, cogs, profit, margin};
+
+  // KPI
+  document.getElementById("outUsers").textContent = fmt(users);
+  document.getElementById("outUsersSub").textContent = fmt(nR) + " R + " + fmt(players) + " игроков";
+  document.getElementById("outRev").textContent = usd(revenue);
+  document.getElementById("outRevStars").textContent = fmt(totalStars) + " ⭐";
+  document.getElementById("outCogs").textContent = usd(cogs);
+  document.getElementById("outCogsSub").textContent = "Gemini " + usd(cogsVision+cogsImg) + " + хостинг " + usd(cogsHost);
+  const pEl = document.getElementById("outProfit");
+  pEl.textContent = usd(profit);
+  pEl.className = "val " + (profit >= 0 ? "pos" : "neg");
+  document.getElementById("outMargin").textContent = "маржа " + fmt(margin,1) + "%";
+
+  // Разбивка
+  document.getElementById("breakdown").innerHTML = `
+    <tr><td>Подписки standard (${fmt(rStd)} R)</td><td>${fmt(rStd*num("prStd"))}</td><td>${usd(rStd*num("prStd")*usdStar)}</td></tr>
+    <tr><td>Подписки premium (${fmt(rPrm)} R)</td><td>${fmt(rPrm*num("prPrm"))}</td><td>${usd(rPrm*num("prPrm")*usdStar)}</td></tr>
+    <tr><td>Подписки elite (${fmt(rElt)} R)</td><td>${fmt(rElt*num("prElt"))}</td><td>${usd(rElt*num("prElt")*usdStar)}</td></tr>
+    <tr><td>Drop packs / Stars-предметы</td><td>${fmt(packsStars)}</td><td>${usd(packsStars*usdStar)}</td></tr>
+    <tr><td>Gemini Vision (${fmt(mainSess+lightSess)} сессий)</td><td>—</td><td class="neg">−${usd(cogsVision).slice(1)}</td></tr>
+    <tr><td>Gemini image (фото-карточки)</td><td>—</td><td class="neg">−${usd(cogsImg).slice(1)}</td></tr>
+    <tr><td>Хостинг</td><td>—</td><td class="neg">−${usd(cogsHost).slice(1)}</td></tr>`;
+
+  // Юнит-экономика
+  const cogsPerPlayer = players > 0 ? (cogsVision+cogsImg)/players : 0;
+  const minStdStars = usdStar > 0 ? Math.ceil(cogsPerPlayer*2/usdStar) : 0;
+  document.getElementById("unitNote").innerHTML =
+    "Юнит-экономика: себестоимость одного активного игрока ≈ <b>" + usd(cogsPerPlayer) +
+    "/мес</b> (" + (usdStar>0 ? fmt(cogsPerPlayer/usdStar) : "—") + " ⭐). " +
+    "Чтобы маржа по standard-слоту была ≥50%, цена standard должна быть ≥ <b>" + fmt(minStdStars) +
+    " ⭐/мес</b> при текущих параметрах. Прибыль с одного R ≈ <b>" + usd(nR>0 ? profit/nR : 0) + "/мес</b>.";
+
+  // Капли-справка
+  const q = 0.85;
+  const dropsMain = 50*q*num("sMain")*W;
+  const dropsLight = 30*q*0.9*num("sLight")*W;
+  document.getElementById("dropsTable").innerHTML = `
+    <tr><td>Доход игрока, main-only (качество 85%)</td><td>≈ ${fmt(dropsMain)} 💧/мес</td></tr>
+    <tr><td>Доход игрока с light-режимом</td><td>≈ ${fmt(dropsMain+dropsLight)} 💧/мес</td></tr>
+    <tr><td>Копить на Unlock light (300 💧)</td><td>≈ ${(dropsMain>0? fmt(300/(dropsMain/4.33),1):"—")} нед. main-тренировок</td></tr>
+    <tr><td>Копить на Фото-карточку (200 💧)</td><td>≈ ${(dropsMain>0? fmt(200/(dropsMain/4.33),1):"—")} нед.</td></tr>
+    <tr><td>Эмиссия капель всей базой</td><td>≈ ${fmt(players*(dropsMain + (num("lightShare")/100)*dropsLight))} 💧/мес</td></tr>`;
+}
+
+function save(){ try{ const o={}; IDS.forEach(id=>o[id]=document.getElementById(id).value);
+  localStorage.setItem("wb_econ", JSON.stringify(o)); }catch(e){} }
+function load(){ try{ const o=JSON.parse(localStorage.getItem("wb_econ")||"{}");
+  IDS.forEach(id=>{ if(o[id]!==undefined) document.getElementById(id).value=o[id]; }); }catch(e){} }
+function setScenario(n){ document.getElementById("nR").value=n; save(); calc(); }
+function resetAll(){ IDS.forEach(id=>document.getElementById(id).value=DEFAULTS[id]);
+  try{ localStorage.removeItem("wb_econ"); }catch(e){} calc(); }
+
+// ---- Сценарии для сравнения ----
+let LAST = null;
+function esc(s){ return String(s).replace(/[<>&"]/g, c=>({"<":"&lt;",">":"&gt;","&":"&amp;","\"":"&quot;"}[c])); }
+function getScens(){ try{ return JSON.parse(localStorage.getItem("wb_econ_scens")||"[]"); }catch(e){ return []; } }
+function setScens(a){ try{ localStorage.setItem("wb_econ_scens", JSON.stringify(a)); }catch(e){} renderScens(); }
+function saveScenario(){
+  if(!LAST) calc();
+  const nameEl = document.getElementById("scenName");
+  const name = (nameEl.value||"").trim() || ("Сценарий " + (getScens().length+1));
+  const inputs = {}; IDS.forEach(id => inputs[id] = document.getElementById(id).value);
+  const a = getScens(); a.push({name, inputs, kpi: {...LAST}}); setScens(a); nameEl.value = "";
+}
+function loadScen(i){
+  const s = getScens()[i]; if(!s) return;
+  IDS.forEach(id => { if(s.inputs[id] !== undefined) document.getElementById(id).value = s.inputs[id]; });
+  save(); calc();
+}
+function delScen(i){ const a = getScens(); a.splice(i,1); setScens(a); }
+function renderScens(){
+  const a = getScens(), w = document.getElementById("scenWrap");
+  if(!a.length){ w.innerHTML = '<div class="note">Пока нет сохранённых сценариев. Настрой параметры, дай название и нажми «Сохранить текущий» — строка появится здесь. Сохрани несколько вариантов и сравнивай их в одной таблице; кнопка ↩ возвращает настройки сценария в поля.</div>'; return; }
+  let h = '<table><thead><tr><th>Сценарий</th><th>R</th><th>Юзеров</th><th>⭐/мес</th><th>Выручка</th><th>Затраты</th><th>Прибыль</th><th>Маржа</th><th></th></tr></thead><tbody>';
+  a.forEach((s,i)=>{ const k = s.kpi;
+    h += `<tr><td>${esc(s.name)}</td><td>${fmt(k.nR)}</td><td>${fmt(k.users)}</td><td>${fmt(k.totalStars)}</td><td>${usd(k.revenue)}</td><td>${usd(k.cogs)}</td><td class="${k.profit>=0?"pos":"neg"}">${usd(k.profit)}</td><td>${fmt(k.margin,1)}%</td><td style="white-space:nowrap"><button class="mini" title="Загрузить в поля" onclick="loadScen(${i})">↩</button> <button class="mini" title="Удалить" onclick="delScen(${i})">✕</button></td></tr>`; });
+  w.innerHTML = h + '</tbody></table>';
+}
+function exportCsv(){
+  const a = getScens(); if(!a.length){ alert("Нет сохранённых сценариев — сначала нажми «Сохранить текущий»."); return; }
+  const head = ["Сценарий","Наставников (R)","Юзеров","Stars/мес","Выручка $","Затраты $","Прибыль $","Маржа %"];
+  const rows = a.map(s => [s.name, s.kpi.nR, Math.round(s.kpi.users), Math.round(s.kpi.totalStars),
+    s.kpi.revenue.toFixed(2), s.kpi.cogs.toFixed(2), s.kpi.profit.toFixed(2), s.kpi.margin.toFixed(1)]);
+  const csv = [head, ...rows].map(r => r.map(x => '"' + String(x).replace(/"/g,'""') + '"').join(";")).join("\r\n");
+  const blob = new Blob(["\uFEFF" + csv], {type: "text/csv;charset=utf-8"});
+  const u = URL.createObjectURL(blob), l = document.createElement("a");
+  l.href = u; l.download = "workout_bot_scenarios.csv"; l.click(); URL.revokeObjectURL(u);
+}
+
+IDS.forEach(id => document.getElementById(id).addEventListener("input", ()=>{ save(); calc(); }));
+load(); calc(); renderScens();
+</script>
+</body>
+</html>
