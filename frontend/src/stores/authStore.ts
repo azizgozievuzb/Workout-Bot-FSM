@@ -66,6 +66,12 @@ interface AuthState {
   giftFreezeBalance: number;
   streakFreezeBalance: number;
   restDaysRemaining: number;
+  // --- 8a: расписание + новые заморозки ---
+  freeFreezesLeft: number;
+  paidFreezes: number;
+  mainDays: number[] | null;
+  morningReminderTime: string | null;
+  needsScheduleSetup: boolean;
   hasActivePartnerships: boolean;
   unreadNotifications: number;
   daysLeft: number | null;
@@ -85,6 +91,9 @@ interface AuthState {
   setGiftFreezeBalance: (v: number) => void;
   setStreakFreezeBalance: (v: number) => void;
   setRestDaysRemaining: (v: number) => void;
+  setMainDays: (v: number[] | null) => void;
+  setNeedsScheduleSetup: (v: boolean) => void;
+  setMorningReminderTime: (v: string | null) => void;
   setHasActivePartnerships: (v: boolean) => void;
   setUnreadNotifications: (v: number) => void;
   setDaysLeft: (v: number | null) => void;
@@ -107,6 +116,11 @@ interface AuthState {
     gift_freeze_balance?: number;
     streak_freeze_balance?: number;
     rest_days_remaining?: number;
+    free_freezes_left?: number;
+    paid_freezes?: number;
+    main_days?: number[] | null;
+    morning_reminder_time?: string | null;
+    needs_schedule_setup?: boolean;
     has_active_partnerships?: boolean;
     days_left?: number | null;
     unread_notifications?: number;
@@ -150,6 +164,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   giftFreezeBalance: 0,
   streakFreezeBalance: Number(localStorage.getItem(CACHE_KEYS.streakFreeze) ?? 0),
   restDaysRemaining: 0,
+  freeFreezesLeft: 0,
+  paidFreezes: 0,
+  mainDays: null,
+  morningReminderTime: null,
+  needsScheduleSetup: false,
   hasActivePartnerships: false,
   unreadNotifications: Number(localStorage.getItem(CACHE_KEYS.unreadNotifs) ?? 0),
   daysLeft: null,
@@ -184,6 +203,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ streakFreezeBalance: v });
   },
   setRestDaysRemaining: (v) => set({ restDaysRemaining: v }),
+  setMainDays: (v) => set({ mainDays: v, needsScheduleSetup: !v || v.length !== 3 }),
+  setNeedsScheduleSetup: (v) => set({ needsScheduleSetup: v }),
+  setMorningReminderTime: (v) => set({ morningReminderTime: v }),
   setHasActivePartnerships: (v) => set({ hasActivePartnerships: v }),
   setUnreadNotifications: (v) => {
     localStorage.setItem(CACHE_KEYS.unreadNotifs, String(v));
@@ -244,6 +266,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       giftFreezeBalance: data.gift_freeze_balance ?? 0,
       streakFreezeBalance: streakFreeze,
       restDaysRemaining: data.rest_days_remaining ?? 0,
+      freeFreezesLeft: data.free_freezes_left ?? 0,
+      paidFreezes: data.paid_freezes ?? 0,
+      mainDays: data.main_days ?? null,
+      morningReminderTime: data.morning_reminder_time ?? null,
+      needsScheduleSetup: data.needs_schedule_setup ?? false,
       hasActivePartnerships: data.has_active_partnerships ?? false,
       daysLeft: data.days_left ?? null,
       unreadNotifications: unread,
@@ -297,6 +324,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       giftFreezeBalance: 0,
       streakFreezeBalance: 0,
       restDaysRemaining: 0,
+      freeFreezesLeft: 0,
+      paidFreezes: 0,
+      mainDays: null,
+      morningReminderTime: null,
+      needsScheduleSetup: false,
       hasActivePartnerships: false,
       unreadNotifications: 0,
       daysLeft: null,

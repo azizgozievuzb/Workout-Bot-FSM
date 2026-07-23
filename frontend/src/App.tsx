@@ -4,6 +4,7 @@ import Backdrop from './design/backdrop/Backdrop';
 import type { GlassCubesHandle } from './design/backdrop/GlassCubes';
 import { useAuth } from './hooks/useAuth';
 import OnboardingFlow from './components/onboarding/OnboardingFlow';
+import ScheduleGate from './components/schedule/ScheduleGate';
 import PhotoGate from './components/photo-gate/PhotoGate';
 import ActionCube from './components/cubes/ActionCube';
 import MarketCube from './components/cubes/MarketCube';
@@ -42,7 +43,7 @@ const carouselVariants = {
 const App: React.FC = () => {
     const { isLoading, onboardingDone, photoUrl, error, role } = useAuth();
     const { is_admin, accessRevoked, banInfo, maintenanceMode, onboardingBlocked, onboardingBlockedMessage,
-        subscription, has_responsible_access, has_player_access } = useAuthStore();
+        subscription, has_responsible_access, has_player_access, needsScheduleSetup } = useAuthStore();
     const [theme, setTheme] = useState<'dark' | 'light'>('dark');
     const [layoutMode, setLayoutMode] = useState<LayoutMode>('chaos');
     const [activeModule, setActiveModule] = useState<ModuleName | null>(null);
@@ -159,6 +160,15 @@ const App: React.FC = () => {
         setTimeout(() => { wheelCooldown.current = false; }, 400);
     }, [activeModule, nextMod]);
 
+    // Пока auth не ответил — нейтральный лоадер (без мелькания кубов/контента).
+    if (isLoading && !error) {
+        return (
+            <div className={`app-container ${theme}-theme`}>
+                <div className="pg-loading-screen" />
+            </div>
+        );
+    }
+
     if (banInfo) return <BanScreen info={banInfo} />;
     if (maintenanceMode && !is_admin) return <MaintenanceScreen />;
     if (accessRevoked && !isLoading) {
@@ -216,6 +226,10 @@ const App: React.FC = () => {
                         {/* Опрос — ТОЛЬКО для приглашённого игрока (has_player_access), после селфи.
                             Новый неприглашённый юзер видит PaywallScreen (см. выше), не опрос. */}
                         {!isLoading && has_player_access && !onboardingDone && !!photoUrl && <OnboardingFlow />}
+
+                        {/* === SCHEDULE GATE === */}
+                        {/* Существующий игрок без main_days (релиз 8a) — довыбор 3 дней. */}
+                        {!isLoading && has_player_access && onboardingDone && needsScheduleSetup && !!photoUrl && <ScheduleGate />}
 
                         {/* === AUTH ERROR === */}
                         {error && (

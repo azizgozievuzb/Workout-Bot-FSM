@@ -10,6 +10,9 @@ export interface PlayerStats {
     level_window: number[];
     rest_days_remaining: number;
     rest_days_used_this_month: number;
+    free_freezes_left?: number;
+    paid_freezes?: number;
+    last_closed_day?: string | null;
 }
 
 export interface PartnerStats {

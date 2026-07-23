@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { retrieveLaunchParams } from '@telegram-apps/sdk-react';
 import api, { setToken } from '../api/client';
 import { useAuthStore } from '../stores/authStore';
+import { saveDetectedTimezone } from '../api/schedule';
 
 // Declare Telegram WebApp type
 declare global {
@@ -89,6 +90,8 @@ export function useAuth() {
 
         if (!cancelled) {
           setToken(data.access_token);
+          // 8a: тихий детект TZ → сохранение (не блокирует вход)
+          void saveDetectedTimezone();
           setAuth({
             token: data.access_token,
             role: data.role,
@@ -106,6 +109,11 @@ export function useAuth() {
             gift_freeze_balance: data.gift_freeze_balance ?? 0,
             streak_freeze_balance: data.streak_freeze_balance ?? 0,
             rest_days_remaining: data.rest_days_remaining ?? 0,
+            free_freezes_left: data.free_freezes_left ?? 0,
+            paid_freezes: data.paid_freezes ?? 0,
+            main_days: data.main_days ?? null,
+            morning_reminder_time: data.morning_reminder_time ?? null,
+            needs_schedule_setup: data.needs_schedule_setup ?? false,
             has_active_partnerships: data.has_active_partnerships ?? false,
             days_left: data.days_left ?? null,
             unread_notifications: data.unread_notifications ?? 0,

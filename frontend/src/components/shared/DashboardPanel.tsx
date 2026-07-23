@@ -6,6 +6,7 @@ import DashboardSection from './DashboardSection';
 import type { DashboardModule, DashboardView, DashboardData } from './DashboardSection';
 import { getMyStats, getPartnerStats } from '../../api/stats';
 import { getUnreadCount } from '../../api/activityFeed';
+import PlayerSchedulePanel from '../schedule/PlayerSchedulePanel';
 
 interface DashboardPanelProps {
     onOpen: (module: DashboardModule, sub?: string) => void;
@@ -27,6 +28,9 @@ const DashboardPanel: React.FC<DashboardPanelProps> = ({ onOpen }) => {
 
     const [data, setData] = useState<DashboardData>({});
     const [loading, setLoading] = useState(true);
+    const [sched, setSched] = useState<{ lastClosed: string | null; free: number; paid: number }>(
+        { lastClosed: null, free: 0, paid: 0 }
+    );
 
     useEffect(() => {
         let cancelled = false;
@@ -44,6 +48,11 @@ const DashboardPanel: React.FC<DashboardPanelProps> = ({ onOpen }) => {
                             drops_balance: s.drops_balance,
                             rest_days_remaining: s.rest_days_remaining,
                         }));
+                        setSched({
+                            lastClosed: s.last_closed_day ?? null,
+                            free: s.free_freezes_left ?? 0,
+                            paid: s.paid_freezes ?? 0,
+                        });
                     })
                     .catch(() => {})
             );
@@ -82,6 +91,16 @@ const DashboardPanel: React.FC<DashboardPanelProps> = ({ onOpen }) => {
 
     return (
         <div className="dashboard-panel">
+            {view === 'player' && canPlay(user) && (
+                <>
+                    <PlayerSchedulePanel
+                        lastClosedDay={sched.lastClosed}
+                        freeFreezes={sched.free}
+                        paidFreezes={sched.paid}
+                    />
+                    <div className="dashboard-divider" />
+                </>
+            )}
             {modules.map((mod, i, arr) => (
                 <React.Fragment key={mod}>
                     <DashboardSection
