@@ -6,10 +6,12 @@ Legacy Jobs A/B/C (expire_codes / warn_expiring / hard_delete_inactive) удал
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from .subscription_lifecycle import register_subscription_jobs
+from .schedule_lifecycle import register_schedule_jobs
 
 
 def create_scheduler(bot) -> AsyncIOScheduler:
     """Create AsyncIO scheduler with all subscription-related jobs."""
     scheduler = AsyncIOScheduler(timezone="UTC")
     register_subscription_jobs(scheduler)
+    register_schedule_jobs(scheduler)  # 8a: streak closure / freezes / reminders
     return scheduler

@@ -409,11 +409,9 @@ async def handle_expired_subscriptions() -> None:
 
 def register_subscription_jobs(scheduler) -> None:
     """Вызывается из promo_lifecycle.create_scheduler (или main lifespan)."""
-    scheduler.add_job(
-        consume_streak_freezes,
-        trigger="cron", hour=0, minute=10,
-        id="consume_streak_freezes", replace_existing=True,
-    )
+    # Job E (consume_streak_freezes) СНЯТ с расписания в 8a: стрик теперь
+    # закрывается только по плановым main-дням в локальной TZ — этим занимается
+    # schedule_lifecycle.close_streak_day. Функция оставлена как legacy (не зовётся).
     scheduler.add_job(
         increment_active_days,
         trigger="cron", hour=3, minute=0,

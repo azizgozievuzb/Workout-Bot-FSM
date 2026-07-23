@@ -19,6 +19,7 @@ from ...core.workout_config import (
 from ...core.config import settings
 from ...db.client import get_supabase
 from ...services.workout_vision import analyze_exercise_clip
+from ...services import schedule
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/workout", tags=["workout"])
@@ -254,7 +255,7 @@ async def finish_session(session_id: str = Form(...), user: dict = Depends(get_c
     # Read player_stats up-front: streak BEFORE this workout drives streak_mult.
     stats_res = await (
         db.table("player_stats")
-        .select("drops_balance, current_streak, best_streak, last_workout_date")
+        .select("drops_balance, current_streak, best_streak, last_workout_date, last_closed_day")
         .eq("player_id", player_id)
         .maybe_single()
         .execute()
@@ -287,26 +288,36 @@ async def finish_session(session_id: str = Form(...), user: dict = Depends(get_c
         .execute()
     )
 
-    # Credit drops_balance + last_workout_date + streak on player_stats
+    # Credit drops_balance + last_workout_date + streak on player_stats.
+    # 8a: капли начисляются за любую тренировку в любой день; СТРИК закрывается
+    # только тренировкой в плановый main-день (по локальной TZ юзера).
     new_balance = int(cur.get("drops_balance") or 0) + drops
-    today = datetime.now(timezone.utc).date().isoformat()
-    last = cur.get("last_workout_date")
-    streak = current_streak
-    if last == today:
-        pass  # already counted today
-    elif last and (datetime.fromisoformat(today).toordinal() - datetime.fromisoformat(last).toordinal()) == 1:
-        streak += 1
-    else:
-        streak = 1
-    best = max(int(cur.get("best_streak") or 0), streak)
 
+    cfg_res = await (
+        db.table("users")
+        .select("timezone, main_days, pending_main_days, pending_schedule_from")
+        .eq("id", player_id)
+        .maybe_single()
+        .execute()
+    )
+    cfg = cfg_res.data if cfg_res and cfg_res.data else {}
+    l_today = schedule.local_today(cfg.get("timezone"))
+    today = l_today.isoformat()
+
+    md = schedule.effective_main_days(cfg, l_today)
+    streak = current_streak
     upsert_payload = {
         "player_id": player_id,
         "drops_balance": new_balance,
         "last_workout_date": today,
-        "current_streak": streak,
-        "best_streak": best,
     }
+    if schedule.is_main_day(md, l_today) and cur.get("last_closed_day") != today:
+        # плановый день закрыт впервые сегодня → стрик +1
+        streak = current_streak + 1
+        upsert_payload["current_streak"] = streak
+        upsert_payload["last_closed_day"] = today
+        upsert_payload["best_streak"] = max(int(cur.get("best_streak") or 0), streak)
+
     await db.table("player_stats").upsert(upsert_payload, on_conflict="player_id").execute()
 
     return FinishSessionResponse(
