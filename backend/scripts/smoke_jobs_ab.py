@@ -13,7 +13,22 @@ Oil (Responsible) telegram_id = 8580720783; исходный expires = 2026-12-1
 После проверки ОБЯЗАТЕЛЬНО выполнить `rollback`.
 """
 import asyncio
+import os
 import sys
+from pathlib import Path
+
+# Загрузить временный backend/.env по абсолютному пути ДО импорта settings
+# (config.py инстанцирует Settings() на импорте; env_file читается от CWD, что
+# ненадёжно). Файл backend/.env — в .gitignore, удаляется после смоука.
+_ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
+if _ENV_PATH.exists():
+    for _line in _ENV_PATH.read_text(encoding="utf-8").splitlines():
+        _line = _line.strip()
+        if not _line or _line.startswith("#") or "=" not in _line:
+            continue
+        _k, _v = _line.split("=", 1)
+        _k, _v = _k.strip(), _v.strip().strip('"').strip("'")
+        os.environ.setdefault(_k, _v)
 
 from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
@@ -28,7 +43,7 @@ from ..schedulers.subscription_lifecycle import (
 )
 
 OIL_TG = 8580720783
-ORIG_EXPIRES = "2026-12-16 16:46:00+00"
+ORIG_EXPIRES = "2026-12-16 16:46:01.887898+00"  # точный снимок Session 51
 
 
 async def _snapshot(db):
