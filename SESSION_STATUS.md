@@ -36,15 +36,16 @@
 ### Ф7 Verify ✅
 - `py_compile` весь backend OK; `ruff --select F` All passed; `tsc --noEmit` 0 ошибок; миграция 034 применена (information_schema подтверждён, 14 колонок); джобы регистрируются (helpers юнит-проверены; APScheduler локально не установлен — регистрация в create_scheduler).
 
-## ⏳ Ф6 Живой smoke Job A/B — ГОТОВ, ЖДЁТ ПРОГОНА С ЮЗЕРОМ
-- **Не запускался** из этой сессии: нет прод-рантайма (нет локального .env/бота; бот на webhook в проде) + шлёт РЕАЛЬНЫЕ сообщения Oil (нужно, чтобы юзер смотрел TG и НЕ оплачивал).
-- Снимок Oil (Ф6.1): `subscription_expires_at = 2026-12-16 16:46:01.887898+00`, tier standard, pricing_mode NULL, has_responsible_access true.
-- Раннер: `backend/scripts/smoke_jobs_ab.py` — субкоманды `snapshot | job-a | job-b | rollback` (запускать на прод-хосте: `python -m backend.scripts.smoke_jobs_ab <cmd>`).
-- Порядок: `job-a` (expires=now+2д, reminder=NULL → счёт-напоминание Oil, НЕ платить) → `job-b` (expires=now−4д → пейволл Oil + пауза игроку Cell) → **обязательно `rollback`** (expires→`2026-12-16 16:46:00+00`, reminder=NULL). Доступ Cell восстановится сам.
-- Результаты (пришло/скрины) внести сюда после прогона.
+## ✅/⚠️ Ф6 Живой smoke Job A/B — ПРОГНАН (локально, CC на машине Азиза; временный `backend/.env`, удалён после)
+- Снимок Oil (Ф6.1): `subscription_expires_at = 2026-12-16 16:46:01.887898+00`, tier standard, pricing_mode NULL.
+- **Job A (логика ✓, доставка счёта ✗):** джоб корректно нашёл Oil, сдвиг expires=now+2д, отправка счёта прошла без ошибки, `last_renewal_reminder_at` проставлен (ставится только после успешной отправки). **НО чат-счёт в Telegram НЕ пришёл.** Диагностика: `get_me` = @conectionWorkout_bot (боевой), обычный текст в тот же чат Oil **доходит**, а `bot.send_invoice(XTR)` — нет (тест «текст сразу после счёта»: текст пришёл, счёт нет; Telegram API оба принял, message_id вернулись).
+  - **🔴 НАХОДКА (в предзапускной чек-лист):** Job A/B шлёт счёт через `bot.send_invoice()` прямо в чат → Stars-счёт (XTR) не рендерится на клиенте. Рабочий путь оплаты (S49, проверен реальными Stars) — `bot.create_invoice_link()` → ссылка → Mini App `tg.openInvoice()` (`payments.py`). **Фикс:** переделать `_send_renewal_invoice` на `create_invoice_link` + кнопку в Mini App (либо слать текст-напоминание со ссылкой startapp=renew, без чат-счёта). До фикса напоминания о продлении в чате невидимы.
+- **Job B (логика ✓):** джоб корректно определил истёкшего Oil; **пауза игроку Cell сработала** — в `notifications` создана запись `access_paused` «⏸ Доступ на паузе…» (подтверждено SQL). Нюанс: плашка паузы шлётся в узком окне `now−1d ≤ grace_end < now` (одноразово у границы grace); `expires=now−4д` при grace 3д кладёт grace_end ровно на `now−1d` и из-за ~1с сдвига часов промахивается — прогнал с `expires=now−3д12ч` (grace_end=now−12ч, внутри окна). Пейволл-счёт Oil — та же проблема нерендера, что и Job A.
+- **Откат + чистка (✓ подтверждено SQL):** Oil `expires → 2026-12-16 16:46:01.887898+00`, `reminder → NULL`; удалены 3 pending `tier_1m` платежа (снапшоты счётов, не оплачены) и 1 smoke-уведомление Cell `access_paused`; доступ Cell вернулся сам. Временный `backend/.env` удалён (в git не попадал).
+- Раннер `backend/scripts/smoke_jobs_ab.py` (`snapshot|job-a|job-b|rollback`) остаётся в репо. Локально доустановлены `supabase==2.10.0`, `pydantic-settings==2.6.1` (были битые/отсутствовали).
 
 ## ▶️ Следующая точка
-8a закрыта (кроме живого Ф6). Дальше — **постановка 8b** (light-режим: 4 упражнения, light-сессия 30💧, unlock/lock, стрик «любой день» со след. пн, дисклеймер-тесты). BACKLOG §8.16.
+8a закрыта, живой Ф6 прогнан. Открытый долг из Ф6 → **предзапускной чек-лист: чат-счёт продления (Job A/B) переделать с `send_invoice` на `create_invoice_link`+Mini App** (иначе напоминания о продлении невидимы). Дальше — **постановка 8b** (light-режим: 4 упражнения, light-сессия 30💧, unlock/lock, стрик «любой день» со след. пн, дисклеймер-тесты). BACKLOG §8.16.
 
 ---
 

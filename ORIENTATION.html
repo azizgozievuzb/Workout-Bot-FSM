@@ -98,7 +98,7 @@
     <li class="warn"><b>Вернуть боевую сетку цен</b> — сейчас заградительная (от посторонних): std intro 800…elt 12m 9900. Эталон — «средняя» сетка Session 47.</li>
     <li>Вариант B гейта (витрина до оплаты, A/B на конверсию) — BACKLOG.</li>
     <li>Ротация Gemini-ключа + чистка git history — BACKLOG.</li>
-    <li>Живой smoke Job A/B (счета-напоминания за ≤3 дня) — раннер готов (<code>smoke_jobs_ab.py</code>), прогнать с юзером.</li>
+    <li class="warn"><b>Чат-счёт продления не рендерится</b> (Job A/B, находка живого smoke S51): <code>bot.send_invoice(XTR)</code> в чат Telegram не показывается (текст доходит, счёт нет). Переделать <code>_send_renewal_invoice</code> на <code>create_invoice_link</code> + кнопку в Mini App (как рабочий путь оплаты S49). Job B (пауза игрока) — работает. Раннер: <code>backend/scripts/smoke_jobs_ab.py</code>.</li>
   </ul>
 </section>
 
