@@ -2,18 +2,6 @@
    CUBE MODULES — Inner screens for Action / Market / Bond
    ========================================================================== */
 
-/* Tier matrix trigger link (PlayerView) */
-.tier-matrix-link {
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: 12px;
-    padding: 2px 0 6px;
-    color: var(--tg-theme-hint-color, rgba(255,255,255,0.4));
-    text-align: left;
-}
-.tier-matrix-link:active { opacity: 0.6; }
-
 /* --- Common layout --- */
 
 .cube-module {
@@ -588,61 +576,6 @@
     color: rgba(44, 32, 22, 0.4);
 }
 
-/* --- Promo invite CHIP (compact, side-positioned) --- */
-
-.promo-invite-chip-row {
-    display: flex;
-    justify-content: flex-end;
-    margin: 0 0 4px;
-}
-
-.promo-invite-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 5px 10px 5px 12px;
-    border-radius: 999px;
-    font-size: 11px;
-    line-height: 1;
-    cursor: pointer;
-    transition: background 0.15s, transform 0.15s;
-}
-
-.dark-theme .promo-invite-chip {
-    background: rgba(99, 102, 241, 0.12);
-    border: 1px solid rgba(99, 102, 241, 0.22);
-    color: rgba(250, 245, 239, 0.75);
-}
-
-.light-theme .promo-invite-chip {
-    background: rgba(99, 102, 241, 0.08);
-    border: 1px solid rgba(99, 102, 241, 0.18);
-    color: rgba(44, 32, 22, 0.75);
-}
-
-.promo-invite-chip:active {
-    transform: scale(0.96);
-}
-
-.promo-invite-chip-label {
-    font-size: 10px;
-    letter-spacing: 0.5px;
-    text-transform: uppercase;
-    opacity: 0.55;
-}
-
-.promo-invite-chip-code {
-    font-family: 'SF Mono', 'Fira Code', monospace;
-    font-weight: 700;
-    letter-spacing: 1.5px;
-    font-size: 12px;
-}
-
-.promo-invite-chip-copy {
-    font-size: 11px;
-    opacity: 0.7;
-}
-
 /* --- Refresh / generate button (ActionCube) --- */
 .promo-generate-btn {
     padding: 4px 12px;
@@ -955,58 +888,6 @@
     color: #FF3B30;
     border: 1px solid rgba(255, 59, 48, 0.3);
     white-space: nowrap;
-}
-
-/* --- Renewal prompt (PlayerView) --- */
-
-.renewal-prompt {
-    padding: 14px 16px;
-    border-radius: 14px;
-    background: rgba(255, 149, 0, 0.1);
-    border: 1px solid rgba(255, 149, 0, 0.25);
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.light-theme .renewal-prompt {
-    background: rgba(255, 149, 0, 0.08);
-    border-color: rgba(255, 149, 0, 0.2);
-}
-
-.renewal-prompt__text {
-    font-size: 13px;
-    font-weight: 600;
-    margin: 0;
-    color: var(--tg-theme-text-color, inherit);
-}
-
-.renewal-prompt__btn {
-    width: 100%;
-    padding: 12px 16px;
-    border-radius: 12px;
-    border: none;
-    font-size: 14px;
-    font-weight: 700;
-    cursor: pointer;
-    background: var(--tg-theme-button-color, #CCFF00);
-    color: var(--tg-theme-button-text-color, #111);
-    transition: transform 0.12s ease, opacity 0.15s;
-}
-
-.renewal-prompt__btn:active:not(:disabled) {
-    transform: scale(0.97);
-}
-
-.renewal-prompt__btn:disabled {
-    opacity: 0.55;
-    cursor: default;
-}
-
-.renewal-prompt__error {
-    font-size: 12px;
-    color: #FF3B30;
-    margin: 0;
 }
 
 /* --- My Players row (ResponsibleView) --- */
@@ -2082,38 +1963,6 @@
 
 .player-row-menu-btn:active {
     background: var(--tg-theme-secondary-bg-color, rgba(128, 128, 128, 0.15));
-}
-
-/* --- Days-left chip (player row) --- */
-
-.days-chip {
-    display: inline-flex;
-    align-items: center;
-    padding: 2px 8px;
-    border-radius: 10px;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.3px;
-}
-
-.days-chip--green {
-    background: rgba(39, 174, 96, 0.15);
-    color: #27ae60;
-}
-
-.days-chip--yellow {
-    background: rgba(245, 158, 11, 0.18);
-    color: #d97706;
-}
-
-.days-chip--red {
-    background: rgba(255, 59, 48, 0.15);
-    color: #ff3b30;
-}
-
-.days-chip--grey {
-    background: var(--tg-theme-secondary-bg-color, rgba(128, 128, 128, 0.15));
-    color: var(--tg-theme-hint-color, #888);
 }
 
 .cube-avatar img {

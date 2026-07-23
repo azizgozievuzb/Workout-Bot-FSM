@@ -187,7 +187,7 @@ const RenewalScreen: React.FC<RenewalScreenProps> = ({ onClose }) => {
       )}
       <div className="paywall-inner">
         <h1 className="paywall-title">Продление подписки</h1>
-        <p className="paywall-sub">Выберите тариф и период. Оплата — звёздами Telegram.</p>
+        {!isFree && <p className="paywall-sub">Выберите тариф и период. Оплата — звёздами Telegram.</p>}
 
         {loading && <div className="paywall-loading">Загрузка…</div>}
 
