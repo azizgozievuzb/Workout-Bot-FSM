@@ -18,6 +18,7 @@ USER_SELECT_COLS = (
     "ban_until, ban_reason, ban_missed_workouts, "
     "responsible_access_tier, player_access_tier, "
     "shop_freeze_balance, gift_freeze_balance, gender, "
+    "timezone, main_days, morning_reminder_time, "
     "goal, goal_update_required, "
     "subscription_expires_at, pricing_mode, custom_price_stars"
 )
@@ -88,6 +89,13 @@ class TokenResponse(BaseModel):
     gift_freeze_balance: int = 0
     streak_freeze_balance: int = 0
     rest_days_remaining: int = 0
+    # 8a: расписание + новые заморозки
+    free_freezes_left: int = 0
+    paid_freezes: int = 0
+    main_days: list[int] | None = None
+    timezone: str | None = None
+    morning_reminder_time: str | None = None
+    needs_schedule_setup: bool = False
     has_active_partnerships: bool = False
     days_left: int | None = None
     unread_notifications: int = 0
@@ -228,13 +236,15 @@ async def _build_full_token_response(db, telegram_id: int, user_data: dict) -> T
     shop_freeze_balance = int(user_data.get("shop_freeze_balance") or 0)
     gift_freeze_balance = int(user_data.get("gift_freeze_balance") or 0)
 
-    # Player stats — streak freeze + rest days
+    # Player stats — заморозки (8a: free/paid; legacy streak_freeze/rest_days для совместимости)
     streak_freeze_balance = 0
     rest_days_remaining = 0
+    free_freezes_left = 0
+    paid_freezes = 0
     if has_player_access:
         ps_res = (
             await db.table("player_stats")
-            .select("streak_freeze_balance, rest_days_remaining")
+            .select("streak_freeze_balance, rest_days_remaining, free_freezes_left, paid_freezes")
             .eq("player_id", user_uuid)
             .maybe_single()
             .execute()
@@ -242,6 +252,8 @@ async def _build_full_token_response(db, telegram_id: int, user_data: dict) -> T
         if ps_res is not None and ps_res.data:
             streak_freeze_balance = int(ps_res.data.get("streak_freeze_balance") or 0)
             rest_days_remaining = int(ps_res.data.get("rest_days_remaining") or 0)
+            free_freezes_left = int(ps_res.data.get("free_freezes_left") or 0)
+            paid_freezes = int(ps_res.data.get("paid_freezes") or 0)
 
     # has_active_partnerships — Responsible/Admin
     has_active_partnerships = False
@@ -289,6 +301,13 @@ async def _build_full_token_response(db, telegram_id: int, user_data: dict) -> T
         gift_freeze_balance=gift_freeze_balance,
         streak_freeze_balance=streak_freeze_balance,
         rest_days_remaining=rest_days_remaining,
+        free_freezes_left=free_freezes_left,
+        paid_freezes=paid_freezes,
+        main_days=user_data.get("main_days"),
+        timezone=user_data.get("timezone"),
+        morning_reminder_time=(str(user_data["morning_reminder_time"])[:5]
+                               if user_data.get("morning_reminder_time") else "08:00"),
+        needs_schedule_setup=bool(has_player_access and not user_data.get("main_days")),
         has_active_partnerships=has_active_partnerships,
         days_left=days_left,
         unread_notifications=unread_notifications,

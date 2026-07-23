@@ -11,10 +11,57 @@ from pydantic import BaseModel
 from ...core.deps import get_current_user
 from ...db.client import get_supabase
 from ...services.photo_styler import process_photo_styles
+from ...services import schedule
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+
+class TimezoneReq(BaseModel):
+    timezone: str
+
+
+class TimezoneResp(BaseModel):
+    timezone: str | None       # рабочая TZ
+    detected_timezone: str | None
+    changed: bool              # обновилась ли рабочая TZ
+
+
+@router.patch("/me/timezone", response_model=TimezoneResp)
+async def set_timezone(
+    body: TimezoneReq, current_user: dict = Depends(get_current_user)
+) -> TimezoneResp:
+    """Тихое сохранение детектированной TZ (вызов фронтом при auth).
+
+    Если рабочая TZ ещё NULL → сохраняем как рабочую. Если отличается —
+    пишем только detected_timezone, рабочую НЕ трогаем (диалог «Обновить?» — 8e).
+    """
+    tz = (body.timezone or "").strip()
+    if not schedule.is_valid_tz(tz):
+        raise HTTPException(status_code=422, detail={"code": "BAD_TIMEZONE"})
+
+    db = await get_supabase()
+    res = await (
+        db.table("users").select("id, timezone")
+        .eq("telegram_id", current_user["telegram_id"]).maybe_single().execute()
+    )
+    if not res or not res.data:
+        raise HTTPException(status_code=404, detail={"code": "USER_NOT_FOUND"})
+
+    uid = res.data["id"]
+    cur_tz = res.data.get("timezone")
+    update: dict = {"detected_timezone": tz}
+    changed = False
+    if not cur_tz:
+        update["timezone"] = tz
+        changed = True
+    await db.table("users").update(update).eq("id", uid).execute()
+    return TimezoneResp(
+        timezone=tz if changed else cur_tz,
+        detected_timezone=tz,
+        changed=changed,
+    )
 
 
 class UserProfile(BaseModel):

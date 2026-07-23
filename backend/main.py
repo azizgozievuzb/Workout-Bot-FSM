@@ -24,6 +24,7 @@ from .api.routers.shop import router as shop_router
 from .api.routers.boosts import router as boosts_router
 from .api.routers.workout import router as workout_router
 from .api.routers.player import router as player_router
+from .api.routers.schedule import router as schedule_router
 from .api.routers.onboarding import router as onboarding_api_router
 from .api.routers.notifications import router as notifications_router
 from .api.routers.payments import router as payments_router
@@ -117,6 +118,7 @@ app.include_router(shop_router)
 app.include_router(boosts_router)
 app.include_router(workout_router)
 app.include_router(player_router)
+app.include_router(schedule_router)
 app.include_router(onboarding_api_router)
 app.include_router(notifications_router)
 app.include_router(payments_router)

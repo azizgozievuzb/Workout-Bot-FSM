@@ -22,6 +22,10 @@ class PlayerStatsResponse(BaseModel):
     level_window: list[int]
     rest_days_remaining: int
     rest_days_used_this_month: int
+    # 8a: новые заморозки + закрытие планового дня
+    free_freezes_left: int = 0
+    paid_freezes: int = 0
+    last_closed_day: str | None = None
 
 
 class PartnerStatsResponse(BaseModel):
@@ -96,6 +100,9 @@ async def get_my_stats(user: dict = Depends(get_current_user)):
             level_window=d.get("level_window", [1, 2, 3]),
             rest_days_remaining=d.get("rest_days_remaining", 3),
             rest_days_used_this_month=d.get("rest_days_used_this_month", 0),
+            free_freezes_left=d.get("free_freezes_left", 0),
+            paid_freezes=d.get("paid_freezes", 0),
+            last_closed_day=d.get("last_closed_day"),
         )
         logger.info("[/stats/me] SUCCESS")
         return response
