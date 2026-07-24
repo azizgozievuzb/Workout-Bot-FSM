@@ -17,14 +17,21 @@ from ...services.notifications import emit_notification
 router = APIRouter(prefix="/partnerships", tags=["partnerships"])
 
 
+def _cartoon_avatar(gender: str | None) -> str:
+    """Дефолт фото-карточки (privacy by default) — мультяшный ассет по полу.
+    Пути — статика фронта (frontend/public/avatars/); заглушки-силуэты,
+    настоящие мультяшки — контент-долг."""
+    return "/avatars/cartoon_female.svg" if gender == "female" else "/avatars/cartoon_male.svg"
+
+
 class MyPlayerOut(BaseModel):
     partnership_id: UUID
     id: UUID  # player user_id
     telegram_id: int
     first_name: str | None
-    profile_photo_url: str | None
-    photo_dark_url: str | None
-    photo_light_url: str | None
+    # 8c (8.8b): наставник видит ТОЛЬКО card_photo_url (купленную фото-карточку),
+    # при её отсутствии — мультяшный ассет по полу. Styled/raw фото R не отдаём.
+    card_photo_url: str
     access_tier: str
     expires_at: str | None
     is_expired: bool
@@ -129,7 +136,7 @@ async def my_players(current_user: dict = Depends(get_current_user)) -> list[MyP
 
     users_res = await (
         db.table("users")
-        .select("id, telegram_id, first_name, profile_photo_url, photo_dark_url, photo_light_url, player_access_tier, deactivated_at")
+        .select("id, telegram_id, first_name, card_photo_url, gender, player_access_tier, deactivated_at")
         .in_("id", player_ids)
         .execute()
     )
@@ -169,9 +176,7 @@ async def my_players(current_user: dict = Depends(get_current_user)) -> list[MyP
             id=u["id"],
             telegram_id=u["telegram_id"],
             first_name=u.get("first_name"),
-            profile_photo_url=u.get("profile_photo_url"),
-            photo_dark_url=u.get("photo_dark_url"),
-            photo_light_url=u.get("photo_light_url"),
+            card_photo_url=u.get("card_photo_url") or _cartoon_avatar(u.get("gender")),
             access_tier=u.get("player_access_tier") or "standard",
             expires_at=exp_raw,
             is_expired=is_expired,

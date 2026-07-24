@@ -44,6 +44,94 @@ PROMPT_LIGHT = (
 MODEL = "gemini-3.1-flash-image"
 FALLBACK_MODEL = "gemini-2.5-flash-image"
 
+# ---------------------------------------------------------------------------
+# 8c: фото-карточка (аватар игрока для наставника) — гендерный промпт.
+# Тот же Gemini-image стек, что и wallpaper-стили выше.
+# ---------------------------------------------------------------------------
+
+_CARD_PROMPT_BASE = (
+    "You are given a selfie photo. Create a stylized PORTRAIT AVATAR (square 1:1) from it:\n"
+    "1. Keep the person's face clearly recognizable — same facial features, natural human eyes.\n"
+    "2. Apply a polished digital-art treatment: clean studio-like background with a soft gradient, "
+    "subtle rim light, painterly finish. NOT a photo with a filter — digital art.\n"
+    "3. Head-and-shoulders framing, face centered and large.\n"
+    "{gender_style}\n"
+    "IMPORTANT: flattering, respectful, no caricature. Edge to edge, no borders, no text."
+)
+
+CARD_STYLE_FEMALE = (
+    "4. Style direction: feminine and graceful — softer light, gentle warm tones, "
+    "smooth elegant color palette, delicate glow."
+)
+CARD_STYLE_MALE = (
+    "4. Style direction: bold and brutal — strong contrast, chiseled shadows, "
+    "cool steel/graphite tones, athletic heroic energy."
+)
+
+# Два варианта на выбор — разные художественные акценты поверх гендерного стиля.
+_CARD_VARIANT_FLAVORS = (
+    "Variant emphasis: cinematic lighting, rich deep background.",
+    "Variant emphasis: airy minimalist background, brighter key light.",
+)
+
+
+def card_prompt(gender: str | None, variant: int) -> str:
+    style = CARD_STYLE_FEMALE if gender == "female" else CARD_STYLE_MALE
+    base = _CARD_PROMPT_BASE.format(gender_style=style)
+    return f"{base}\n{_CARD_VARIANT_FLAVORS[variant % len(_CARD_VARIANT_FLAVORS)]}"
+
+
+async def process_card_photo_variants(photo_bytes: bytes, telegram_id: int, gender: str | None) -> None:
+    """Генерирует 2 AI-варианта фото-карточки → users.card_photo_candidates.
+
+    Статусы в card_photo_candidates: {'status': 'processing'} (ставит вызывающий
+    код) → {'status': 'choosing', 'variants': [url, url]} | {'status': 'failed'}.
+    """
+    db = None
+    try:
+        client = genai.Client(api_key=settings.GEMINI_API_KEY)
+        db = await get_supabase()
+        base = settings.SUPABASE_URL.strip().strip("'").strip('"').rstrip("/")
+
+        urls: list[str] = []
+        for i in range(2):
+            styled = await _generate_styled(client, photo_bytes, card_prompt(gender, i))
+            if not styled:
+                logger.error(f"card variant {i} generation failed for user {telegram_id}")
+                continue
+            import uuid as _uuid
+            path = f"{telegram_id}/card_v_{_uuid.uuid4().hex[:8]}.jpg"
+            try:
+                await db.storage.from_("avatars").upload(
+                    path=path,
+                    file=styled,
+                    file_options={"content-type": "image/jpeg", "x-upsert": "true"},
+                )
+                urls.append(f"{base}/storage/v1/object/public/avatars/{path}")
+            except Exception as e:
+                logger.error(f"card variant upload failed: {e}")
+
+        candidates = (
+            {"status": "choosing", "variants": urls} if len(urls) == 2
+            else {"status": "failed"}
+        )
+        await (
+            db.table("users").update({"card_photo_candidates": candidates})
+            .eq("telegram_id", telegram_id).execute()
+        )
+        logger.info(f"card photo variants done for user {telegram_id}: {len(urls)}")
+    except Exception as e:
+        logger.error(f"process_card_photo_variants failed for {telegram_id}: {e}")
+        try:
+            if db is None:
+                db = await get_supabase()
+            await (
+                db.table("users").update({"card_photo_candidates": {"status": "failed"}})
+                .eq("telegram_id", telegram_id).execute()
+            )
+        except Exception:
+            pass
+
 
 async def _generate_styled(client: genai.Client, photo_bytes: bytes, prompt: str) -> bytes | None:
     """Send photo to Gemini and get styled image back."""

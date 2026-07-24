@@ -43,6 +43,8 @@ class ScheduleResp(BaseModel):
     today_session_type: str | None = None  # 'main' | 'light' | None (сегодня не плановый)
     light_unlock_price: int | None = None
     light_lock_price: int | None = None
+    # 8c: смена графика вне grace — платная
+    schedule_change_price: int | None = None
 
 
 _COLS = (
@@ -99,13 +101,14 @@ def _build_resp(row: dict, now: datetime, prices: dict | None = None) -> Schedul
         today_session_type=planned,
         light_unlock_price=prices.get("light_unlock"),
         light_lock_price=prices.get("light_lock"),
+        schedule_change_price=prices.get("schedule_change"),
     )
 
 
 async def _light_prices(db) -> dict:
     res = await (
         db.table("app_shop_items").select("key, price_drops")
-        .in_("key", ["light_unlock", "light_lock"]).execute()
+        .in_("key", ["light_unlock", "light_lock", "schedule_change"]).execute()
     )
     return {r["key"]: int(r["price_drops"]) for r in (res.data or [])}
 
@@ -205,6 +208,14 @@ async def set_schedule(
                 detail={"code": "SCHEDULE_COOLDOWN", "next_change_available_at": na.isoformat()},
             )
 
+    # 8c: вне grace смена платная (schedule_change из app_shop_items).
+    # Не хватает капель → 400 INSUFFICIENT_DROPS с ценой в detail (_charge_drops).
+    prices = await _light_prices(db)
+    change_price = prices.get("schedule_change")
+    if change_price is None:
+        raise HTTPException(status_code=500, detail={"code": "PRICE_NOT_CONFIGURED"})
+    await _charge_drops(db, uid, change_price)
+
     local_today = sched.local_today(row.get("timezone"), base=now)
     eff_from = sched.next_monday(local_today)
     update = {
@@ -213,7 +224,7 @@ async def set_schedule(
         "schedule_changed_at": now.isoformat(),
     }
     await db.table("users").update(update).eq("id", uid).execute()
-    return _build_resp({**row, **update}, now, await _light_prices(db))
+    return _build_resp({**row, **update}, now, prices)
 
 
 # ---------------------------------------------------------------------------

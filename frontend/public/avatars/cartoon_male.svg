@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- PLACEHOLDER (8c контент-долг): нейтральный силуэт М; заменить мультяшным образом -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2b3a55"/>
+      <stop offset="1" stop-color="#1a2438"/>
+    </linearGradient>
+  </defs>
+  <rect width="200" height="200" fill="url(#bg)"/>
+  <circle cx="100" cy="78" r="34" fill="#8fa3c8"/>
+  <path d="M40 200 C40 148 70 128 100 128 C130 128 160 148 160 200 Z" fill="#8fa3c8"/>
+  <path d="M66 62 q34 -26 68 0 q-4 -30 -34 -30 q-30 0 -34 30 Z" fill="#5d739c"/>
+</svg>
