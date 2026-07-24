@@ -61,7 +61,7 @@
 
 <header>
   <h1>💪 Workout Bot (4G) <span class="drop">/ ORIENTATION</span></h1>
-  <div class="stamp">Обновлено: <b>2026-07-23 · Session 51</b> · Скажи Cowork'у «обнови ORIENTATION.html», чтобы актуализировать эту страницу</div>
+  <div class="stamp">Обновлено: <b>2026-07-24 · Session 52</b> · Скажи Cowork'у «обнови ORIENTATION.html», чтобы актуализировать эту страницу</div>
 </header>
 
 <section class="full">
@@ -80,9 +80,9 @@
 <div class="grid">
 
 <section class="now">
-  <h2><span class="ico">📍</span>Где мы сейчас <span class="badge b-done">7.5.1 CLOSED</span> <span class="badge b-next">Фаза 8 СТАРТОВАЛА · 8a</span></h2>
-  <p><b>Фаза 8 стартовала — подфаза 8a реализована (Session 51):</b> фундамент расписания/стрика/заморозок/уведомлений + timezone. Игрок на онбординге выбирает <b>3 main-дня</b> (существующим — гейт довыбора); TZ детектится и тихо сохраняется; <b>стрик</b> закрывается только тренировкой в плановый main-день по локальной TZ (капли — за любую тренировку); почасовой TZ-джоб в локальную полночь списывает <b>заморозку</b> (Ж3/М1 в месяц, авто) или обнуляет стрик; утреннее (выбор времени) + вечернее (20:00) напоминания с тихим окном 22:00–09:00. Миграция 034 применена. Verify зелёный (py_compile / ruff F / tsc). Живой smoke Job A/B — <b>раннер готов</b> (<code>backend/scripts/smoke_jobs_ab.py</code>), ждёт прогона с юзером.</p>
-  <div class="formula">8a: миграция 034 ✓ · /players/me/schedule + /users/me/timezone + /players/me/reminder-time ✓ · джобы close_streak_day / grant_monthly_freezes / send_workout_reminders ✓ · онбординг-шаг дней + гейт + дашборд-индикатор недели ✓ · хвосты S49 (RenewalScreen free, лоадер, CSS промо) ✓</div>
+  <h2><span class="ico">📍</span>Где мы сейчас <span class="badge b-done">7.5.1 CLOSED</span> <span class="badge b-done">8a</span> <span class="badge b-next">Фаза 8 · 8b реализована</span></h2>
+  <p><b>Подфаза 8b — light-режим реализована (Session 52):</b> «зарядка» из <b>4 упражнений</b> на месте (ходьба/колени/пятки/маршировка), light-сессия макс <b>30💧</b> (клип упражнения той же длительности, что в main — 60с; полный интервал работы 3 мин, остаток без записи). <b>Unlock/lock</b> за капли (300/500💧) через дисклеймер-тест из 3 вопросов; после unlock стрик считается <b>каждый день</b> (main-дни=main, прочие=light) со следующего понедельника; <b>антифарм</b> — капли максимум за 1 main + 1 light сессию в день. Витрина-каталог <code>app_shop_items</code> + админ-редактор цен. Миграция 035 применена. Verify зелёный (py_compile / ruff F / tsc). <span class="warn">Демо 4 light-упражнений — плейсхолдеры (копии похожих), контент-долг.</span></p>
+  <div class="formula">8a: расписание/стрик/заморозки/уведомления/TZ ✓ (миграция 034) · 8b: миграция 035 ✓ · /workout ?session_type + light-гейт ✓ · /players/me/light-unlock|light-lock ✓ · /admin/app-shop-items ✓ · closure/уведомления light-aware ✓ · FSM+WorkoutScreen (work-hold, тексты «зарядка») ✓ · дашборд light-маркеры + unlock/lock + тест ✓</div>
   <hr style="border:none;border-top:1px solid rgba(255,255,255,.1);margin:14px 0">
   <p><b>Платёжная модель (7.5.1 CLOSED, Session 49) работает целиком и просмоучена реальными Stars:</b></p>
   <p><b>Платёжная модель работает целиком и просмоучена реальными Stars (Session 49, 22–23.07):</b> пейволл с интро-ценой и раскрытием «далее N ⭐/мес» → Ответственный; инвайт-ссылки без видимых кодов; продление/смена тира с экрана «Подписка и биллинг» (вход из Bond в любой момент); <b>апгрейд</b> — сразу, остаток дней докатывается; <b>даунгрейд</b> — эвикция лишних игроков, тир меняется только при оплате; купоны 1–99% с live-пересчётом и once_per_user; админ: поиск юзера по TG ID (авто), «Особые» (free/custom), редактор цен; plain /start кладёт юзера в БД до входа в приложение.</p>
@@ -91,8 +91,8 @@
 </section>
 
 <section class="next">
-  <h2><span class="ico">▶️</span>Что дальше <span class="badge b-next">8b</span> <span class="badge b-next">перед запуском</span></h2>
-  <p><b>1. Подфаза 8b — light-режим</b> (BACKLOG §8.16: 4 упражнения, light-сессия 30💧, unlock/lock за капли, стрик «любой день» со след. пн, дисклеймер-тесты). Далее 8c (магазин игрока) → 8d (полка наставника) → 8e (полировка). Живой Job A/B — прогнать с юзером (раннер готов).</p>
+  <h2><span class="ico">▶️</span>Что дальше <span class="badge b-next">8c</span> <span class="badge b-next">перед запуском</span></h2>
+  <p><b>1. Подфаза 8c — магазин игрока</b> (BACKLOG §8.16: витрина 4 карточек, докупка заморозок, фото-карточка, restore и смена графика контекстно). Далее 8d (полка наставника) → 8e (полировка). Smoke 8b — прогнать с юзером (чеклист в SESSION_STATUS S52). Живой Job A/B — прогнать (раннер готов). <b>Контент-долг:</b> снять реальные 4 light-демо.</p>
   <p style="margin-top:8px"><b>2. Чек-лист перед публичным запуском:</b></p>
   <ul>
     <li class="warn"><b>Вернуть боевую сетку цен</b> — сейчас заградительная (от посторонних): std intro 800…elt 12m 9900. Эталон — «средняя» сетка Session 47.</li>

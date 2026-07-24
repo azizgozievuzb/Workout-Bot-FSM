@@ -1,3 +1,54 @@
+# SESSION STATUS — Session 52 (2026-07-24) — Фаза 8b (light-режим) РЕАЛИЗОВАНА (backend+frontend verify ✅)
+
+## ✅ Сделано (8b — light-режим)
+
+### Ф1 Миграция 035 (applied через my-supabase, idempotent, verified)
+- `users`: `light_unlocked` (bool, def false), `light_active_from` DATE (пн активации), `light_locked_at` TIMESTAMPTZ.
+- `workout_sessions`: `session_type TEXT def 'main' CHECK('main','light')`.
+- `player_stats`: `last_main_drops_day`, `last_light_drops_day` DATE (антифарм-маркеры — **добавлено сверх спеки**, нужно для «1 main+1 light/день»).
+- `app_shop_items` (key PK, title, price_drops CHECK≥1, is_active, updated_at) — seed `light_unlock=300`, `light_lock=500`.
+
+### Ф2 Бэкенд
+- `workout_config.py`: `LIGHT_EXERCISES` (4: walk_in_place, knee_raises, heel_kicks, marching), light-тайминги (prepare 10 / **work 180** / rest 60 / review 5), `session_config()/exercise_by_idx()/total_for()/max_drops_for()`. Клип = `exercise_sec`=60 (как main); полный интервал работы = `work_sec`=180 (остаток без записи). MAX_DROPS: main 50 / light 30.
+- `services/schedule.py`: `light_is_active()` (unlocked→today≥active_from; после lock→активен до next_monday(light_locked_at), «доиграть неделю честно»), `planned_day_type()` (light активен → каждый день плановый: main-дни=main, прочие=light; иначе main-only), `session_closes_day()` (main-день закрывает только main; light-день — light ИЛИ main).
+- `workout.py`: `/config?session_type`, `/start` (session_type + гейт light_unlocked→403 LIGHT_LOCKED), `/clip` (exercise по типу), `/finish` (drops по типу + **антифарм**: повторная сессия того же типа за день → 0 капель, сессия и XP сохраняются; стрик по `session_closes_day`).
+- `schedule.py` router: `/me/light-unlock` + `/me/light-lock` (списание drops по цене из app_shop_items, баланс<цены→400; unlock: active_from=след пн; lock: light_locked_at=now, main-only со след пн). GET `/me/schedule` расширен: light_unlocked/active/active_from/today_session_type/цены.
+- `admin.py`: GET/PATCH `/admin/app-shop-items` (по образцу tier-prices).
+- `schedule_lifecycle.py`: closure-джоб и уведомления теперь по `planned_day_type` (заморозки на любой плановый день); light-день → нейтральные тексты «лёгкая зарядка».
+
+### Ф3 Фронтенд + FSM
+- `workoutSessionMachine.ts`: параметризован `total` (event `SET_TOTAL`, main 16 / light 4).
+- `WorkoutScreen.tsx`: prop `sessionType`; work-hold (клип стопается на `exercise_sec`, work-фаза идёт `work_sec`, остаток — камера живая без записи); light-тексты «зарядка» (NOT «тренировка»); тайминги/прогресс по `work_sec`.
+- `ActionCube` PlayerView: кнопка по плановому дню (light-день→«☀️ Лёгкая зарядка», main→«Приступим»); при активном light — вторая кнопка сверхпланового другого типа.
+- `PlayerSchedulePanel`: недельный индикатор main/light-маркерами + подпись «Light с понедельника DD.MM»; временная кнопка «✨ Открыть light-режим (N💧)» / «Закрыть light-режим»; оба через `DisclaimerTest` (3 хардкод-вопроса, неверный ответ→заново).
+- API: `workout.ts` (session_type в config/start, work_sec), `schedule.ts` (light-поля, unlockLight/lockLight).
+
+### Ф4 Verify ✅
+- `py_compile` OK; `ruff --select F` All passed; `tsc --noEmit` 0 ошибок; миграция 035 применена (information_schema + seed verified); light-UI не рендерит «тренировка» (слово только в main-ветке тернарника noun).
+- eslint: репо и без 8b полон strict-ошибок (не гейт сборки; гейты — ruff/tsc). Новый `DisclaimerTest.tsx` даёт react-refresh warning (экспорт констант рядом с компонентом) — dev-only, безвредно.
+
+## 🧩 Плейсхолдер-демо (КОНТЕНТ-ДОЛГ)
+ffmpeg на машине без `drawtext` (нет libfreetype) → 4 light-демо = копии ближайших: walk_in_place/knee_raises/marching ← high_knees.mp4, heel_kicks ← jumping_jacks.mp4. Помечено в `workout_config.py`. Снять реальные 4 демо-зарядки.
+
+## 📌 Допущения Cowork (8b)
+1. Light per-exercise ≈ prepare 10 + work 180 + rest 60 + review 5 = 250с ×4 ≈ 17 мин (разминка/заминка сведены в удлинённые prepare/rest — движок не имеет session-level фаз; спека «≈20 мин» приблизительна).
+2. Антифарм-маркеры (`last_main/light_drops_day`) добавлены в player_stats сверх списка миграции — иначе «1+1/день» не реализовать.
+3. Light-сессию можно ИГРАТЬ только когда `light_active` (кнопка скрыта до активации след. пн); до active_from играем main.
+4. Списание капель unlock/lock — read-then-write (как в finish); гонка для одиночного юзера пренебрежима.
+5. Work-hold edge: если юзер увёл приложение в фон во время hold и вернулся после конца work — клип может записаться длиннее 60с (до work_sec); при >30МБ бэк вернёт 413→0 баллов. Редкий кейс, задокументирован.
+
+## ▶️ Следующая точка
+8b закрыта. Smoke-чеклист юзеру (ниже). Дальше — 8c (витрина магазина). Открытый долг из 8a — фикс чат-счёта продления (предзапуск).
+
+## 🔬 SMOKE-ЧЕКЛИСТ 8b (реальный бот)
+1. В PlayerSchedulePanel «✨ Открыть light-режим» → тест 3 вопроса → баланс списался (−300), подпись «Light с понедельника DD.MM».
+2. SQL: `SELECT light_unlocked, light_active_from FROM users WHERE ...` — true + следующий пн.
+3. В light-день лобби предлагает «☀️ Лёгкая зарядка»; сессия из 4 упражнений идёт (work-фаза 3 мин, клип 60с) и завершается каплями ≤30.
+4. «Закрыть light-режим» → тест → main-only со след. пн (light-дни доигрываются до пн).
+5. Повторная сессия того же типа в тот же день → 0 капель (XP показан, сессия сохранена).
+
+---
+
 # SESSION STATUS — Session 51 (2026-07-23) — Фаза 8a РЕАЛИЗОВАНА (backend+frontend verify ✅), smoke Job A/B готов к живому прогону
 
 ## ✅ Сделано (8a — фундамент расписания/стрика/заморозок/уведомлений + TZ)
@@ -40,12 +91,15 @@
 - Снимок Oil (Ф6.1): `subscription_expires_at = 2026-12-16 16:46:01.887898+00`, tier standard, pricing_mode NULL.
 - **Job A (логика ✓, доставка счёта ✗):** джоб корректно нашёл Oil, сдвиг expires=now+2д, отправка счёта прошла без ошибки, `last_renewal_reminder_at` проставлен (ставится только после успешной отправки). **НО чат-счёт в Telegram НЕ пришёл.** Диагностика: `get_me` = @conectionWorkout_bot (боевой), обычный текст в тот же чат Oil **доходит**, а `bot.send_invoice(XTR)` — нет (тест «текст сразу после счёта»: текст пришёл, счёт нет; Telegram API оба принял, message_id вернулись).
   - **🔴 НАХОДКА (в предзапускной чек-лист):** Job A/B шлёт счёт через `bot.send_invoice()` прямо в чат → Stars-счёт (XTR) не рендерится на клиенте. Рабочий путь оплаты (S49, проверен реальными Stars) — `bot.create_invoice_link()` → ссылка → Mini App `tg.openInvoice()` (`payments.py`). **Фикс:** переделать `_send_renewal_invoice` на `create_invoice_link` + кнопку в Mini App (либо слать текст-напоминание со ссылкой startapp=renew, без чат-счёта). До фикса напоминания о продлении в чате невидимы.
+  - *Ремарка Cowork (S51, для задачи фикса):* чат-счета XTR через `sendInvoice` — штатный и массово работающий паттерн Telegram-ботов, «не рендерится вообще» — так не должно быть. Прежде чем менять архитектуру на link+MiniApp, в задаче фикса СНАЧАЛА сверить параметры нашего `send_invoice` с рабочим `create_invoice_link` (подозреваемые: `provider_token` передаётся пустой строкой вместо полного отсутствия, лишние поля для XTR) и проверить счёт на втором аккаунте (Mr./GMDLT) — исключить клиент Oil. Если не решится параметрами — тогда link+кнопка (двухтапность решения S44 п.12 сохраняется: кнопка-ссылка открывает нативное окно оплаты и без Mini App).
 - **Job B (логика ✓):** джоб корректно определил истёкшего Oil; **пауза игроку Cell сработала** — в `notifications` создана запись `access_paused` «⏸ Доступ на паузе…» (подтверждено SQL). Нюанс: плашка паузы шлётся в узком окне `now−1d ≤ grace_end < now` (одноразово у границы grace); `expires=now−4д` при grace 3д кладёт grace_end ровно на `now−1d` и из-за ~1с сдвига часов промахивается — прогнал с `expires=now−3д12ч` (grace_end=now−12ч, внутри окна). Пейволл-счёт Oil — та же проблема нерендера, что и Job A.
 - **Откат + чистка (✓ подтверждено SQL):** Oil `expires → 2026-12-16 16:46:01.887898+00`, `reminder → NULL`; удалены 3 pending `tier_1m` платежа (снапшоты счётов, не оплачены) и 1 smoke-уведомление Cell `access_paused`; доступ Cell вернулся сам. Временный `backend/.env` удалён (в git не попадал).
 - Раннер `backend/scripts/smoke_jobs_ab.py` (`snapshot|job-a|job-b|rollback`) остаётся в репо. Локально доустановлены `supabase==2.10.0`, `pydantic-settings==2.6.1` (были битые/отсутствовали).
 
 ## ▶️ Следующая точка
-8a закрыта, живой Ф6 прогнан. Открытый долг из Ф6 → **предзапускной чек-лист: чат-счёт продления (Job A/B) переделать с `send_invoice` на `create_invoice_link`+Mini App** (иначе напоминания о продлении невидимы). Дальше — **постановка 8b** (light-режим: 4 упражнения, light-сессия 30💧, unlock/lock, стрик «любой день» со след. пн, дисклеймер-тесты). BACKLOG §8.16.
+8a закрыта, живой Ф6 прогнан. Открытый долг из Ф6 → **предзапускной чек-лист: фикс чат-счёта продления** (сначала сверка параметров `send_invoice`, см. ремарку Cowork выше; потом `create_invoice_link`+Mini App). Дальше — **постановка 8b** (light-режим). BACKLOG §8.16.
+
+## ✅ Вопрос закрыт (2026-07-24 18:10): **8b идёт с плейсхолдер-демо** (решение юзера; замена на проф-контент потом = подмена файлов). **`PROMPT_8B.md` выдан** (Meta: high, ultrathink нет, Verbose). Допущения Cowork в постановке 8b: (1) light-день закрывается light ИЛИ main-сессией (перевыполнение не наказываем), main-день — только main; (2) антифарм: капли максимум за 1 main + 1 light в день; (3) до витрины 8c покупка unlock/lock живёт временной кнопкой в PlayerSchedulePanel; (4) после lock light-дни плановые до конца текущей недели (доиграть честно); (5) клип light-упражнения — той же длительности/механики, что в main.
 
 ---
 
