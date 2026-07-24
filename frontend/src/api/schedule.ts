@@ -13,10 +13,27 @@ export interface ScheduleState {
     in_grace: boolean;
     next_change_available_at: string | null;
     can_change_now: boolean;
+    // 8b: light-режим
+    light_unlocked: boolean;
+    light_active: boolean;
+    light_active_from: string | null;       // понедельник активации (если ещё не наступил)
+    today_session_type: 'main' | 'light' | null;
+    light_unlock_price: number | null;
+    light_lock_price: number | null;
 }
 
 export async function getSchedule(): Promise<ScheduleState> {
     const { data } = await api.get('/players/me/schedule');
+    return data;
+}
+
+export async function unlockLight(): Promise<ScheduleState> {
+    const { data } = await api.post('/players/me/light-unlock');
+    return data;
+}
+
+export async function lockLight(): Promise<ScheduleState> {
+    const { data } = await api.post('/players/me/light-lock');
     return data;
 }
 

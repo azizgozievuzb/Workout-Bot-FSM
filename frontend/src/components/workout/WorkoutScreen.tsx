@@ -26,6 +26,7 @@ import {
   uploadWorkoutClip,
   type ClipResponse,
   type FinishSessionResponse,
+  type SessionType,
   type WorkoutConfig,
 } from '../../api/workout';
 import { hapticImpact, hapticNotification } from '../../utils/haptic';
@@ -33,6 +34,7 @@ import './WorkoutScreen.css';
 
 interface Props {
   onClose: () => void;
+  sessionType?: SessionType;
 }
 
 interface ErrState {
@@ -71,8 +73,12 @@ const buildAnnouncementWords = (next: ExerciseType): string[] => {
   return words;
 };
 
-const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
+const WorkoutScreen: React.FC<Props> = ({ onClose, sessionType = 'main' }) => {
   const { ctx, send } = useWorkoutMachine();
+  const isLight = sessionType === 'light';
+  // Light-UI НЕ использует слово «тренировка» — только «зарядка».
+  const nounAcc = isLight ? 'зарядку' : 'тренировку';  // винительный
+  const nounGen = isLight ? 'зарядки' : 'тренировки';  // родительный
   const [config, setConfig] = useState<WorkoutConfig | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [phaseSecLeft, setPhaseSecLeft] = useState<number>(0);
@@ -106,6 +112,10 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
   }, []);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  // 8b work-hold: клип останавливается на exercise_sec, а work-фаза длится work_sec.
+  const clipBlobRef = useRef<Blob | null>(null);
+  const clipHandledRef = useRef(false);
+  const holdTimeoutRef = useRef<number | null>(null);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const phaseTimerRef = useRef<number | null>(null);
   // BUG-4: wall-clock timer — survives setInterval throttling when tab is hidden
@@ -118,9 +128,13 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
     let cancelled = false;
     (async () => {
       try {
-        const [cfg, sess] = await Promise.all([getWorkoutConfig(), startWorkoutSession()]);
+        const [cfg, sess] = await Promise.all([
+          getWorkoutConfig(sessionType),
+          startWorkoutSession(sessionType),
+        ]);
         if (cancelled) return;
         setConfig(cfg);
+        send({ type: 'SET_TOTAL', total: cfg.total_exercises });
         setSessionId(sess.session_id);
       } catch (e) {
         if (cancelled) return;
@@ -128,6 +142,7 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
       }
     })();
     return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // --- hardware lifecycle -----------------------------------------
@@ -443,8 +458,17 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
 
   const handleExerciseEnd = useCallback(async () => {
     hapticImpact('heavy');
+    // 8b: клип мог быть уже снят во время work-hold (light). Иначе — снимаем сейчас.
+    if (holdTimeoutRef.current) { window.clearTimeout(holdTimeoutRef.current); holdTimeoutRef.current = null; }
     // BUG-3: stopRecording MUST complete before TIMER_END (which triggers stopCamera on rest entry).
-    const blob = await stopRecording();
+    let blob: Blob | null;
+    if (clipHandledRef.current) {
+      blob = clipBlobRef.current;
+    } else {
+      blob = await stopRecording();
+    }
+    clipBlobRef.current = null;
+    clipHandledRef.current = false;
     send({ type: 'TIMER_END' });
     if (!sessionId) return;
     if (!blob) {
@@ -485,13 +509,25 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
         runPhaseTimer(config.prepare_sec, handlePrepareEnd);
       })();
     } else if (ctx.state === 'exercisingPhase') {
-      runPhaseTimer(config.exercise_sec, handleExerciseEnd);
+      // work-фаза длится work_sec; в light остаток (work_sec−exercise_sec) — без записи.
+      runPhaseTimer(config.work_sec, handleExerciseEnd);
+      clipHandledRef.current = false;
+      clipBlobRef.current = null;
+      if (config.work_sec > config.exercise_sec) {
+        holdTimeoutRef.current = window.setTimeout(async () => {
+          clipBlobRef.current = await stopRecording();
+          clipHandledRef.current = true;
+        }, config.exercise_sec * 1000);
+      }
     } else if (ctx.state === 'restAndAnalyzingPhase') {
       // BUG-3: release camera fully during rest — LED off, no MediaStream live.
       stopCamera();
       runPhaseTimer(config.rest_sec, handleRestEnd);
     }
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      if (holdTimeoutRef.current) { window.clearTimeout(holdTimeoutRef.current); holdTimeoutRef.current = null; }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ctx.state, config, sessionId, retryToken]);
 
@@ -584,14 +620,14 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
     const w = tgWeb();
     if (w?.showConfirm) {
       try {
-        w.showConfirm('Завершить тренировку? Прогресс будет потерян.', (ok: boolean) => {
+        w.showConfirm(`Завершить ${nounAcc}? Прогресс будет потерян.`, (ok: boolean) => {
           if (ok) handleClose();
         });
         return;
       } catch { /* fall through to modal */ }
     }
     setShowCloseConfirm(true);
-  }, [ctx.state, handleClose]);
+  }, [ctx.state, handleClose, nounAcc]);
 
   // Keep the BackButton handler ref pointed at the latest closure
   useEffect(() => {
@@ -640,7 +676,7 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
 
       const exerciseFill =
         status === 'done' ? 1
-        : status === 'exercisingPhase' ? Math.max(0, 1 - phaseSecLeft / config.exercise_sec)
+        : status === 'exercisingPhase' ? Math.max(0, 1 - phaseSecLeft / config.work_sec)
         : status === 'preparePhase' ? 0
         : status === 'restAndAnalyzingPhase' || status === 'aiVerdictReview' ? 1
         : status === 'finishSession' ? 1
@@ -703,7 +739,7 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
             <button
               className="ws-finish-btn"
               onClick={handleCloseWithConfirm}
-              aria-label="Завершить тренировку"
+              aria-label={`Завершить ${nounAcc}`}
             >
               Завершить
             </button>
@@ -789,7 +825,7 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
           <div className="ws-center-card">
             <div className="ws-title">Готовы?</div>
             <div className="ws-subtitle">
-              {config.total_exercises} упражнений · ~{Math.round((config.total_exercises * (config.prepare_sec + config.exercise_sec + config.rest_sec + config.review_sec)) / 60)} минут.<br />
+              {config.total_exercises} упражнений · ~{Math.round((config.total_exercises * (config.prepare_sec + config.work_sec + config.rest_sec + config.review_sec)) / 60)} минут.<br />
               Поставьте телефон вертикально, камера должна видеть вас полностью.
             </div>
             <button className="ws-btn ws-btn--primary" onClick={handleStart}>Начать</button>
@@ -857,8 +893,8 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
             <div className="ws-warn-icon">⚠️</div>
             <div className="ws-warn-title">Внимание</div>
             <div className="ws-warn-text">
-              Во время тренировки <b>не свайпайте от краёв экрана</b> — это закроет
-              приложение и прервёт тренировку. К сожалению, Telegram не позволяет
+              Во время {nounGen} <b>не свайпайте от краёв экрана</b> — это закроет
+              приложение и прервёт {nounAcc}. К сожалению, Telegram не позволяет
               полностью отключить этот жест на iOS.
               <br /><br />
               Используйте кнопку «Завершить» в верхнем углу, если нужно остановиться.
@@ -879,7 +915,7 @@ const WorkoutScreen: React.FC<Props> = ({ onClose }) => {
       {showCloseConfirm && (
         <div className="ws-modal-backdrop" onClick={() => setShowCloseConfirm(false)}>
           <div className="ws-modal" onClick={e => e.stopPropagation()}>
-            <div className="ws-modal-title">Завершить тренировку?</div>
+            <div className="ws-modal-title">Завершить {nounAcc}?</div>
             <div className="ws-modal-text">Прогресс будет потерян.</div>
             <div className="ws-modal-actions">
               <button className="ws-btn ws-btn--secondary" onClick={() => setShowCloseConfirm(false)}>

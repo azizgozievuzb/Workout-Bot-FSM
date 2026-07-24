@@ -17,6 +17,8 @@ import { hapticImpact, hapticNotification } from '../../utils/haptic';
 import RoleTransition from '../shared/RoleTransition';
 import GiftFreezeModal from './GiftFreezeModal';
 import WorkoutScreen from '../workout/WorkoutScreen';
+import { getSchedule, type ScheduleState } from '../../api/schedule';
+import type { SessionType } from '../../api/workout';
 import '../../styles/cubes.css';
 
 type ActiveView = 'player' | 'responsible';
@@ -78,12 +80,17 @@ const PlayerView: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [restDayInFlight, setRestDayInFlight] = useState(false);
     const [restDayToast, setRestDayToast] = useState('');
-    const [workoutOpen, setWorkoutOpen] = useState(false);
+    const [workoutType, setWorkoutType] = useState<SessionType | null>(null);
+    const [sched, setSched] = useState<ScheduleState | null>(null);
 
-    const handleStartWorkout = useCallback((e: React.MouseEvent) => {
+    useEffect(() => {
+        getSchedule().then(setSched).catch(() => {});
+    }, []);
+
+    const openWorkout = useCallback((e: React.MouseEvent, type: SessionType) => {
         e.stopPropagation();
         hapticImpact('medium');
-        setWorkoutOpen(true);
+        setWorkoutType(type);
     }, []);
 
     useEffect(() => {
@@ -166,12 +173,36 @@ const PlayerView: React.FC = () => {
             )}
             {restDayToast && <div className="admin-toast">{restDayToast}</div>}
 
-            {/* D. Workout entry point */}
-            <button className="cube-btn-primary" onClick={handleStartWorkout}>
-                Приступим
-            </button>
+            {/* D. Workout entry point — тип по плановому дню (8b) */}
+            {(() => {
+                const todayType = sched?.today_session_type ?? null;
+                const lightActive = sched?.light_active ?? false;
+                const primaryType: SessionType = todayType === 'light' ? 'light' : 'main';
+                const primaryLabel = primaryType === 'light' ? '☀️ Лёгкая зарядка' : 'Приступим';
+                // Сверхплановый запуск другого типа не блокируем (только если light активен).
+                const secondaryType: SessionType | null = lightActive
+                    ? (primaryType === 'light' ? 'main' : 'light')
+                    : null;
+                const secondaryLabel = secondaryType === 'light' ? '☀️ Лёгкая зарядка' : 'Полная тренировка';
+                return (
+                    <>
+                        <button className="cube-btn-primary" onClick={(e) => openWorkout(e, primaryType)}>
+                            {primaryLabel}
+                        </button>
+                        {secondaryType && (
+                            <button
+                                className="cube-btn-primary"
+                                style={{ marginTop: 8, background: 'rgba(255,255,255,0.10)', color: 'inherit' }}
+                                onClick={(e) => openWorkout(e, secondaryType)}
+                            >
+                                {secondaryLabel}
+                            </button>
+                        )}
+                    </>
+                );
+            })()}
 
-            {workoutOpen && <WorkoutScreen onClose={() => setWorkoutOpen(false)} />}
+            {workoutType && <WorkoutScreen sessionType={workoutType} onClose={() => setWorkoutType(null)} />}
 
             <div className="cube-card">
                 <div className="cube-stat">

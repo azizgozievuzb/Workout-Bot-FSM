@@ -71,3 +71,47 @@
 }
 .sched-save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .sched-freeze-badge { font-size: 13px; color: rgba(255,255,255,0.75); }
+
+/* --- Light-режим (8b) --- */
+.week-dot.light { border-color: rgba(251, 191, 36, 0.6); color: rgba(255, 236, 179, 0.9); }
+.sched-light-btn {
+    margin-top: 6px; padding: 12px; border-radius: 12px; border: none;
+    background: linear-gradient(135deg, #fbbf24, #f59e0b); color: #3a2a00;
+    font-size: 15px; font-weight: 700; cursor: pointer;
+}
+.sched-light-btn.lock {
+    background: rgba(255,255,255,0.10); color: rgba(255,255,255,0.8);
+}
+.sched-light-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.sched-light-caption { font-size: 12px; color: rgba(251,191,36,0.85); margin-top: 6px; font-weight: 600; }
+
+/* --- Дисклеймер-тест (§8.10) --- */
+.disclaimer-backdrop {
+    position: fixed; inset: 0; z-index: 2000;
+    background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center;
+    padding: 20px;
+}
+.disclaimer-card {
+    width: 100%; max-width: 400px;
+    background: #1a1c22; border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 16px; padding: 20px;
+    display: flex; flex-direction: column; gap: 10px;
+}
+.disclaimer-title { font-size: 17px; font-weight: 800; color: #fff; }
+.disclaimer-intro { font-size: 13px; color: rgba(255,255,255,0.7); }
+.disclaimer-progress { font-size: 12px; color: rgba(255,255,255,0.45); }
+.disclaimer-wrong { font-size: 13px; color: #f87171; font-weight: 600; }
+.disclaimer-q { font-size: 15px; font-weight: 600; color: #fff; margin-top: 4px; }
+.disclaimer-options { display: flex; flex-direction: column; gap: 8px; }
+.disclaimer-option {
+    padding: 12px; border-radius: 10px; text-align: left;
+    border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.05);
+    color: #fff; font-size: 14px; cursor: pointer;
+}
+.disclaimer-option:active { background: rgba(255,255,255,0.12); }
+.disclaimer-cancel {
+    margin-top: 4px; padding: 10px; border-radius: 10px; border: none;
+    background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7);
+    font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.disclaimer-hint { font-size: 11px; color: rgba(255,255,255,0.4); text-align: center; }

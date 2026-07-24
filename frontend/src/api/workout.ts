@@ -10,10 +10,14 @@ export interface ExerciseMeta {
   muscles: string[];
 }
 
+export type SessionType = 'main' | 'light';
+
 export interface WorkoutConfig {
+  session_type: SessionType;
   total_exercises: number;
   prepare_sec: number;
-  exercise_sec: number;
+  exercise_sec: number;   // длина клипа (record) — одинакова для обоих типов
+  work_sec: number;       // полный интервал работы (light > exercise_sec)
   rest_sec: number;
   review_sec: number;
   max_drops_per_session: number;
@@ -38,14 +42,19 @@ export interface FinishSessionResponse {
   drops_earned: number;
 }
 
-export async function getWorkoutConfig(): Promise<WorkoutConfig> {
-  const { data } = await api.get<WorkoutConfig>('/workout/config');
+export async function getWorkoutConfig(sessionType: SessionType = 'main'): Promise<WorkoutConfig> {
+  const { data } = await api.get<WorkoutConfig>('/workout/config', {
+    params: { session_type: sessionType },
+  });
   return data;
 }
 
-export async function startWorkoutSession(): Promise<StartSessionResponse> {
+export async function startWorkoutSession(sessionType: SessionType = 'main'): Promise<StartSessionResponse> {
   const tz_offset_min = -new Date().getTimezoneOffset();
-  const { data } = await api.post<StartSessionResponse>('/workout/start', { tz_offset_min });
+  const { data } = await api.post<StartSessionResponse>('/workout/start', {
+    tz_offset_min,
+    session_type: sessionType,
+  });
   return data;
 }
 

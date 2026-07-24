@@ -14,16 +14,18 @@ export type WorkoutState =
   | 'finishSession';
 
 export interface WorkoutContext {
-  currentExercise: number;          // 0..15
+  currentExercise: number;          // 0..total-1
+  total: number;                    // 16 (main) | 4 (light)
   globalTimeElapsedMs: number;
-  aiScores: number[];               // length 16, 0..100
-  aiFeedbacks: (string | null)[];   // length 16
+  aiScores: number[];               // length `total`, 0..100
+  aiFeedbacks: (string | null)[];   // length `total`
   errorMessage: string | null;
   lastVerdict: { score: number; feedback: string } | null;
 }
 
 export type WorkoutEvent =
   | { type: 'START_WORKOUT' }
+  | { type: 'SET_TOTAL'; total: number }   // 8b: параметризация main(16)/light(4)
   | { type: 'TIMER_END' }
   | { type: 'AI_VERDICT'; score: number; feedback: string }
   | { type: 'AI_ERROR' }
@@ -31,14 +33,15 @@ export type WorkoutEvent =
   | { type: 'TICK'; deltaMs: number }
   | { type: 'RESET' };
 
-const TOTAL = 16;
+const DEFAULT_TOTAL = 16;
 
 const initial = (): WorkoutContext & { state: WorkoutState } => ({
   state: 'idle',
   currentExercise: 0,
+  total: DEFAULT_TOTAL,
   globalTimeElapsedMs: 0,
-  aiScores: Array(TOTAL).fill(0),
-  aiFeedbacks: Array(TOTAL).fill(null),
+  aiScores: Array(DEFAULT_TOTAL).fill(0),
+  aiFeedbacks: Array(DEFAULT_TOTAL).fill(null),
   errorMessage: null,
   lastVerdict: null,
 });
@@ -49,6 +52,17 @@ function reducer(ctx: FullState, event: WorkoutEvent): FullState {
   switch (event.type) {
     case 'RESET':
       return initial();
+
+    case 'SET_TOTAL': {
+      // Разрешено только в idle (до старта), чтобы не сломать активный цикл.
+      if (ctx.state !== 'idle' || event.total < 1 || event.total === ctx.total) return ctx;
+      return {
+        ...ctx,
+        total: event.total,
+        aiScores: Array(event.total).fill(0),
+        aiFeedbacks: Array(event.total).fill(null),
+      };
+    }
 
     case 'TICK':
       return { ...ctx, globalTimeElapsedMs: ctx.globalTimeElapsedMs + event.deltaMs };
@@ -92,7 +106,7 @@ function reducer(ctx: FullState, event: WorkoutEvent): FullState {
 
     case 'NEXT_EXERCISE': {
       if (ctx.state !== 'aiVerdictReview') return ctx;
-      const cycleComplete = ctx.currentExercise + 1 >= TOTAL;
+      const cycleComplete = ctx.currentExercise + 1 >= ctx.total;
       if (cycleComplete) {
         return { ...ctx, state: 'finishSession' };
       }
