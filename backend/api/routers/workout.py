@@ -138,12 +138,17 @@ async def start_session(body: StartSessionReq, user: dict = Depends(get_current_
 
     session_type = "light" if body.session_type == "light" else "main"
     if session_type == "light":
-        # light-сессию можно начать только при купленном light-режиме.
+        # light-сессию можно начать, пока light-режим АКТИВЕН (та же логика, что
+        # в лобби/finish): unlocked→today>=active_from; после Lock — доигрываем
+        # неделю до next_monday(light_locked_at). Гейтить по сырому light_unlocked
+        # нельзя: Lock сбрасывает флаг, но light-дни ещё плановые до пн.
         u = await (
-            db.table("users").select("light_unlocked")
+            db.table("users")
+            .select("timezone, light_unlocked, light_active_from, light_locked_at")
             .eq("id", player_id).maybe_single().execute()
         )
-        if not (u and u.data and u.data.get("light_unlocked")):
+        urow = u.data if (u and u.data) else {}
+        if not schedule.light_is_active(urow, schedule.local_today(urow.get("timezone"))):
             raise HTTPException(status_code=403, detail={"code": "LIGHT_LOCKED"})
 
     # Kill any stale in_progress session for this player (safety — stale unmount)
