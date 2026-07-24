@@ -1,5 +1,6 @@
 """Workout Session API — 35-min cycle lifecycle."""
 import logging
+import random
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -7,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from ...core.deps import get_current_user
 from ...core.workout_config import (
+    SUPPORT_PHRASES,
     exercise_by_idx,
     max_drops_for,
     session_config,
@@ -66,6 +68,13 @@ class FinishSessionResponse(BaseModel):
     total_score: int
     avg_score: int
     drops_earned: int
+    # 8c: частичный зачёт + антифарм
+    exercises_done: int = 0        # клипов загружено (включая 0-балльные)
+    total_exercises: int = 0
+    completed_full: bool = False   # все N упражнений пройдены
+    day_closed: bool = False       # эта сессия закрыла плановый день (стрик +1)
+    repeat: bool = False           # повторная сессия типа за день → без начислений
+    support_phrase: str | None = None  # фраза поддержки при repeat
 
 
 # ---------------------------------------------------------------------------
@@ -301,20 +310,27 @@ async def finish_session(session_id: str = Form(...), user: dict = Depends(get_c
     l_today = schedule.local_today(cfg.get("timezone"))
     today = l_today.isoformat()
 
-    # Антифарм: капли максимум за 1 main + 1 light сессию в день (лок. TZ).
-    # Повторная сессия того же типа сегодня → 0 капель (сессия и XP сохраняются).
+    # Антифарм (8c): начисления — капли И XP — только за ПЕРВУЮ сессию каждого
+    # типа в день (лок. TZ). Повторная сессия того же типа → drops 0, XP 0,
+    # repeat=true + фраза поддержки (сессия сохраняется, полная может закрыть день).
     day_col = "last_main_drops_day" if session_type == "main" else "last_light_drops_day"
     already_earned_today = schedule._to_date(cur.get(day_col)) == l_today
 
     # Drops (Капли 💧) formula — обобщено по session_type (core/workout_config.py).
+    # Частичный зачёт (ранний выход): (done/N)^0.65 работает при done < N.
     done_scores = [s for s in scores if s > 0]
     done_count  = len(done_scores)
+    attempted   = len(scores)              # клипов загружено (включая 0-балльные)
+    # Полная сессия = пройдены ВСЕ N упражнений (клип каждого дошёл до бэка;
+    # 0-балльные считаются пройденными). Только она закрывает стрик-день.
+    completed_full = attempted >= total_ex
     quality     = (sum(done_scores) / done_count / 100.0) if done_count > 0 else 0.0
     completion  = (done_count / total_ex) ** 0.65 if done_count > 0 else 0.0
     streak_mult = 1 + min(current_streak, 20) * 0.015   # cap +30%
     raw         = max_drops * quality * completion * streak_mult
     drops       = 0 if already_earned_today else round(min(raw, max_drops))
-    avg         = round(quality * 100)  # XP shown in final card = quality% of done exercises
+    # XP (avg) — под тем же антифармом, что и капли.
+    avg         = 0 if already_earned_today else round(quality * 100)
 
     now_iso = datetime.now(timezone.utc).isoformat()
     await (
@@ -325,6 +341,7 @@ async def finish_session(session_id: str = Form(...), user: dict = Depends(get_c
                 "finished_at": now_iso,
                 "total_score": total,
                 "drops_earned": drops,
+                "completed_full": completed_full,
             }
         )
         .eq("id", session_id)
@@ -333,7 +350,7 @@ async def finish_session(session_id: str = Form(...), user: dict = Depends(get_c
 
     # Credit drops_balance + last_workout_date + streak on player_stats.
     # Капли начисляются за любую тренировку (кроме антифарм-повтора); СТРИК
-    # закрывается только сессией, закрывающей сегодняшний плановый день (8b).
+    # закрывается только ПОЛНОЙ сессией, закрывающей сегодняшний плановый день (8c).
     new_balance = int(cur.get("drops_balance") or 0) + drops
 
     upsert_payload = {
@@ -346,12 +363,15 @@ async def finish_session(session_id: str = Form(...), user: dict = Depends(get_c
 
     planned = schedule.planned_day_type(cfg, l_today)
     streak = current_streak
+    day_closed = False
     if (
-        schedule.session_closes_day(planned, session_type)
+        completed_full
+        and schedule.session_closes_day(planned, session_type)
         and cur.get("last_closed_day") != today
     ):
-        # плановый день закрыт впервые сегодня → стрик +1
+        # плановый день закрыт впервые сегодня полной сессией → стрик +1
         streak = current_streak + 1
+        day_closed = True
         upsert_payload["current_streak"] = streak
         upsert_payload["last_closed_day"] = today
         upsert_payload["best_streak"] = max(int(cur.get("best_streak") or 0), streak)
@@ -363,6 +383,12 @@ async def finish_session(session_id: str = Form(...), user: dict = Depends(get_c
         total_score=total,
         avg_score=avg,
         drops_earned=drops,
+        exercises_done=attempted,
+        total_exercises=total_ex,
+        completed_full=completed_full,
+        day_closed=day_closed,
+        repeat=already_earned_today,
+        support_phrase=random.choice(SUPPORT_PHRASES) if already_earned_today else None,
     )
 
 

@@ -166,6 +166,10 @@ async def close_streak_day() -> None:
                          {"legacy_left": legacy - 1})
             elif streak > 0:
                 upd["current_streak"] = 0
+                # 8c: фиксируем сломанный стрик ДО обнуления — платный restore
+                # (окно 72ч) читает lost_streak_len/lost_streak_at.
+                upd["lost_streak_len"] = streak
+                upd["lost_streak_at"] = now.isoformat()
                 notif = ("streak_broken", "💔 Стрик прерван",
                          f"Ты пропустил плановый день. Было: {streak}. Начни заново!",
                          {"prev_streak": streak})

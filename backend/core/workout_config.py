@@ -130,6 +130,18 @@ LIGHT_EXERCISES: list[Exercise] = [
 assert len(EXERCISES) == TOTAL_EXERCISES, "EXERCISES must contain 16 entries"
 assert len(LIGHT_EXERCISES) == LIGHT_TOTAL_EXERCISES, "LIGHT_EXERCISES must contain 4 entries"
 
+# 8c: повторная сессия дня (антифарм: капли 0, XP 0) → случайная фраза
+# поддержки вместо цифр. Нейтральные; гендеризация — 8e.
+SUPPORT_PHRASES: tuple[str, ...] = (
+    "Ты молодец!",
+    "Телу — спасибо!",
+    "Красиво идёшь!",
+    "Сверх плана — сильно!",
+    "Движение — жизнь!",
+    "Отличная работа!",
+    "Так держать!",
+)
+
 
 def _normalize_type(session_type: str | None) -> str:
     return "light" if session_type == "light" else "main"
