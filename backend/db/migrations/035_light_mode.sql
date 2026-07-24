@@ -1,0 +1,48 @@
+-- ============================================================
+-- Migration 035: Phase 8b — light mode
+--   light unlock/lock on users, session_type on workout_sessions,
+--   app_shop_items catalog (витрина 8c ляжет сюда), antifarm day markers.
+-- Idempotent (safe to re-run).
+-- ============================================================
+
+-- ---------- users: light unlock/lock ----------
+-- light_unlocked   — куплен ли light-режим (навсегда, пока не сделан lock).
+-- light_active_from — понедельник, с которого стрик считает «любой день»
+--                     (ставится = следующий пн при unlock, лок. TZ).
+-- light_locked_at  — момент lock; до следующего пн после lock light-дни ещё
+--                     плановые («доиграть неделю честно»), потом main-only.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS light_unlocked BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS light_active_from DATE NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS light_locked_at TIMESTAMPTZ NULL;
+
+-- ---------- workout_sessions: тип сессии ----------
+ALTER TABLE workout_sessions ADD COLUMN IF NOT EXISTS session_type TEXT NOT NULL DEFAULT 'main';
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'workout_sessions_session_type_check') THEN
+    ALTER TABLE workout_sessions
+      ADD CONSTRAINT workout_sessions_session_type_check
+      CHECK (session_type IN ('main', 'light'));
+  END IF;
+END$$;
+
+-- ---------- player_stats: антифарм (макс 1 main + 1 light в день) ----------
+-- Последний лок. день, за который начислены капли по каждому типу сессии.
+ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS last_main_drops_day DATE NULL;
+ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS last_light_drops_day DATE NULL;
+
+-- ---------- app_shop_items: каталог витрины приложения ----------
+-- key — стабильный идентификатор карточки; price_drops редактируется админкой.
+-- 8b кладёт light_unlock/light_lock; в 8c сюда лягут остальные карточки.
+CREATE TABLE IF NOT EXISTS app_shop_items (
+    key         TEXT PRIMARY KEY,
+    title       TEXT NOT NULL,
+    price_drops INT  NOT NULL CHECK (price_drops >= 1),
+    is_active   BOOLEAN NOT NULL DEFAULT true,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+INSERT INTO app_shop_items (key, title, price_drops, is_active) VALUES
+    ('light_unlock', 'Открыть light-режим', 300, true),
+    ('light_lock',   'Закрыть light-режим', 500, true)
+ON CONFLICT (key) DO NOTHING;

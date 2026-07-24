@@ -92,3 +92,75 @@ def next_monday(d: date) -> date:
     if days_ahead == 0:
         days_ahead = 7
     return d + timedelta(days=days_ahead)
+
+
+# ---------------------------------------------------------------------------
+# Light mode (Phase 8b)
+# ---------------------------------------------------------------------------
+
+def light_is_active(user_row: dict, today: date, *, base: datetime | None = None) -> bool:
+    """Активен ли light-режим на дату ``today`` (лок. TZ).
+
+    * unlocked=true  → активен, если today >= light_active_from.
+    * unlocked=false → «доиграть неделю честно» после lock: активен, пока
+      today < next_monday(локальная дата light_locked_at). Потом main-only.
+    """
+    tz = user_row.get("timezone")
+    if user_row.get("light_unlocked"):
+        af = _to_date(user_row.get("light_active_from"))
+        return af is not None and today >= af
+    locked = user_row.get("light_locked_at")
+    if not locked:
+        return False
+    lk_local = local_today(tz, base=_to_dt(locked, base))
+    if lk_local is None:
+        return False
+    return today < next_monday(lk_local)
+
+
+def planned_day_type(user_row: dict, today: date) -> str | None:
+    """Тип планового дня: 'main' | 'light' | None (день не плановый).
+
+    * light активен  → плановый КАЖДЫЙ день: main-дни = 'main', остальные = 'light'.
+    * light не активен → плановые только main-дни ('main'); прочие — None.
+    """
+    md = effective_main_days(user_row, today)
+    is_md = is_main_day(md, today)
+    if light_is_active(user_row, today):
+        return "main" if is_md else "light"
+    return "main" if is_md else None
+
+
+def session_closes_day(planned_type: str | None, session_type: str) -> bool:
+    """Закрывает ли сессия ``session_type`` плановый день типа ``planned_type``.
+
+    * main-день  — только main-сессией.
+    * light-день — light ИЛИ main (перевыполнение не наказываем).
+    """
+    if planned_type == "main":
+        return session_type == "main"
+    if planned_type == "light":
+        return session_type in ("main", "light")
+    return False
+
+
+def _to_date(v) -> date | None:
+    if not v:
+        return None
+    if isinstance(v, date) and not isinstance(v, datetime):
+        return v
+    try:
+        return date.fromisoformat(str(v)[:10])
+    except (ValueError, TypeError):
+        return None
+
+
+def _to_dt(v, base: datetime | None) -> datetime | None:
+    """light_locked_at → aware datetime (для конверсии в лок. дату)."""
+    if isinstance(v, datetime):
+        return v if v.tzinfo else v.replace(tzinfo=UTC)
+    try:
+        dt = datetime.fromisoformat(str(v).replace("Z", "+00:00"))
+        return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
+    except (ValueError, TypeError):
+        return base or datetime.now(UTC)

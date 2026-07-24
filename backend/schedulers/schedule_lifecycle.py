@@ -26,7 +26,8 @@ UTC = timezone.utc
 
 _USER_COLS = (
     "id, telegram_id, timezone, main_days, pending_main_days, pending_schedule_from, "
-    "morning_reminder_time, last_morning_reminder_date, last_evening_reminder_date"
+    "morning_reminder_time, last_morning_reminder_date, last_evening_reminder_date, "
+    "light_unlocked, light_active_from, light_locked_at"
 )
 _STATS_COLS = (
     "player_id, current_streak, free_freezes_left, paid_freezes, streak_freeze_balance, "
@@ -133,13 +134,14 @@ async def close_streak_day() -> None:
         if eval_day is not None and eval_day >= yesterday:
             continue  # идемпотентность: вчера уже обработано
 
-        was_main = sched.is_main_day(p.get("main_days"), yesterday)
+        # 8b: плановым может быть main- ИЛИ light-день (если light активен).
+        was_planned = sched.planned_day_type(p, yesterday) is not None
         closed = _as_date(p.get("last_closed_day")) == yesterday
 
         upd = {"last_streak_eval_day": yesterday.isoformat()}
         notif = None  # (type, title, message, payload)
 
-        if was_main and not closed:
+        if was_planned and not closed:
             free = int(p.get("free_freezes_left") or 0)
             paid = int(p.get("paid_freezes") or 0)
             legacy = int(p.get("streak_freeze_balance") or 0)  # старый кошелёк (даримые R)
@@ -223,13 +225,23 @@ async def send_workout_reminders() -> None:
         l_today = ln.date()
         today_iso = l_today.isoformat()
 
-        md = sched.effective_main_days(p, l_today)
-        if not sched.is_main_day(md, l_today):
+        planned = sched.planned_day_type(p, l_today)
+        if planned is None:
             continue  # сегодня не плановый день
 
         lwd = _as_date(p.get("last_workout_date"))
         if lwd is not None and lwd >= l_today:
             continue  # уже тренировался сегодня
+
+        is_light = planned == "light"
+        morning_text = (
+            "☀️ Сегодня лёгкая зарядка — 4 упражнения на месте!"
+            if is_light else "🏋 Сегодня твой день тренировки!"
+        )
+        evening_text = (
+            "⚠️ Лёгкая зарядка ещё не сделана. Стрик в опасности!"
+            if is_light else "⚠️ Сегодня ещё не тренировался. Стрик в опасности!"
+        )
 
         mins_now = ln.hour * 60 + ln.minute
 
@@ -239,8 +251,7 @@ async def send_workout_reminders() -> None:
         if mins_rt <= mins_now < mins_rt + 15:
             if _as_date(p.get("last_morning_reminder_date")) != l_today:
                 await send_bot_message(
-                    bot, p["telegram_id"],
-                    "🏋 Сегодня твой день тренировки!",
+                    bot, p["telegram_id"], morning_text,
                     reply_markup=_train_button(),
                 )
                 await db.table("users").update(
@@ -252,8 +263,7 @@ async def send_workout_reminders() -> None:
         if 20 * 60 <= mins_now < 20 * 60 + 15 and 9 * 60 <= mins_now < 22 * 60:
             if _as_date(p.get("last_evening_reminder_date")) != l_today:
                 await send_bot_message(
-                    bot, p["telegram_id"],
-                    "⚠️ Сегодня ещё не тренировался. Стрик в опасности!",
+                    bot, p["telegram_id"], evening_text,
                     reply_markup=_train_button(),
                 )
                 await db.table("users").update(

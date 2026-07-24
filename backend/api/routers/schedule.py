@@ -36,11 +36,19 @@ class ScheduleResp(BaseModel):
     in_grace: bool = False
     next_change_available_at: str | None = None
     can_change_now: bool = True
+    # 8b: light-режим
+    light_unlocked: bool = False
+    light_active: bool = False           # активен сегодня (лок. TZ)
+    light_active_from: str | None = None  # понедельник активации (если ещё не наступил)
+    today_session_type: str | None = None  # 'main' | 'light' | None (сегодня не плановый)
+    light_unlock_price: int | None = None
+    light_lock_price: int | None = None
 
 
 _COLS = (
     "id, timezone, main_days, pending_main_days, pending_schedule_from, "
-    "schedule_changed_at, schedule_grace_until"
+    "schedule_changed_at, schedule_grace_until, "
+    "light_unlocked, light_active_from, light_locked_at"
 )
 
 
@@ -54,7 +62,7 @@ def _parse_dt(v):
         return None
 
 
-def _build_resp(row: dict, now: datetime) -> ScheduleResp:
+def _build_resp(row: dict, now: datetime, prices: dict | None = None) -> ScheduleResp:
     grace_until = _parse_dt(row.get("schedule_grace_until"))
     in_grace = grace_until is not None and now < grace_until
     changed_at = _parse_dt(row.get("schedule_changed_at"))
@@ -68,6 +76,15 @@ def _build_resp(row: dict, now: datetime) -> ScheduleResp:
             next_avail = na.isoformat()
             can_change = False
 
+    # 8b: light-состояние на сегодня (лок. TZ).
+    l_today = sched.local_today(row.get("timezone"), base=now)
+    light_active = sched.light_is_active(row, l_today, base=now)
+    planned = sched.planned_day_type(row, l_today)
+    af = sched._to_date(row.get("light_active_from"))
+    # Показываем дату активации, только если unlocked, но она ещё не наступила.
+    af_str = af.isoformat() if (row.get("light_unlocked") and af and l_today < af) else None
+    prices = prices or {}
+
     return ScheduleResp(
         main_days=row.get("main_days"),
         pending_main_days=row.get("pending_main_days"),
@@ -76,7 +93,21 @@ def _build_resp(row: dict, now: datetime) -> ScheduleResp:
         in_grace=in_grace,
         next_change_available_at=next_avail,
         can_change_now=can_change,
+        light_unlocked=bool(row.get("light_unlocked")),
+        light_active=light_active,
+        light_active_from=af_str,
+        today_session_type=planned,
+        light_unlock_price=prices.get("light_unlock"),
+        light_lock_price=prices.get("light_lock"),
     )
+
+
+async def _light_prices(db) -> dict:
+    res = await (
+        db.table("app_shop_items").select("key, price_drops")
+        .in_("key", ["light_unlock", "light_lock"]).execute()
+    )
+    return {r["key"]: int(r["price_drops"]) for r in (res.data or [])}
 
 
 async def _fetch(db, tg_id: int) -> dict:
@@ -92,7 +123,8 @@ async def _fetch(db, tg_id: int) -> dict:
 async def get_schedule(current_user: dict = Depends(get_current_user)) -> ScheduleResp:
     db = await get_supabase()
     row = await _fetch(db, current_user["telegram_id"])
-    return _build_resp(row, datetime.now(UTC))
+    prices = await _light_prices(db)
+    return _build_resp(row, datetime.now(UTC), prices)
 
 
 class ReminderTimeReq(BaseModel):
@@ -181,4 +213,78 @@ async def set_schedule(
         "schedule_changed_at": now.isoformat(),
     }
     await db.table("users").update(update).eq("id", uid).execute()
-    return _build_resp({**row, **update}, now)
+    return _build_resp({**row, **update}, now, await _light_prices(db))
+
+
+# ---------------------------------------------------------------------------
+# Light unlock / lock (Phase 8b)
+# ---------------------------------------------------------------------------
+
+async def _charge_drops(db, player_id: str, price: int) -> None:
+    """Списание drops_balance по цене (read-then-write). Баланс < цены → 400."""
+    ps = await (
+        db.table("player_stats").select("drops_balance")
+        .eq("player_id", player_id).maybe_single().execute()
+    )
+    bal = int((ps.data or {}).get("drops_balance") or 0) if ps else 0
+    if bal < price:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "INSUFFICIENT_DROPS", "balance": bal, "price": price},
+        )
+    await (
+        db.table("player_stats").update({"drops_balance": bal - price})
+        .eq("player_id", player_id).execute()
+    )
+
+
+@router.post("/me/light-unlock", response_model=ScheduleResp)
+async def light_unlock(current_user: dict = Depends(get_current_user)) -> ScheduleResp:
+    db = await get_supabase()
+    now = datetime.now(UTC)
+    row = await _fetch(db, current_user["telegram_id"])
+    uid = row["id"]
+    prices = await _light_prices(db)
+    price = prices.get("light_unlock")
+    if price is None:
+        raise HTTPException(status_code=500, detail={"code": "PRICE_NOT_CONFIGURED"})
+    if row.get("light_unlocked"):
+        raise HTTPException(status_code=409, detail={"code": "ALREADY_UNLOCKED"})
+
+    await _charge_drops(db, uid, price)
+
+    l_today = sched.local_today(row.get("timezone"), base=now)
+    active_from = sched.next_monday(l_today)
+    update = {
+        "light_unlocked": True,
+        "light_active_from": active_from.isoformat(),
+        "light_locked_at": None,
+    }
+    await db.table("users").update(update).eq("id", uid).execute()
+    return _build_resp({**row, **update}, now, prices)
+
+
+@router.post("/me/light-lock", response_model=ScheduleResp)
+async def light_lock(current_user: dict = Depends(get_current_user)) -> ScheduleResp:
+    db = await get_supabase()
+    now = datetime.now(UTC)
+    row = await _fetch(db, current_user["telegram_id"])
+    uid = row["id"]
+    prices = await _light_prices(db)
+    price = prices.get("light_lock")
+    if price is None:
+        raise HTTPException(status_code=500, detail={"code": "PRICE_NOT_CONFIGURED"})
+    if not row.get("light_unlocked"):
+        raise HTTPException(status_code=409, detail={"code": "NOT_UNLOCKED"})
+
+    await _charge_drops(db, uid, price)
+
+    # light_unlocked=false; до следующего пн light-дни ещё плановые (доиграть
+    # неделю честно) — это считает light_is_active по light_locked_at.
+    update = {
+        "light_unlocked": False,
+        "light_locked_at": now.isoformat(),
+        "light_active_from": None,
+    }
+    await db.table("users").update(update).eq("id", uid).execute()
+    return _build_resp({**row, **update}, now, prices)

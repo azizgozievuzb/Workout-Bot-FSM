@@ -7,14 +7,10 @@ from pydantic import BaseModel, Field
 
 from ...core.deps import get_current_user
 from ...core.workout_config import (
-    EXERCISE_SEC,
-    MAX_DROPS_PER_SESSION,
-    PREPARE_SEC,
-    REST_SEC,
-    REVIEW_SEC,
-    TOTAL_EXERCISES,
-    as_public_list,
     exercise_by_idx,
+    max_drops_for,
+    session_config,
+    total_for,
 )
 from ...core.config import settings
 from ...db.client import get_supabase
@@ -43,9 +39,11 @@ class ExerciseMeta(BaseModel):
 
 
 class WorkoutConfigResponse(BaseModel):
+    session_type: str
     total_exercises: int
     prepare_sec: int
     exercise_sec: int
+    work_sec: int
     rest_sec: int
     review_sec: int
     max_drops_per_session: int
@@ -92,7 +90,7 @@ async def _resolve_player(db, telegram_id: int) -> str:
 async def _assert_session_owned(db, session_id: str, player_id: str) -> dict:
     res = await (
         db.table("workout_sessions")
-        .select("id, player_id, status, started_at")
+        .select("id, player_id, status, started_at, session_type")
         .eq("id", session_id)
         .maybe_single()
         .execute()
@@ -109,15 +107,18 @@ async def _assert_session_owned(db, session_id: str, player_id: str) -> dict:
 # ---------------------------------------------------------------------------
 
 @router.get("/config", response_model=WorkoutConfigResponse)
-async def get_config(user: dict = Depends(get_current_user)):
+async def get_config(session_type: str = "main", user: dict = Depends(get_current_user)):
+    cfg = session_config(session_type)
     return WorkoutConfigResponse(
-        total_exercises=TOTAL_EXERCISES,
-        prepare_sec=PREPARE_SEC,
-        exercise_sec=EXERCISE_SEC,
-        rest_sec=REST_SEC,
-        review_sec=REVIEW_SEC,
-        max_drops_per_session=MAX_DROPS_PER_SESSION,
-        exercises=[ExerciseMeta(**e) for e in as_public_list()],
+        session_type=cfg["session_type"],
+        total_exercises=cfg["total_exercises"],
+        prepare_sec=cfg["prepare_sec"],
+        exercise_sec=cfg["exercise_sec"],
+        work_sec=cfg["work_sec"],
+        rest_sec=cfg["rest_sec"],
+        review_sec=cfg["review_sec"],
+        max_drops_per_session=cfg["max_drops_per_session"],
+        exercises=[ExerciseMeta(**e) for e in cfg["exercises"]],
     )
 
 
@@ -127,12 +128,23 @@ async def get_config(user: dict = Depends(get_current_user)):
 
 class StartSessionReq(BaseModel):
     tz_offset_min: int | None = Field(default=None, ge=-720, le=840)
+    session_type: str = "main"
 
 
 @router.post("/start", response_model=StartSessionResponse)
 async def start_session(body: StartSessionReq, user: dict = Depends(get_current_user)):
     db = await get_supabase()
     player_id = await _resolve_player(db, user["telegram_id"])
+
+    session_type = "light" if body.session_type == "light" else "main"
+    if session_type == "light":
+        # light-сессию можно начать только при купленном light-режиме.
+        u = await (
+            db.table("users").select("light_unlocked")
+            .eq("id", player_id).maybe_single().execute()
+        )
+        if not (u and u.data and u.data.get("light_unlocked")):
+            raise HTTPException(status_code=403, detail={"code": "LIGHT_LOCKED"})
 
     # Kill any stale in_progress session for this player (safety — stale unmount)
     stale = await (
@@ -153,7 +165,11 @@ async def start_session(body: StartSessionReq, user: dict = Depends(get_current_
 
     ins = await (
         db.table("workout_sessions")
-        .insert({"player_id": player_id, "client_tz_offset": body.tz_offset_min})
+        .insert({
+            "player_id": player_id,
+            "client_tz_offset": body.tz_offset_min,
+            "session_type": session_type,
+        })
         .execute()
     )
     row = (ins.data or [{}])[0]
@@ -179,7 +195,7 @@ async def upload_clip(
         raise HTTPException(status_code=409, detail="Session not in progress")
 
     try:
-        exercise = exercise_by_idx(exercise_idx)
+        exercise = exercise_by_idx(exercise_idx, session.get("session_type"))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -243,6 +259,10 @@ async def finish_session(session_id: str = Form(...), user: dict = Depends(get_c
     if session["status"] != "in_progress":
         raise HTTPException(status_code=409, detail="Session already finalized")
 
+    session_type = "light" if session.get("session_type") == "light" else "main"
+    total_ex = total_for(session_type)
+    max_drops = max_drops_for(session_type)
+
     ex_res = await (
         db.table("workout_exercises")
         .select("ai_score")
@@ -255,7 +275,8 @@ async def finish_session(session_id: str = Form(...), user: dict = Depends(get_c
     # Read player_stats up-front: streak BEFORE this workout drives streak_mult.
     stats_res = await (
         db.table("player_stats")
-        .select("drops_balance, current_streak, best_streak, last_workout_date, last_closed_day")
+        .select("drops_balance, current_streak, best_streak, last_workout_date, "
+                "last_closed_day, last_main_drops_day, last_light_drops_day")
         .eq("player_id", player_id)
         .maybe_single()
         .execute()
@@ -263,14 +284,31 @@ async def finish_session(session_id: str = Form(...), user: dict = Depends(get_c
     cur = stats_res.data if stats_res and stats_res.data else {}
     current_streak = int(cur.get("current_streak") or 0)
 
-    # Drops (Капли 💧) formula — main workout, see core/workout_config.py docstring.
+    cfg_res = await (
+        db.table("users")
+        .select("timezone, main_days, pending_main_days, pending_schedule_from, "
+                "light_unlocked, light_active_from, light_locked_at")
+        .eq("id", player_id)
+        .maybe_single()
+        .execute()
+    )
+    cfg = cfg_res.data if cfg_res and cfg_res.data else {}
+    l_today = schedule.local_today(cfg.get("timezone"))
+    today = l_today.isoformat()
+
+    # Антифарм: капли максимум за 1 main + 1 light сессию в день (лок. TZ).
+    # Повторная сессия того же типа сегодня → 0 капель (сессия и XP сохраняются).
+    day_col = "last_main_drops_day" if session_type == "main" else "last_light_drops_day"
+    already_earned_today = schedule._to_date(cur.get(day_col)) == l_today
+
+    # Drops (Капли 💧) formula — обобщено по session_type (core/workout_config.py).
     done_scores = [s for s in scores if s > 0]
     done_count  = len(done_scores)
     quality     = (sum(done_scores) / done_count / 100.0) if done_count > 0 else 0.0
-    completion  = (done_count / TOTAL_EXERCISES) ** 0.65 if done_count > 0 else 0.0
+    completion  = (done_count / total_ex) ** 0.65 if done_count > 0 else 0.0
     streak_mult = 1 + min(current_streak, 20) * 0.015   # cap +30%
-    raw         = MAX_DROPS_PER_SESSION * quality * completion * streak_mult
-    drops       = round(min(raw, MAX_DROPS_PER_SESSION))
+    raw         = max_drops * quality * completion * streak_mult
+    drops       = 0 if already_earned_today else round(min(raw, max_drops))
     avg         = round(quality * 100)  # XP shown in final card = quality% of done exercises
 
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -289,29 +327,24 @@ async def finish_session(session_id: str = Form(...), user: dict = Depends(get_c
     )
 
     # Credit drops_balance + last_workout_date + streak on player_stats.
-    # 8a: капли начисляются за любую тренировку в любой день; СТРИК закрывается
-    # только тренировкой в плановый main-день (по локальной TZ юзера).
+    # Капли начисляются за любую тренировку (кроме антифарм-повтора); СТРИК
+    # закрывается только сессией, закрывающей сегодняшний плановый день (8b).
     new_balance = int(cur.get("drops_balance") or 0) + drops
 
-    cfg_res = await (
-        db.table("users")
-        .select("timezone, main_days, pending_main_days, pending_schedule_from")
-        .eq("id", player_id)
-        .maybe_single()
-        .execute()
-    )
-    cfg = cfg_res.data if cfg_res and cfg_res.data else {}
-    l_today = schedule.local_today(cfg.get("timezone"))
-    today = l_today.isoformat()
-
-    md = schedule.effective_main_days(cfg, l_today)
-    streak = current_streak
     upsert_payload = {
         "player_id": player_id,
         "drops_balance": new_balance,
         "last_workout_date": today,
     }
-    if schedule.is_main_day(md, l_today) and cur.get("last_closed_day") != today:
+    if not already_earned_today:
+        upsert_payload[day_col] = today
+
+    planned = schedule.planned_day_type(cfg, l_today)
+    streak = current_streak
+    if (
+        schedule.session_closes_day(planned, session_type)
+        and cur.get("last_closed_day") != today
+    ):
         # плановый день закрыт впервые сегодня → стрик +1
         streak = current_streak + 1
         upsert_payload["current_streak"] = streak

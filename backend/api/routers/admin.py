@@ -617,6 +617,57 @@ async def update_tier_price(
 
 
 # ===========================================================================
+# App shop items — admin (8b; витрина 8c расширит каталог)
+# ===========================================================================
+
+class AppShopItemRow(BaseModel):
+    key: str
+    title: str
+    price_drops: int
+    is_active: bool
+    updated_at: str | None = None
+
+
+class UpdateAppShopItemReq(BaseModel):
+    price_drops: int | None = Field(default=None, ge=1)
+    is_active: bool | None = None
+    title: str | None = None
+
+
+@general_router.get("/app-shop-items", response_model=list[AppShopItemRow])
+async def list_app_shop_items(admin: dict = Depends(require_admin)):
+    db = await get_supabase()
+    res = await (
+        db.table("app_shop_items")
+        .select("key, title, price_drops, is_active, updated_at")
+        .order("key")
+        .execute()
+    )
+    return [AppShopItemRow(**r) for r in (res.data or [])]
+
+
+@general_router.patch("/app-shop-items/{key}", response_model=AppShopItemRow)
+async def update_app_shop_item(
+    key: str,
+    body: UpdateAppShopItemReq,
+    admin: dict = Depends(require_admin),
+):
+    db = await get_supabase()
+    update: dict = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    for col in ("price_drops", "is_active", "title"):
+        val = getattr(body, col)
+        if val is not None:
+            update[col] = val
+    if len(update) == 1:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+
+    res = await db.table("app_shop_items").update(update).eq("key", key).execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Item not found")
+    return AppShopItemRow(**res.data[0])
+
+
+# ===========================================================================
 # User pricing override — admin (7.5)
 # ===========================================================================
 

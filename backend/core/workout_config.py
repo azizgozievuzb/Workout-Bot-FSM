@@ -1,32 +1,48 @@
 """
 Workout configuration — single source of truth for the cycle.
-FE/BE share the same EXERCISES list (FE fetches via GET /workout/config).
+FE/BE share the same config (FE fetches via GET /workout/config?session_type=…).
 
-Cycle design (~27 min total):
+Two session types (Phase 8b):
+  * main  — 16 упражнений × ~26 мин, макс 50 💧.
+  * light — 4 упражнения «зарядка», ~17-20 мин, макс 30 💧.
+
+Cycle design (main, ~27 min total):
   16 × (prepare 5s → exercise 60s → rest+analyze 30s → review 5s) = 16 × 100 = 1600s ≈ 26.7 min
-  (slight slack absorbed by cold-start + network delay)
 
-⚠️  REST_SEC=30 is tight for Gemini Vision analysis of a 60s clip.
-    If verdict frequently arrives late (errorMessage shown in aiVerdictReview),
-    bump REST_SEC back up to 45–60.
+Light cycle (~17 min):
+  4 × (prepare 10s → work 180s → rest 60s → review 5s) ≈ 1020s ≈ 17 min.
+  Разминка/заминка сведены в удлинённые prepare/rest (движок не имеет
+  отдельных session-level фаз). КЛИП упражнения = EXERCISE_SEC (60s), той же
+  длительности/механики, что в main; остаток work-интервала (WORK_SEC−EXERCISE_SEC)
+  — таймер без записи (камера остаётся живой, юзер продолжает движение).
 
-Drops (Капли 💧) award formula — main workout (Phase 7.3):
+Drops (Капли 💧) award formula — обобщено по session_type:
   done_scores = [s for s in scores if s > 0]
   done        = len(done_scores)
   quality     = (sum(done_scores) / done / 100) if done > 0 else 0
-  completion  = (done / 16) ** 0.65 if done > 0 else 0
+  completion  = (done / TOTAL) ** 0.65 if done > 0 else 0
   streak_mult = 1 + min(current_streak, 20) * 0.015   # cap +30%
-  raw         = MAX_DROPS_PER_SESSION * quality * completion * streak_mult
-  drops       = round(min(raw, MAX_DROPS_PER_SESSION))
+  raw         = MAX_DROPS * quality * completion * streak_mult
+  drops       = round(min(raw, MAX_DROPS))
+  MAX_DROPS: main 50 / light 30.  TOTAL: main 16 / light 4.
 """
 from dataclasses import dataclass, field, asdict
 
+# ---- main timings ----
 PREPARE_SEC = 5
-EXERCISE_SEC = 60   # active period: 60s (was 40)
-REST_SEC = 30       # rest + AI analyze: 30s (was 90) — see warning above
+EXERCISE_SEC = 60   # active/record period: 60s — clip length (both session types)
+REST_SEC = 30       # rest + AI analyze: 30s
 REVIEW_SEC = 5
 TOTAL_EXERCISES = 16
-MAX_DROPS_PER_SESSION = 50  # main-tier cap (Капли 💧). Light-режим = 30, Phase 8.
+MAX_DROPS_PER_SESSION = 50  # main-tier cap (Капли 💧)
+
+# ---- light timings ----
+LIGHT_PREPARE_SEC = 10
+LIGHT_WORK_SEC = 180      # полный интервал работы (3 мин); клип = EXERCISE_SEC (60s)
+LIGHT_REST_SEC = 60       # отдых между упражнениями (1 мин)
+LIGHT_REVIEW_SEC = 5
+LIGHT_TOTAL_EXERCISES = 4
+LIGHT_MAX_DROPS = 30
 
 
 @dataclass(frozen=True)
@@ -91,20 +107,93 @@ EXERCISES: list[Exercise] = [
              muscles=("Квадрицепсы", "Кор", "Икры")),
 ]
 
+# Light «зарядка» — 4 низкоударных упражнения на месте.
+# PLACEHOLDER demo — заменить проф. контентом у всех четырёх (frontend/public/demos/<key>.mp4).
+#   ffmpeg на машине сборки без drawtext (нет libfreetype) → заглушки = копии
+#   ближайшего существующего демо: walk_in_place/knee_raises/marching ← high_knees.mp4,
+#   heel_kicks ← jumping_jacks.mp4. Контент-долг: снять реальные 4 демо.
+LIGHT_EXERCISES: list[Exercise] = [
+    Exercise(0, "walk_in_place", "Ходьба на месте",        "Спокойный шаг на месте, руки работают в такт", "cardio",
+             position="Стоя",
+             muscles=("Икры", "Бёдра", "Кор")),
+    Exercise(1, "knee_raises",   "Подъём коленей",         "Поочерёдно поднимай колено до пояса, спина прямая", "cardio",
+             position="Стоя",
+             muscles=("Пресс", "Квадрицепсы", "Подвздошно-поясничные")),
+    Exercise(2, "heel_kicks",    "Пятки к ягодицам",       "Поочерёдно захлёстывай пятку к ягодице, темп ровный", "cardio",
+             position="Стоя",
+             muscles=("Бицепс бедра", "Икры", "Ягодицы")),
+    Exercise(3, "marching",      "Маршировка",             "Марш на месте с активной работой рук", "cardio",
+             position="Стоя",
+             muscles=("Икры", "Кор", "Плечи")),
+]
+
 assert len(EXERCISES) == TOTAL_EXERCISES, "EXERCISES must contain 16 entries"
+assert len(LIGHT_EXERCISES) == LIGHT_TOTAL_EXERCISES, "LIGHT_EXERCISES must contain 4 entries"
 
 
-def exercise_by_idx(idx: int) -> Exercise:
-    if idx < 0 or idx >= TOTAL_EXERCISES:
+def _normalize_type(session_type: str | None) -> str:
+    return "light" if session_type == "light" else "main"
+
+
+def exercises_for(session_type: str | None) -> list[Exercise]:
+    return LIGHT_EXERCISES if _normalize_type(session_type) == "light" else EXERCISES
+
+
+def total_for(session_type: str | None) -> int:
+    return LIGHT_TOTAL_EXERCISES if _normalize_type(session_type) == "light" else TOTAL_EXERCISES
+
+
+def max_drops_for(session_type: str | None) -> int:
+    return LIGHT_MAX_DROPS if _normalize_type(session_type) == "light" else MAX_DROPS_PER_SESSION
+
+
+def exercise_by_idx(idx: int, session_type: str | None = "main") -> Exercise:
+    lst = exercises_for(session_type)
+    if idx < 0 or idx >= len(lst):
         raise ValueError(f"exercise_idx out of range: {idx}")
-    return EXERCISES[idx]
+    return lst[idx]
 
 
-def as_public_list() -> list[dict]:
-    """FE-facing serialization (config endpoint). Tuples → lists for JSON."""
+def session_config(session_type: str | None = "main") -> dict:
+    """FE-facing serialization (config endpoint) per session type.
+
+    ``work_sec`` = полный интервал работы; ``exercise_sec`` = длина клипа
+    (record). Для main они равны (60), для light work_sec=180.
+    """
+    if _normalize_type(session_type) == "light":
+        return {
+            "session_type": "light",
+            "total_exercises": LIGHT_TOTAL_EXERCISES,
+            "prepare_sec": LIGHT_PREPARE_SEC,
+            "exercise_sec": EXERCISE_SEC,      # клип = 60s (как в main)
+            "work_sec": LIGHT_WORK_SEC,        # полный интервал работы = 180s
+            "rest_sec": LIGHT_REST_SEC,
+            "review_sec": LIGHT_REVIEW_SEC,
+            "max_drops_per_session": LIGHT_MAX_DROPS,
+            "exercises": _public_list(LIGHT_EXERCISES),
+        }
+    return {
+        "session_type": "main",
+        "total_exercises": TOTAL_EXERCISES,
+        "prepare_sec": PREPARE_SEC,
+        "exercise_sec": EXERCISE_SEC,
+        "work_sec": EXERCISE_SEC,              # main: работа == клип
+        "rest_sec": REST_SEC,
+        "review_sec": REVIEW_SEC,
+        "max_drops_per_session": MAX_DROPS_PER_SESSION,
+        "exercises": _public_list(EXERCISES),
+    }
+
+
+def _public_list(lst: list[Exercise]) -> list[dict]:
     out: list[dict] = []
-    for e in EXERCISES:
+    for e in lst:
         d = asdict(e)
         d["muscles"] = list(e.muscles)
         out.append(d)
     return out
+
+
+def as_public_list() -> list[dict]:
+    """Backward-compat: FE-facing main exercises."""
+    return _public_list(EXERCISES)
