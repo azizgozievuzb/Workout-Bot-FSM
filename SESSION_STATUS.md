@@ -1,3 +1,63 @@
+# SESSION STATUS — Session 53 (2026-07-25) — Фаза 8c (магазин игрока) РЕАЛИЗОВАНА (backend+frontend verify ✅)
+
+## ✅ Сделано (8c — витрина, фото-карточка, частичный зачёт, restore)
+
+### Ф1 Миграции 036 + 036b (applied через my-supabase, idempotent, verified)
+- `app_shop_items`: `meta JSONB` + seed `freeze=50`, `photo_card=200`, `photo_reroll=60`, `schedule_change=100`, `streak_restore=20` (цена за день; meta `{min:60, cap:400}`). Все цены — плейсхолдеры, правятся существующим админ-редактором app-shop-items.
+- `users`: `card_photo_url`, `card_photo_source` CHECK('ai','raw'), `card_photo_candidates JSONB` (стейт-машина флоу: awaiting_photo → processing → choosing{variants} | failed).
+- `player_stats`: `lost_streak_len`, `lost_streak_at` (пишет closure-джоб при сломе ДО обнуления).
+- `workout_sessions`: `completed_full BOOL` (все N упражнений дошли до бэка).
+- **036b RPC**: `buy_paid_freeze` (баланс+кап 3 одним UPDATE), `restore_streak` (стрик+баланс атомарно, guard `p_expected_len` от гонки read→RPC).
+
+### Ф2 Бэкенд — сессии
+- `workout.py /finish`: **антифарм расширен на XP** (повтор типа за день → drops 0, XP 0, `repeat=true` + случайная фраза из `SUPPORT_PHRASES` в `workout_config.py`, 7 нейтральных); частичная формула `(done/N)^0.65` работает при раннем выходе; **день закрывает только `completed_full`** сессия (повторная полная закрывает с 0 начислений). Ответ finish расширен: `exercises_done/total_exercises/completed_full/day_closed/repeat/support_phrase`.
+- `schedule_lifecycle.py` closure: при сломе стрика пишет `lost_streak_len/lost_streak_at`.
+- `/cancel` остался только как stale-cleanup (красная кнопка фронта переведена на `/finish`).
+
+### Ф3 Бэкенд — покупки (новый роутер `api/routers/player_shop.py`, prefix /players)
+- `GET /players/me/shop` — агрегат витрины: баланс, цены (активные app_shop_items), заморозки free/paid, restore-офер (len/price/deadline), состояние фото-карточки.
+- `POST /me/buy-freeze` — RPC-атомарно, кап 3 → 400 FREEZE_CAP.
+- `POST /me/restore-streak` — окно 72ч (`STREAK_RESTORE_WINDOW_HOURS`, модульная константа в player_shop.py), цена 20×len clamp [60,400] из meta.
+- Фото-карточка: `purchase` (снова полная цена при повторной смене) → `upload` (mode ai|raw; raw в AI НЕ отправляется; селфи хранится `avatars/{tid}/card_selfie.jpg` для реролла) → `choose(index)` / `reroll` (списание, 2 новых). Генерация — фоном тем же photo_styler-стеком: `process_card_photo_variants` (2 варианта, гендерный промпт: Ж мягче/женственнее, М брутальнее; фронт поллит /me/shop).
+- `PATCH /players/me/schedule` вне grace — списание `schedule_change` (внутри grace/первичная — бесплатно); не хватает → 400 INSUFFICIENT_DROPS с ценой в detail. GET отдаёт `schedule_change_price`.
+- **R-панель**: `partnerships.my_players` больше НЕ отдаёт styled/raw фото — только `card_photo_url`, при NULL → мультяшный ассет по полу (`/avatars/cartoon_male|female.svg`, заглушки-силуэты — КОНТЕНТ-ДОЛГ).
+
+### Ф4 Фронтенд
+- `MarketCube` PlayerShop переписан: шапка-баланс 💧 (UX-долг №5) + ровно 4 карточки (Unlock/Lock light с DisclaimerTest, Заморозка со счётчиком «бесплатных X, купленных Y/3», Фото-карточка). Заглушки «Stars/TON скоро» убраны. Легаси-лоты наставника — секцией «🎁 От наставника» ниже (редизайн — 8d).
+- `CardPhotoFlow.tsx` (новый): покупка → «✨ Обработать AI» / «📷 Как есть (без AI)» → селфи (input capture) → поллинг processing → экран 2 вариантов → «Выбрать» / «🎲 Ещё 2 (60💧)» → превью «так тебя видит наставник».
+- `PlayerSchedulePanel`: unlock/lock-кнопки убраны (ссылка «Магазин →»); вне grace кнопка смены — «Сменить за N 💧» + обработка INSUFFICIENT_DROPS.
+- `ActionCube` PlayerView: постоянный бейдж 💧 в статус-строке (дашборд) + restore-плашка «💔 Стрик N дн. сгорел → Восстановить за X 💧» с подтверждением (окно 72ч).
+- `WorkoutScreen`: красная кнопка → «Закончить досрочно» → модалка (тексты UX-долга №7) → **`/finish` вместо `/cancel`** (частичный зачёт); карточка «Готово»: частичные цифры «Засчитано X из N» + «День НЕ закрыт — пройди полную … чтобы спасти стрик» / «✅ День закрыт» / при repeat — фраза поддержки + «Начисления уже получены». Guard'ы earlyDone на все эффекты цикла (камера не реиницится).
+- `playerAvatarUrl` упрощён до `card_photo_url`; типы MyPlayer/Finish/Schedule/shop.ts обновлены.
+
+### Ф5 Verify ✅
+- `py_compile` весь backend OK; `ruff --select F` All passed; `tsc --noEmit` 0 ошибок.
+- Миграция 036: 7 новых колонок подтверждены information_schema; seed 5 ключей + meta verified SELECT-ом.
+- Grep: витрина игрока без «Stars/TON скоро» (только комментарий); `photo_dark/light_url` не отдаются R-эндпоинтами.
+- Юнит-прогон логики finish (симуляция 1:1): частичная 2/4 → капли 17, день НЕ закрыт; полная повторная → 0/0 + день закрыт; повторная частичная → ничего; полная первая main → закрыт; restore clamp 1д→60/5д→100/30д→400. Все OK.
+
+## 📌 Допущения (Session 53)
+1. **Restore-окно 72ч** — константа `STREAK_RESTORE_WINDOW_HOURS` в player_shop.py (не в админке). Restore ставит `current_streak = lost_streak_len` (по спеке; дни, закрытые после слома до restore, не суммируются).
+2. **`completed_full`** = все N клипов дошли до бэка (0-балльные считаются пройденными). Редкий edge: полный прогон с 1 упавшей загрузкой клипа (сеть/413) посчитается частичным — задокументировано.
+3. **Мультяшки** — 2 SVG-силуэта-заглушки в `frontend/public/avatars/` (КОНТЕНТ-ДОЛГ: настоящие мультяшные образы м/ж).
+4. Состояние флоу фото-карточки живёт в `card_photo_candidates` JSONB (`{status, variants}`), отдельной колонки статуса нет.
+5. Селфи для реролла хранится в публичном бакете avatars (как и прочие фото проекта) — `{tid}/card_selfie.jpg`.
+6. Легаси-лоты shop_items (адресные от R) оставлены в витрине секцией ниже — их судьба решается в 8d.
+7. Списания вне RPC (photo_card/reroll/schedule_change/light) — оптимистичный CAS (eq-guard + retry), как в 8b, но с compare-and-set.
+
+## ▶️ Следующая точка
+8c реализована, нужен живой смоук (чеклист ниже). Дальше — 8d (полка наставника). Открытые долги: чат-счёт продления (предзапуск), UX №1 (orb), №2/№6 (вход в расписание/статический дашборд — частично закрыты витриной, вход в панель расписания всё ещё только long-press), №3/№4 (8e).
+
+## 🔬 SMOKE-ЧЕКЛИСТ 8c (реальный бот; цены на смоук выставить SQL-ом в 1💧, после вернуть)
+1. **Витрина**: MarketCube игрока — баланс 💧 в шапке, ровно 4 карточки, заглушек Stars/TON нет.
+2. **Заморозка**: покупка → счётчик «купленных Y/3» растёт, баланс падает; 4-я покупка → «Запас полон» (кап 3).
+3. **Фото-карточка**: AI-путь — покупка → селфи → 2 варианта → реролл (−1💧) → выбрать → превью; наставник в R-панели видит фото. Raw-путь — «как есть», в AI не уходит. До покупки наставник видит мультяшку-силуэт.
+4. **Ранний выход 2/4**: light-зарядка, после 2-го упражнения «Закончить досрочно» → капли есть, «День НЕ закрыт»; полная повторная в тот же день → 0 начислений + фраза поддержки, день закрыт (SQL: last_closed_day=today, completed_full=true).
+5. **Restore**: слом сымитировать SQL-ом (`lost_streak_len=5, lost_streak_at=now(), current_streak=0`) → плашка на Action-кубе → восстановление → current_streak=5, lost_*=NULL.
+6. **Смена графика вне grace**: SQL сдвинуть `schedule_grace_until` в прошлое → кнопка «Сменить за N 💧» → смена списывает капли; при 0 капель → сообщение о нехватке.
+
+---
+
 # SESSION STATUS — Session 52 (2026-07-24) — Фаза 8b (light-режим) РЕАЛИЗОВАНА (backend+frontend verify ✅)
 
 ## ✅ Сделано (8b — light-режим)
