@@ -86,6 +86,8 @@ const WorkoutScreen: React.FC<Props> = ({ onClose, sessionType = 'main' }) => {
   const [errState, setErrState] = useState<ErrState | null>(null);
   const [retryToken, setRetryToken] = useState(0);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  // 8c: ранний выход = /finish с частичным done (НЕ /cancel; cancel — stale-cleanup)
+  const [earlyDone, setEarlyDone] = useState(false);
   const [showSwipeWarning, setShowSwipeWarning] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [diagInfo, setDiagInfo] = useState<any>(null);
@@ -490,7 +492,7 @@ const WorkoutScreen: React.FC<Props> = ({ onClose, sessionType = 'main' }) => {
 
   // --- kickoff effect: when in a timed state, start the timer ------
   useEffect(() => {
-    if (!config || !sessionId) return;
+    if (!config || !sessionId || earlyDone) return;
     let cancelled = false;
     if (ctx.state === 'preparePhase') {
       (async () => {
@@ -565,7 +567,7 @@ const WorkoutScreen: React.FC<Props> = ({ onClose, sessionType = 'main' }) => {
   // so the stream is already live when the split layout mounts. Eliminates the
   // visible "gap" between rest end and demo+camera appearing.
   useEffect(() => {
-    if (ctx.state !== 'restAndAnalyzingPhase') return;
+    if (ctx.state !== 'restAndAnalyzingPhase' || earlyDone) return;
     if (!config) return;
     const earlyInitMs = Math.max(0, (config.rest_sec - 5) * 1000);
     const t = window.setTimeout(() => {
@@ -574,17 +576,17 @@ const WorkoutScreen: React.FC<Props> = ({ onClose, sessionType = 'main' }) => {
       }
     }, earlyInitMs);
     return () => window.clearTimeout(t);
-  }, [ctx.state, config, initCamera]);
+  }, [ctx.state, config, initCamera, earlyDone]);
 
   // BUG-2 fix: auto-advance through aiVerdictReview — no popup, no tap.
   // Keep a brief beat (review_sec from config, default 1.5s) so haptic + state settle,
   // then transition straight into the next preparePhase / finishSession.
   useEffect(() => {
-    if (ctx.state !== 'aiVerdictReview') return;
+    if (ctx.state !== 'aiVerdictReview' || earlyDone) return;
     const ms = Math.max(800, (config?.review_sec ?? 1.5) * 1000);
     const t = window.setTimeout(() => { handleNext(); }, ms);
     return () => window.clearTimeout(t);
-  }, [ctx.state, config?.review_sec, handleNext]);
+  }, [ctx.state, config?.review_sec, handleNext, earlyDone]);
 
   // --- finish -------------------------------------------------------
   useEffect(() => {
@@ -604,30 +606,50 @@ const WorkoutScreen: React.FC<Props> = ({ onClose, sessionType = 'main' }) => {
   const handleClose = useCallback(async () => {
     hapticImpact('light');
     unlockTelegramChrome();
-    try { if (sessionId && ctx.state !== 'finishSession') await cancelWorkoutSession(sessionId); } catch {}
+    // /cancel — только для незавершённой сессии (idle-выход); ранний выход идёт
+    // через /finish (частичный зачёт), после него cancel не нужен.
+    try {
+      if (sessionId && ctx.state !== 'finishSession' && !earlyDone) await cancelWorkoutSession(sessionId);
+    } catch {}
     stopCamera();
     releaseWakeLock();
     onClose();
-  }, [ctx.state, onClose, releaseWakeLock, sessionId, stopCamera, unlockTelegramChrome]);
+  }, [ctx.state, earlyDone, onClose, releaseWakeLock, sessionId, stopCamera, unlockTelegramChrome]);
 
-  // BUG-5: confirm before destroying an in-flight workout. Prefer Telegram's
-  // native showConfirm; fall back to a React modal on older clients.
+  // 8c: «Закончить досрочно» — останавливаем цикл и зовём /finish: бэк засчитает
+  // загруженные упражнения по (done/N)^0.65; день закроет только полная сессия.
+  const handleEarlyFinish = useCallback(async () => {
+    setShowCloseConfirm(false);
+    if (!sessionId) { handleClose(); return; }
+    hapticImpact('medium');
+    // Остановить таймеры/hold/камеру — цикл дальше не идёт.
+    if (phaseTimerRef.current) { window.clearInterval(phaseTimerRef.current); phaseTimerRef.current = null; }
+    phaseEndsAtRef.current = null;
+    phaseStartedAtRef.current = null;
+    currentOnEndRef.current = null;
+    if (holdTimeoutRef.current) { window.clearTimeout(holdTimeoutRef.current); holdTimeoutRef.current = null; }
+    stopCamera();
+    releaseWakeLock();
+    unlockTelegramChrome();
+    setEarlyDone(true);
+    try {
+      const r = await finishWorkoutSession(sessionId);
+      setResult(r);
+      hapticNotification('success');
+    } catch {
+      setErrState({ message: 'Не удалось сохранить результат. Попробуйте позже.' });
+    }
+  }, [handleClose, releaseWakeLock, sessionId, stopCamera, unlockTelegramChrome]);
+
+  // BUG-5/8c: красная кнопка. idle/finish — сразу закрыть; в середине — модалка
+  // раннего выхода (свои тексты, UX-долг №7 → всегда React-модалка).
   const handleCloseWithConfirm = useCallback(() => {
-    if (ctx.state === 'idle' || ctx.state === 'finishSession') {
+    if (ctx.state === 'idle' || ctx.state === 'finishSession' || earlyDone) {
       handleClose();
       return;
     }
-    const w = tgWeb();
-    if (w?.showConfirm) {
-      try {
-        w.showConfirm(`Завершить ${nounAcc}? Прогресс будет потерян.`, (ok: boolean) => {
-          if (ok) handleClose();
-        });
-        return;
-      } catch { /* fall through to modal */ }
-    }
     setShowCloseConfirm(true);
-  }, [ctx.state, handleClose, nounAcc]);
+  }, [ctx.state, earlyDone, handleClose]);
 
   // Keep the BackButton handler ref pointed at the latest closure
   useEffect(() => {
@@ -723,11 +745,11 @@ const WorkoutScreen: React.FC<Props> = ({ onClose, sessionType = 'main' }) => {
 
   // Demo + own-camera PiP only during prepare/exercise — released during rest (BUG-3).
   const showDemoAndCam =
-    ctx.state === 'preparePhase' || ctx.state === 'exercisingPhase';
+    !earlyDone && (ctx.state === 'preparePhase' || ctx.state === 'exercisingPhase');
 
   // Rest screen takes over for both rest+analyze and the brief verdict review.
   const restPhase =
-    ctx.state === 'restAndAnalyzingPhase' || ctx.state === 'aiVerdictReview';
+    !earlyDone && (ctx.state === 'restAndAnalyzingPhase' || ctx.state === 'aiVerdictReview');
 
   return createPortal(
     <div className="ws-root">
@@ -739,9 +761,9 @@ const WorkoutScreen: React.FC<Props> = ({ onClose, sessionType = 'main' }) => {
             <button
               className="ws-finish-btn"
               onClick={handleCloseWithConfirm}
-              aria-label={`Завершить ${nounAcc}`}
+              aria-label={`Закончить ${nounAcc} досрочно`}
             >
-              Завершить
+              {ctx.state === 'finishSession' || earlyDone ? 'Закрыть' : 'Закончить досрочно'}
             </button>
             <div className="ws-progress-label">
               {Math.min(ctx.currentExercise + 1, config.total_exercises)} / {config.total_exercises}
@@ -868,15 +890,38 @@ const WorkoutScreen: React.FC<Props> = ({ onClose, sessionType = 'main' }) => {
         </div>
       )}
 
-      {ctx.state === 'finishSession' && (
+      {(ctx.state === 'finishSession' || earlyDone) && (
         <div className="ws-finish-wrap">
           <div className="ws-center-card">
             <div className="ws-title">Готово 🎉</div>
             {result ? (
-              <>
-                <div className="ws-result-row"><span>XP</span><span className="ws-result-val">XP {result.avg_score}</span></div>
-                <div className="ws-result-row"><span>Капли</span><span className="ws-result-val">💧 {result.drops_earned}</span></div>
-              </>
+              result.repeat ? (
+                /* 8c антифарм: повторная сессия дня — без цифр, фраза поддержки */
+                <>
+                  <div className="ws-subtitle" style={{ fontSize: 18 }}>
+                    {result.support_phrase || 'Ты молодец!'}
+                  </div>
+                  <div className="ws-subtitle">
+                    Начисления за сегодня уже получены. День закрывает только полная сессия.
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="ws-result-row"><span>XP</span><span className="ws-result-val">XP {result.avg_score}</span></div>
+                  <div className="ws-result-row"><span>Капли</span><span className="ws-result-val">💧 {result.drops_earned}</span></div>
+                  {!result.completed_full && (
+                    <div className="ws-subtitle">
+                      Засчитано {result.exercises_done} из {result.total_exercises}.
+                      {!result.day_closed && (
+                        <> День НЕ закрыт — пройди полную {nounAcc} до конца дня, чтобы спасти стрик.</>
+                      )}
+                    </div>
+                  )}
+                  {result.day_closed && (
+                    <div className="ws-subtitle">✅ День закрыт — стрик в безопасности.</div>
+                  )}
+                </>
+              )
             ) : (
               <div className="ws-loading ws-loading--inline">Сохраняем результат…</div>
             )}
@@ -911,21 +956,21 @@ const WorkoutScreen: React.FC<Props> = ({ onClose, sessionType = 'main' }) => {
         </div>
       )}
 
-      {/* Custom confirm modal — fallback when WebApp.showConfirm is unavailable */}
+      {/* 8c: модалка раннего выхода — частичный зачёт вместо потери прогресса */}
       {showCloseConfirm && (
         <div className="ws-modal-backdrop" onClick={() => setShowCloseConfirm(false)}>
           <div className="ws-modal" onClick={e => e.stopPropagation()}>
-            <div className="ws-modal-title">Завершить {nounAcc}?</div>
-            <div className="ws-modal-text">Прогресс будет потерян.</div>
+            <div className="ws-modal-title">Закончить {nounAcc} досрочно?</div>
+            <div className="ws-modal-text">
+              Выполненные упражнения засчитаются частично. День закрывает только
+              полная сессия — без неё стрик под угрозой.
+            </div>
             <div className="ws-modal-actions">
               <button className="ws-btn ws-btn--secondary" onClick={() => setShowCloseConfirm(false)}>
-                Отмена
+                Продолжить
               </button>
-              <button
-                className="ws-btn ws-btn--danger"
-                onClick={() => { setShowCloseConfirm(false); handleClose(); }}
-              >
-                Завершить
+              <button className="ws-btn ws-btn--danger" onClick={handleEarlyFinish}>
+                Закончить досрочно
               </button>
             </div>
           </div>

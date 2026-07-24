@@ -13,7 +13,6 @@ import type { MyPlayer } from '../../api/partnerships';
 import { createInvite, listInvites, deleteInvite } from '../../api/invites';
 import type { Invite } from '../../api/invites';
 import { playerAvatarUrl } from '../../utils/playerAvatar';
-import { useTheme } from '../../contexts/ThemeContext';
 import { hapticImpact, hapticNotification } from '../../utils/haptic';
 import '../../styles/cubes.css';
 
@@ -182,7 +181,6 @@ const SLOT_FULL_MSG: Record<string, string> = {
 };
 
 const InvitesPanel: React.FC<{ refreshKey?: number }> = ({ refreshKey = 0 }) => {
-    const theme = useTheme();
     const ownAccessTier = useAuthStore((s) => s.ownAccessTier);
     const [players, setPlayers] = useState<MyPlayer[]>([]);
     const [invites, setInvites] = useState<Invite[]>([]);
@@ -252,7 +250,7 @@ const InvitesPanel: React.FC<{ refreshKey?: number }> = ({ refreshKey = 0 }) => 
                 <div style={{ opacity: 0.6, fontSize: 13, padding: '4px 0 8px' }}>Пока нет игроков.</div>
             ) : (
                 players.map((p) => {
-                    const avatar = playerAvatarUrl(p, theme);
+                    const avatar = playerAvatarUrl(p);
                     return (
                         <div key={p.id} className="cube-feed-card">
                             <div className="cube-avatar">

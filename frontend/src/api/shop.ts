@@ -77,3 +77,69 @@ export async function giftFreeze(req: GiftFreezeRequest): Promise<GiftFreezeResp
     const { data } = await api.post('/shop/gift-freeze', req);
     return data;
 }
+
+/* ============================================================
+   8c: витрина игрока (app_shop_items) — /players/me/shop
+   ============================================================ */
+
+export interface CardPhotoState {
+    url: string | null;
+    source: 'ai' | 'raw' | null;
+    status: 'awaiting_photo' | 'processing' | 'choosing' | 'failed' | null;
+    variants: string[];
+}
+
+export interface RestoreOffer {
+    lost_streak_len: number;
+    lost_streak_at: string;
+    price: number;
+    expires_at: string;
+}
+
+export interface PlayerShopState {
+    drops_balance: number;
+    prices: Record<string, number>;   // key → price_drops
+    free_freezes_left: number;
+    paid_freezes: number;
+    paid_freezes_cap: number;
+    restore: RestoreOffer | null;
+    card_photo: CardPhotoState;
+}
+
+export async function getPlayerShop(): Promise<PlayerShopState> {
+    const { data } = await api.get('/players/me/shop');
+    return data;
+}
+
+export async function buyFreeze(): Promise<{ drops_balance: number; paid_freezes: number }> {
+    const { data } = await api.post('/players/me/buy-freeze');
+    return data;
+}
+
+export async function restoreStreak(): Promise<{ drops_balance: number; current_streak: number }> {
+    const { data } = await api.post('/players/me/restore-streak');
+    return data;
+}
+
+export async function cardPhotoPurchase(): Promise<CardPhotoState> {
+    const { data } = await api.post('/players/me/card-photo/purchase');
+    return data;
+}
+
+export async function cardPhotoUpload(photoBase64: string, mode: 'ai' | 'raw'): Promise<CardPhotoState> {
+    const { data } = await api.post('/players/me/card-photo/upload', {
+        photo_base64: photoBase64,
+        mode,
+    }, { timeout: 60_000 });
+    return data;
+}
+
+export async function cardPhotoChoose(index: number): Promise<CardPhotoState> {
+    const { data } = await api.post('/players/me/card-photo/choose', { index });
+    return data;
+}
+
+export async function cardPhotoReroll(): Promise<CardPhotoState> {
+    const { data } = await api.post('/players/me/card-photo/reroll');
+    return data;
+}

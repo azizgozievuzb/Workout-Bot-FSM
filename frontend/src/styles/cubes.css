@@ -2648,3 +2648,135 @@
     opacity: 0.6;
     font-weight: 400;
 }
+
+/* ============================================================
+   8c — витрина игрока (MarketCube) + фото-карточка + restore
+   ============================================================ */
+
+.market-balance-header {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    border-radius: 12px;
+    background: rgba(80, 160, 255, 0.12);
+    border: 1px solid rgba(80, 160, 255, 0.25);
+}
+
+.market-balance-value {
+    font-size: 20px;
+    font-weight: 800;
+}
+
+.market-balance-label {
+    font-size: 12px;
+    opacity: 0.6;
+}
+
+/* Маленький постоянный бейдж баланса (дашборд игрока) */
+.player-drops-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 700;
+    background: rgba(80, 160, 255, 0.15);
+    border: 1px solid rgba(80, 160, 255, 0.3);
+}
+
+/* Restore-плашка (Action-куб) */
+.restore-plate {
+    margin: 8px 0;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: rgba(255, 90, 90, 0.12);
+    border: 1px solid rgba(255, 90, 90, 0.3);
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.restore-plate button {
+    margin-top: 8px;
+}
+
+/* Фото-карточка флоу */
+.cardflow-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.65);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 20px;
+}
+
+.cardflow-card {
+    width: 100%;
+    max-width: 380px;
+    max-height: 86vh;
+    overflow-y: auto;
+    border-radius: 16px;
+    padding: 18px;
+    background: #16202e;
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.cardflow-title {
+    font-size: 17px;
+    font-weight: 800;
+}
+
+.cardflow-hint {
+    font-size: 12.5px;
+    opacity: 0.7;
+    line-height: 1.4;
+}
+
+.cardflow-msg {
+    font-size: 12.5px;
+    color: #ff8a8a;
+}
+
+.cardflow-preview {
+    width: 100%;
+    max-height: 300px;
+    object-fit: cover;
+    border-radius: 12px;
+}
+
+.cardflow-variants {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.cardflow-variant {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.cardflow-variant img {
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+    border-radius: 12px;
+}
+
+.cardflow-close {
+    align-self: center;
+    background: none;
+    border: none;
+    color: inherit;
+    opacity: 0.6;
+    font-size: 13px;
+    padding: 6px;
+    cursor: pointer;
+}

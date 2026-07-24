@@ -2,11 +2,9 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import {
     DAY_LABELS, getSchedule, setSchedule, setMorningReminderTime,
-    unlockLight, lockLight,
     type ScheduleState,
 } from '../../api/schedule';
 import ScheduleDaysPicker from './ScheduleDaysPicker';
-import DisclaimerTest, { UNLOCK_QUESTIONS, LOCK_QUESTIONS } from './DisclaimerTest';
 import { hapticNotification } from '../../utils/haptic';
 import './schedule.css';
 
@@ -42,49 +40,17 @@ const PlayerSchedulePanel: React.FC<Props> = ({ lastClosedDay, freeFreezes, paid
     const [time, setTime] = useState<string>(storeReminder || '08:00');
     const [busy, setBusy] = useState(false);
     const [msg, setMsg] = useState('');
-    const [test, setTest] = useState<'unlock' | 'lock' | null>(null);
 
     useEffect(() => {
         getSchedule().then(setSched).catch(() => {});
-    }, []);
-
-    const doUnlock = useCallback(async () => {
-        setTest(null); setBusy(true); setMsg('');
-        try {
-            const res = await unlockLight();
-            setSched(res);
-            hapticNotification('success');
-            setMsg(res.light_active_from
-                ? `Light откроется с понедельника ${fmtDate(res.light_active_from)}`
-                : 'Light-режим открыт');
-        } catch (e: any) {
-            hapticNotification('error');
-            const code = e?.response?.data?.detail?.code;
-            setMsg(code === 'INSUFFICIENT_DROPS' ? 'Недостаточно капель' : 'Не удалось открыть light');
-        } finally { setBusy(false); }
-    }, []);
-
-    const doLock = useCallback(async () => {
-        setTest(null); setBusy(true); setMsg('');
-        try {
-            const res = await lockLight();
-            setSched(res);
-            hapticNotification('success');
-            setMsg('Light-режим закроется со следующего понедельника');
-        } catch (e: any) {
-            hapticNotification('error');
-            const code = e?.response?.data?.detail?.code;
-            setMsg(code === 'INSUFFICIENT_DROPS' ? 'Недостаточно капель' : 'Не удалось закрыть light');
-        } finally { setBusy(false); }
     }, []);
 
     const mainDays = sched?.main_days ?? storeMain ?? [];
     const tWd = todayWeekday();
     const tISO = todayISO();
     const lightActive = sched?.light_active ?? false;
-    const lightUnlocked = sched?.light_unlocked ?? false;
-    const unlockPrice = sched?.light_unlock_price ?? 300;
-    const lockPrice = sched?.light_lock_price ?? 500;
+    const changePrice = sched?.schedule_change_price ?? null;
+    const inGrace = sched?.in_grace ?? false;
 
     const saveTime = useCallback(async () => {
         setBusy(true); setMsg('');
@@ -115,10 +81,13 @@ const PlayerSchedulePanel: React.FC<Props> = ({ lastClosedDay, freeFreezes, paid
             }
         } catch (e: any) {
             hapticNotification('error');
-            const code = e?.response?.data?.detail?.code;
+            const detail = e?.response?.data?.detail;
+            const code = typeof detail === 'object' ? detail?.code : '';
             if (code === 'SCHEDULE_COOLDOWN') {
-                const na = e?.response?.data?.detail?.next_change_available_at;
+                const na = detail?.next_change_available_at;
                 setMsg(`Смена доступна с ${na ? new Date(na).toLocaleDateString() : 'позже'}`);
+            } else if (code === 'INSUFFICIENT_DROPS') {
+                setMsg(`Недостаточно капель: ${detail?.balance ?? 0}/${detail?.price ?? ''} 💧`);
             } else {
                 setMsg('Не удалось сменить дни');
             }
@@ -192,7 +161,10 @@ const PlayerSchedulePanel: React.FC<Props> = ({ lastClosedDay, freeFreezes, paid
                             style={{ marginTop: 10 }}
                             onClick={() => { setDraftDays([...mainDays]); setEditing(true); }}
                         >
-                            Изменить дни main-тренировок
+                            {/* 8c: вне grace смена платная */}
+                            {!inGrace && changePrice
+                                ? `Сменить за ${changePrice} 💧`
+                                : 'Изменить дни main-тренировок'}
                         </button>
                         {cooldownText && <div className="sched-cooldown">{cooldownText}</div>}
                     </>
@@ -217,45 +189,16 @@ const PlayerSchedulePanel: React.FC<Props> = ({ lastClosedDay, freeFreezes, paid
                 )}
             </div>
 
-            {/* Light-режим: временная кнопка (в 8c переедет в витрину) */}
+            {/* 8c: покупки light переехали в витрину (MarketCube) */}
             <div>
                 <div className="sched-row-label">Light-режим (лёгкая зарядка)</div>
-                {!lightUnlocked ? (
-                    <button className="sched-light-btn" disabled={busy} onClick={() => setTest('unlock')}>
-                        ✨ Открыть light-режим ({unlockPrice} 💧)
-                    </button>
-                ) : (
-                    <button className="sched-light-btn lock" disabled={busy} onClick={() => setTest('lock')}>
-                        Закрыть light-режим ({lockPrice} 💧)
-                    </button>
-                )}
                 <div className="sched-cooldown">
-                    Light — 4 упражнения-зарядки. Стрик становится ежедневным (main + light-дни).
+                    Light — 4 упражнения-зарядки, стрик становится ежедневным.
+                    Открыть или закрыть light-режим можно в магазине: Магазин →
                 </div>
             </div>
 
             {msg && <div className="sched-cooldown">{msg}</div>}
-
-            {test === 'unlock' && (
-                <DisclaimerTest
-                    title="Открыть light-режим?"
-                    intro={`Спишется ${unlockPrice} 💧. Активация — со следующего понедельника.`}
-                    questions={UNLOCK_QUESTIONS}
-                    confirmLabel="открыть light-режим"
-                    onPass={doUnlock}
-                    onCancel={() => setTest(null)}
-                />
-            )}
-            {test === 'lock' && (
-                <DisclaimerTest
-                    title="Закрыть light-режим?"
-                    intro={`Спишется ${lockPrice} 💧. Main-only — со следующего понедельника.`}
-                    questions={LOCK_QUESTIONS}
-                    confirmLabel="закрыть light-режим"
-                    onPass={doLock}
-                    onCancel={() => setTest(null)}
-                />
-            )}
         </div>
     );
 };

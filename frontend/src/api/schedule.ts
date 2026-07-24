@@ -20,6 +20,8 @@ export interface ScheduleState {
     today_session_type: 'main' | 'light' | null;
     light_unlock_price: number | null;
     light_lock_price: number | null;
+    // 8c: смена графика вне grace — платная
+    schedule_change_price: number | null;
 }
 
 export async function getSchedule(): Promise<ScheduleState> {

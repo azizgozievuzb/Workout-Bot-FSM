@@ -11,8 +11,9 @@ import { getProducts, createInvoice, getPayment } from '../../api/payments';
 import type { StarProduct } from '../../api/payments';
 import { getMyPlayers } from '../../api/partnerships';
 import type { MyPlayer } from '../../api/partnerships';
+import { getPlayerShop, restoreStreak } from '../../api/shop';
+import type { PlayerShopState } from '../../api/shop';
 import { playerAvatarUrl } from '../../utils/playerAvatar';
-import { useTheme } from '../../contexts/ThemeContext';
 import { hapticImpact, hapticNotification } from '../../utils/haptic';
 import RoleTransition from '../shared/RoleTransition';
 import GiftFreezeModal from './GiftFreezeModal';
@@ -82,10 +83,39 @@ const PlayerView: React.FC = () => {
     const [restDayToast, setRestDayToast] = useState('');
     const [workoutType, setWorkoutType] = useState<SessionType | null>(null);
     const [sched, setSched] = useState<ScheduleState | null>(null);
+    // 8c: витрина-агрегат — restore-офер после слома стрика
+    const [shop, setShop] = useState<PlayerShopState | null>(null);
+    const [restoreConfirm, setRestoreConfirm] = useState(false);
+    const [restoreBusy, setRestoreBusy] = useState(false);
+    const [restoreToast, setRestoreToast] = useState('');
 
     useEffect(() => {
         getSchedule().then(setSched).catch(() => {});
+        getPlayerShop().then(setShop).catch(() => {});
     }, []);
+
+    const doRestore = useCallback(async () => {
+        if (restoreBusy) return;
+        setRestoreBusy(true);
+        try {
+            const res = await restoreStreak();
+            hapticNotification('success');
+            setRestoreToast(`🔥 Стрик восстановлен: ${res.current_streak} дн.`);
+            setShop(prev => prev ? { ...prev, drops_balance: res.drops_balance, restore: null } : prev);
+            setStats(prev => prev ? { ...prev, current_streak: res.current_streak } : prev);
+        } catch (err: any) {
+            hapticNotification('error');
+            const detail = err?.response?.data?.detail;
+            const code = typeof detail === 'object' ? detail?.code : '';
+            setRestoreToast(code === 'INSUFFICIENT_DROPS'
+                ? `Недостаточно капель (${detail?.balance}/${detail?.price})`
+                : 'Восстановление недоступно');
+        } finally {
+            setRestoreBusy(false);
+            setRestoreConfirm(false);
+            setTimeout(() => setRestoreToast(''), 4000);
+        }
+    }, [restoreBusy]);
 
     const openWorkout = useCallback((e: React.MouseEvent, type: SessionType) => {
         e.stopPropagation();
@@ -157,7 +187,39 @@ const PlayerView: React.FC = () => {
                         ❄️ {streakFreezeBalance}
                     </div>
                 )}
+                {/* 8c: баланс капель — маленький постоянный бейдж (UX-долг №5) */}
+                <div className="player-drops-chip">
+                    💧 {shop?.drops_balance ?? stats.drops_balance}
+                </div>
             </div>
+
+            {/* 8c: restore-плашка — 72ч после слома стрика */}
+            {shop?.restore && (
+                <div className="restore-plate">
+                    💔 Стрик {shop.restore.lost_streak_len} дн. сгорел.
+                    {!restoreConfirm ? (
+                        <button
+                            className="cube-btn-sm"
+                            style={{ display: 'block' }}
+                            onClick={(e) => { e.stopPropagation(); hapticImpact('light'); setRestoreConfirm(true); }}
+                        >
+                            Восстановить за {shop.restore.price} 💧
+                        </button>
+                    ) : (
+                        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                            <button className="cube-btn-sm" disabled={restoreBusy}
+                                onClick={(e) => { e.stopPropagation(); doRestore(); }}>
+                                {restoreBusy ? '…' : `Да, вернуть (−${shop.restore.price} 💧)`}
+                            </button>
+                            <button className="cube-btn-sm" disabled={restoreBusy}
+                                onClick={(e) => { e.stopPropagation(); setRestoreConfirm(false); }}>
+                                Отмена
+                            </button>
+                        </div>
+                    )}
+                </div>
+            )}
+            {restoreToast && <div className="admin-toast">{restoreToast}</div>}
 
             {/* B. Rest-day button */}
             {restDaysRemaining > 0 && gender === 'female' && (
@@ -238,7 +300,6 @@ const TIER_PLAYER_LIMITS: Record<string, number> = { standard: 1, premium: 2, el
 type ModalKind = 'gift';
 
 const ResponsibleView: React.FC = () => {
-    const theme = useTheme();
     const ownAccessTier = useAuthStore((s) => s.ownAccessTier);
     const shopFreezeBalance = useAuthStore((s) => s.shopFreezeBalance);
     const giftFreezeBalance = useAuthStore((s) => s.giftFreezeBalance);
@@ -407,7 +468,7 @@ const ResponsibleView: React.FC = () => {
                         ].filter(Boolean).join(' ');
                         const name = p.first_name || '—';
                         const isActive = subActive && !p.is_deactivated;
-                        const avatar = playerAvatarUrl(p, theme);
+                        const avatar = playerAvatarUrl(p);
                         return (
                             <div className={rowClass} key={p.id}>
                                 <div className="cube-avatar">

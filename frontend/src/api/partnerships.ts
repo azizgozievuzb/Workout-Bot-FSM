@@ -5,9 +5,8 @@ export interface MyPlayer {
     id: string;
     telegram_id: number;
     first_name: string | null;
-    profile_photo_url: string | null;
-    photo_dark_url: string | null;
-    photo_light_url: string | null;
+    // 8c (8.8b): наставник видит только фото-карточку (или мультяшку по полу)
+    card_photo_url: string;
     expires_at: string | null;
     is_expired: boolean;
     days_left: number | null;

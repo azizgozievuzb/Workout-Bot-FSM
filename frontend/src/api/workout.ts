@@ -40,6 +40,13 @@ export interface FinishSessionResponse {
   total_score: number;
   avg_score: number;
   drops_earned: number;
+  // 8c: частичный зачёт + антифарм
+  exercises_done: number;
+  total_exercises: number;
+  completed_full: boolean;
+  day_closed: boolean;
+  repeat: boolean;
+  support_phrase: string | null;
 }
 
 export async function getWorkoutConfig(sessionType: SessionType = 'main'): Promise<WorkoutConfig> {
