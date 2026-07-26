@@ -26,6 +26,7 @@ const CardPhotoFlow: React.FC<Props> = ({ card, prices, balance, onClose, onChan
     const [mode, setMode] = useState<'ai' | 'raw' | null>(null);
     const [chosenUrl, setChosenUrl] = useState<string | null>(null);
     const fileRef = useRef<HTMLInputElement | null>(null);
+    const cameraRef = useRef<HTMLInputElement | null>(null);
     const pollRef = useRef<number | null>(null);
 
     const price = prices['photo_card'] ?? 200;
@@ -156,24 +157,49 @@ const CardPhotoFlow: React.FC<Props> = ({ card, prices, balance, onClose, onChan
     } else if (status === 'awaiting_photo' || status === 'failed') {
         body = (
             <>
-                <div className="cardflow-title">{status === 'failed' ? 'Не получилось — попробуй ещё раз' : 'Загрузи селфи'}</div>
-                <button
-                    className="cube-btn-primary"
-                    disabled={busy}
-                    onClick={() => { setMode('ai'); fileRef.current?.click(); }}
-                >
-                    ✨ Обработать AI
-                </button>
-                <button
-                    className="cube-btn-sm"
-                    disabled={busy}
-                    onClick={() => { setMode('raw'); fileRef.current?.click(); }}
-                >
-                    📷 Поставить как есть (без AI)
-                </button>
-                <div className="cardflow-hint">
-                    «Как есть» — фото не отправляется в AI и сразу становится карточкой.
-                </div>
+                {mode === null ? (
+                    <>
+                        <div className="cardflow-title">{status === 'failed' ? 'Не получилось — попробуй ещё раз' : 'Загрузи селфи'}</div>
+                        <button
+                            className="cube-btn-primary"
+                            disabled={busy}
+                            onClick={() => setMode('ai')}
+                        >
+                            ✨ Обработать AI
+                        </button>
+                        <button
+                            className="cube-btn-sm"
+                            disabled={busy}
+                            onClick={() => setMode('raw')}
+                        >
+                            📷 Поставить как есть (без AI)
+                        </button>
+                        <div className="cardflow-hint">
+                            «Как есть» — фото не отправляется в AI и сразу становится карточкой.
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        <div className="cardflow-title">Откуда фото?</div>
+                        <button
+                            className="cube-btn-primary"
+                            disabled={busy}
+                            onClick={() => cameraRef.current?.click()}
+                        >
+                            📸 Сделать фото
+                        </button>
+                        <button
+                            className="cube-btn-sm"
+                            disabled={busy}
+                            onClick={() => fileRef.current?.click()}
+                        >
+                            🖼 Выбрать из галереи
+                        </button>
+                        <button className="cube-btn-sm" disabled={busy} onClick={() => setMode(null)}>
+                            ← Назад
+                        </button>
+                    </>
+                )}
             </>
         );
     } else {
@@ -207,6 +233,15 @@ const CardPhotoFlow: React.FC<Props> = ({ card, prices, balance, onClose, onChan
                     ref={fileRef}
                     type="file"
                     accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={onFile}
+                />
+                {/* Съёмка камерой (фронталка) — хотфикс смоука 8c, находка №11 */}
+                <input
+                    ref={cameraRef}
+                    type="file"
+                    accept="image/*"
+                    capture="user"
                     style={{ display: 'none' }}
                     onChange={onFile}
                 />
