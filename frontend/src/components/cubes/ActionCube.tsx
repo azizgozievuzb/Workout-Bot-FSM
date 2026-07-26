@@ -482,11 +482,7 @@ const ResponsibleView: React.FC = () => {
                                     </div>
                                 </div>
                                 <div className="cube-player-actions" style={{ position: 'relative' }}>
-                                    {isActive && (
-                                        <button className="cube-btn-sm" onClick={(e) => openBoostModal(e, p.id, name)}>
-                                            ⚡X2
-                                        </button>
-                                    )}
+                                    {/* ⚡X2 легаси-бейдж убран (смоук 8c, находка №8); судьба бустов — 8d */}
                                     <button
                                         className="player-row-menu-btn"
                                         aria-label="Действия"
