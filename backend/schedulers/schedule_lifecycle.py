@@ -63,14 +63,40 @@ def _train_button() -> InlineKeyboardMarkup:
 
 
 async def _active_players(db) -> list[dict]:
-    """Игроки с активной подпиской (partnerships.expires_at > now, status active),
-    смерженные users-конфиг + player_stats. Только те, у кого выбраны main_days."""
-    now_iso = datetime.now(UTC).isoformat()
+    """Игроки с активным доступом (модель 7.5: подписка их Responsible + grace,
+    pricing_mode='free' → всегда активен), смерженные users-конфиг + player_stats.
+    Только те, у кого выбраны main_days.
+
+    NB: partnerships.expires_at — легаси промо-эпохи (у боевых пар NULL),
+    фильтровать по нему нельзя; активность считается как в core.access."""
+    from ..core.access import SUBSCRIPTION_GRACE_DAYS, parse_dt
+    now = datetime.now(UTC)
     parts = await (
-        db.table("partnerships").select("player_id")
-        .gt("expires_at", now_iso).eq("status", "active").execute()
+        db.table("partnerships").select("player_id, responsible_id")
+        .eq("status", "active").execute()
     )
-    ids = list({p["player_id"] for p in (parts.data or []) if p.get("player_id")})
+    pairs = [
+        (p["player_id"], p["responsible_id"])
+        for p in (parts.data or [])
+        if p.get("player_id") and p.get("responsible_id")
+    ]
+    if not pairs:
+        return []
+
+    resp_ids = list({r for _, r in pairs})
+    rrs = await (
+        db.table("users").select("id, subscription_expires_at, pricing_mode")
+        .in_("id", resp_ids).execute()
+    )
+    grace_cutoff = now - timedelta(days=SUBSCRIPTION_GRACE_DAYS)
+    resp_active: dict[str, bool] = {}
+    for r in (rrs.data or []):
+        exp = parse_dt(r.get("subscription_expires_at"))
+        resp_active[r["id"]] = (
+            r.get("pricing_mode") == "free" or (exp is not None and exp > grace_cutoff)
+        )
+
+    ids = list({pl for pl, rid in pairs if resp_active.get(rid)})
     if not ids:
         return []
 
