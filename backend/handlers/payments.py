@@ -1,8 +1,12 @@
-"""Aiogram handlers for Telegram Stars payments (task 7.4).
+"""Aiogram handlers for Telegram Stars payments (task 7.4 + 8d).
 
   * pre_checkout_query  — validate against the payment snapshot; MUST answer < 10s.
-  * successful_payment  — idempotent mark-paid → fulfill (activate boost) → notify.
+  * successful_payment  — idempotent mark-paid → fulfill → notify.
   * /paysupport, /terms — required commands for bots selling via Stars.
+
+Product types: `tier_*` (subscription, 7.5), `drop_pack` (пул капель наставника),
+`shelf_star_item` (предмет на полку игрока). Контекст исполнения — в payments.meta.
+Бусты X2 выпилены в 8d; исторические платежи product_type='boost_*' не трогаем.
 
 No automatic refunds: a fulfill failure leaves the payment 'paid' and asks the user
 to contact support. Refunds are admin-only (admin_payments router).
@@ -16,7 +20,7 @@ from aiogram.types import Message, PreCheckoutQuery
 
 from ..db.client import get_supabase
 from ..services.bot_notify import send_bot_message
-from ..services.boost_service import PRODUCT_TO_BOOST_TYPE, activate_boost
+from ..services.notifications import emit_notification
 from ..services.tier_pricing import PERIOD_DAYS, PERIOD_LABELS, TIER_TITLES
 
 logger = logging.getLogger(__name__)
@@ -25,7 +29,8 @@ payments_router = Router(name="payments")
 
 SUPPORT_CONTACT = "@conectionWorkout_bot"
 
-_BOOST_LABEL = {"1_day": "24 часа", "1_week": "7 дней"}
+# Партнёрство-получатель обязательно только для лотов полки.
+_NEEDS_PARTNERSHIP = ("shelf_star_item",)
 
 
 def _is_tier(product_type: str | None) -> bool:
@@ -129,6 +134,113 @@ async def _fulfill_tier_payment(db, message: Message, payment: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
+# 8d fulfilment: drop pack → пул дарения; shelf star item → лот на полке игрока
+# ---------------------------------------------------------------------------
+
+async def _mark_fulfilled(db, payment_id: str) -> None:
+    await (
+        db.table("payments")
+        .update({"status": "fulfilled", "fulfilled_at": datetime.now(timezone.utc).isoformat()})
+        .eq("id", payment_id)
+        .execute()
+    )
+
+
+async def _fulfill_drop_pack(db, message: Message, payment: dict) -> None:
+    """Капли пакета ложатся в gift_balance покупателя (§8.7). Идемпотентность —
+    на уровне mark-paid: сюда попадает только первый обработчик платежа."""
+    payment_id = payment["id"]
+    meta = payment.get("meta") or {}
+    drops = int(meta.get("drops") or 0)
+    try:
+        if drops < 1:
+            raise ValueError(f"bad drop_pack meta: {meta}")
+        res = await db.rpc("credit_gift_balance", {
+            "p_user_id": payment["buyer_user_id"], "p_drops": drops,
+        }).execute()
+        data = res.data if isinstance(res.data, dict) else {}
+        if not data.get("ok"):
+            raise ValueError(f"credit_gift_balance failed: {data}")
+        await _mark_fulfilled(db, payment_id)
+    except Exception as e:
+        logger.error("FULFILL DROP PACK FAILED payment=%s: %s", payment_id, e)
+        await message.answer(
+            "✅ Оплата получена. Капли будут зачислены. "
+            f"Если баланс не изменится — напишите {SUPPORT_CONTACT} или отправьте /paysupport."
+        )
+        return
+
+    await message.answer(
+        f"💧 Зачислено <b>{drops}</b> капель в пул подарков.\n"
+        "Подарить их игроку можно на его странице в панели наставника."
+    )
+
+
+async def _fulfill_shelf_star_item(db, message: Message, payment: dict) -> None:
+    """Покупка = сразу выставление: инвентаря у наставника нет (§8.8)."""
+    payment_id = payment["id"]
+    meta = payment.get("meta") or {}
+    partnership_id = payment.get("target_partnership_id")
+    catalog_key = meta.get("catalog_key")
+    price_drops = int(meta.get("price_drops") or 0)
+    title = meta.get("title") or "Предмет от наставника"
+
+    try:
+        if not partnership_id or not catalog_key or price_drops < 1:
+            raise ValueError(f"bad shelf_star_item data: pair={partnership_id} meta={meta}")
+        ins = await (
+            db.table("shelf_items").insert({
+                "partnership_id": partnership_id,
+                "type": "star_item",
+                "title": title,
+                "price_drops": price_drops,
+                "status": "active",
+                "star_catalog_key": catalog_key,
+            }).execute()
+        )
+        if not ins.data:
+            raise ValueError("shelf_items insert returned no row")
+        await _mark_fulfilled(db, payment_id)
+    except Exception as e:
+        logger.error("FULFILL SHELF ITEM FAILED payment=%s: %s", payment_id, e)
+        await message.answer(
+            "✅ Оплата получена. Предмет вот-вот появится на полке игрока. "
+            f"Если не появится — напишите {SUPPORT_CONTACT} или отправьте /paysupport."
+        )
+        return
+
+    await message.answer(
+        f"🎁 «{title}» на полке игрока. Цена для игрока: <b>{price_drops}</b> 💧."
+    )
+
+    # Уведомить игрока о новом лоте (как в 8a: бот + in-app).
+    try:
+        pair = await (
+            db.table("partnerships").select("player_id")
+            .eq("id", partnership_id).maybe_single().execute()
+        )
+        player_id = pair.data.get("player_id") if (pair and pair.data) else None
+        if player_id:
+            await emit_notification(
+                db, user_id=player_id, type="shelf_new_item",
+                title="🎁 Новый предмет на полке",
+                message=f"«{title}» — {price_drops} 💧",
+                payload={"catalog_key": catalog_key},
+            )
+            tg = await (
+                db.table("users").select("telegram_id")
+                .eq("id", player_id).maybe_single().execute()
+            )
+            if tg and tg.data and tg.data.get("telegram_id"):
+                await send_bot_message(
+                    message.bot, int(tg.data["telegram_id"]),
+                    f"🎁 Наставник положил на полку «{title}» за {price_drops} 💧.",
+                )
+    except Exception as e:
+        logger.warning("player notify failed payment=%s: %s", payment_id, e)
+
+
+# ---------------------------------------------------------------------------
 # pre_checkout_query
 # ---------------------------------------------------------------------------
 
@@ -160,9 +272,11 @@ async def handle_pre_checkout(query: PreCheckoutQuery) -> None:
         if query.total_amount != int(p["amount_stars"]):
             await query.answer(ok=False, error_message="Цена изменилась. Начните покупку заново.")
             return
-        # Tier payments have no partnership target; boosts require an active partnership.
-        if not _is_tier(p.get("product_type")):
-            if not p["target_partnership_id"] or not await _partnership_active(db, p["target_partnership_id"]):
+        # Подписка и пакет капель партнёрства не требуют (капли ложатся в пул R);
+        # лот полки адресный — пара должна быть жива на момент оплаты.
+        product_type = p.get("product_type")
+        if product_type in _NEEDS_PARTNERSHIP or p.get("target_partnership_id"):
+            if not p.get("target_partnership_id") or not await _partnership_active(db, p["target_partnership_id"]):
                 await query.answer(ok=False, error_message="Партнёрство больше не активно.")
                 return
 
@@ -209,61 +323,19 @@ async def handle_successful_payment(message: Message) -> None:
         await _fulfill_tier_payment(db, message, payment)
         return
 
-    partnership_id = payment.get("target_partnership_id")
-    boost_type = PRODUCT_TO_BOOST_TYPE.get(payment["product_type"])
-
-    # Fulfill: activate the boost. On failure keep status='paid' (no auto-refund).
-    try:
-        if not partnership_id or not boost_type:
-            raise ValueError(f"bad payment fulfilment data: partnership={partnership_id} product={payment['product_type']}")
-        await activate_boost(db, partnership_id, boost_type)
-        await (
-            db.table("payments")
-            .update({
-                "status": "fulfilled",
-                "fulfilled_at": datetime.now(timezone.utc).isoformat(),
-            })
-            .eq("id", payment_id)
-            .execute()
-        )
-    except Exception as e:
-        logger.error("FULFILL FAILED payment=%s: %s", payment_id, e)
-        await message.answer(
-            "✅ Оплата получена. Буст активируется автоматически. "
-            f"Если возникнут проблемы — напишите {SUPPORT_CONTACT} или отправьте /paysupport."
-        )
+    product_type = payment.get("product_type")
+    if product_type == "drop_pack":
+        await _fulfill_drop_pack(db, message, payment)
+        return
+    if product_type == "shelf_star_item":
+        await _fulfill_shelf_star_item(db, message, payment)
         return
 
-    label = _BOOST_LABEL.get(boost_type, boost_type)
-
-    # Confirm to the Responsible (buyer).
-    await message.answer(f"✅ Буст X2 активирован для игрока на {label}. Спасибо за поддержку!")
-
-    # Notify the Player.
-    try:
-        player_res = await (
-            db.table("partnerships")
-            .select("player_id")
-            .eq("id", partnership_id)
-            .maybe_single()
-            .execute()
-        )
-        if player_res and player_res.data:
-            tg_res = await (
-                db.table("users")
-                .select("telegram_id")
-                .eq("id", player_res.data["player_id"])
-                .maybe_single()
-                .execute()
-            )
-            if tg_res and tg_res.data:
-                await send_bot_message(
-                    message.bot,
-                    tg_res.data["telegram_id"],
-                    f"⚡ Ваш Ответственный подарил вам буст X2 на {label}! Капли за тренировки удваиваются.",
-                )
-    except Exception as e:
-        logger.warning("player notify failed payment=%s: %s", payment_id, e)
+    logger.error("unknown product_type in fulfilment payment=%s type=%s", payment_id, product_type)
+    await message.answer(
+        "✅ Оплата получена, но товар не распознан. "
+        f"Напишите {SUPPORT_CONTACT} или отправьте /paysupport — разберёмся."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -274,9 +346,10 @@ async def handle_successful_payment(message: Message) -> None:
 async def handle_paysupport(message: Message) -> None:
     await message.answer(
         "💬 <b>Поддержка по оплате</b>\n\n"
-        "Оплата проходит через звёзды Telegram (XTR). Если буст не активировался "
-        "после оплаты или есть вопрос по возврату — напишите администратору: "
-        f"{SUPPORT_CONTACT}. Возврат звёзд возможен по решению администратора.\n\n"
+        "Оплата проходит через звёзды Telegram (XTR). Если подписка, капли или "
+        "предмет на полке не появились после оплаты, либо есть вопрос по возврату — "
+        f"напишите администратору: {SUPPORT_CONTACT}. Возврат звёзд возможен по "
+        "решению администратора.\n\n"
         "Укажите примерное время оплаты и имя игрока — так мы найдём платёж быстрее."
     )
 
@@ -285,8 +358,8 @@ async def handle_paysupport(message: Message) -> None:
 async def handle_terms(message: Message) -> None:
     await message.answer(
         "📄 <b>Условия использования</b>\n\n"
-        "Покупка бустов X2 оплачивается звёздами Telegram (XTR) и активирует "
-        "удвоение капель игрока на выбранный срок (1 день или 1 неделя). "
-        "Цифровой товар предоставляется сразу после оплаты.\n\n"
+        "Звёздами Telegram (XTR) оплачиваются: подписка наставника, пакеты капель "
+        "для подарков игроку и предметы на полку игрока. Цифровой товар "
+        "предоставляется сразу после оплаты.\n\n"
         f"Вопросы и возвраты — через поддержку: /paysupport ({SUPPORT_CONTACT})."
     )

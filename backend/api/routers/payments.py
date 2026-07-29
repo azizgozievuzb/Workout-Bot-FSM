@@ -1,13 +1,19 @@
 """Payments API — Telegram Stars invoices (task 7.4).
 
 Flow:
-  POST /payments/invoice   → Responsible buys a product for own Player; creates a
-                             `pending` payment row + a Telegram invoice link.
-  GET  /payments/{id}      → buyer polls own payment status.
-  GET  /payments/products  → active products + live prices (for the buy UI).
+  POST /payments/tier-invoice       → subscription (tier) payment + coupons (7.5).
+  POST /payments/drop-pack-invoice  → Responsible buys a drops pack into own
+                                      gift_balance (8d, §8.7). Партнёрства не требует.
+  GET  /payments/drop-packs         → active packs + live prices (buy UI).
+  GET  /payments/{id}               → buyer polls own payment status.
+  GET  /payments/products           → active products + live prices (for the buy UI).
 
-Prices come ONLY from the star_products table. amount_stars is snapshotted onto the
-payment row at invoice time so an admin price change can never alter an open invoice.
+Shelf star-item invoices live in routers/shelf.py (they need slot/limit checks) and
+reuse `create_stars_invoice` from here.
+
+Prices come ONLY from the DB (tier_prices / drop_packs / shelf_catalog).
+amount_stars is snapshotted onto the payment row at invoice time so an admin price
+change can never alter an open invoice; fulfilment context lives in payments.meta.
 """
 import logging
 from datetime import datetime, timezone
@@ -39,11 +45,6 @@ router = APIRouter(prefix="/payments", tags=["payments"])
 # Schemas
 # ---------------------------------------------------------------------------
 
-class InvoiceRequest(BaseModel):
-    product_type: str
-    player_id: str
-
-
 class InvoiceResponse(BaseModel):
     payment_id: str
     invoice_link: str
@@ -53,19 +54,22 @@ class PaymentStatusResponse(BaseModel):
     status: str
 
 
-class ProductInfo(BaseModel):
-    product_type: str
-    title: str
-    description: str
-    price_stars: int
-
-
 class TierPriceInfo(BaseModel):
     tier: str
     intro_price_stars: int
     price_1m: int
     price_3m: int
     price_12m: int
+
+
+class DropPackInfo(BaseModel):
+    key: str
+    drops: int
+    price_stars: int
+
+
+class DropPackInvoiceRequest(BaseModel):
+    pack_key: str
 
 
 # ---------------------------------------------------------------------------
@@ -85,21 +89,122 @@ async def _fetch_user_id(db, telegram_id: int) -> str:
     return res.data["id"]
 
 
+async def create_stars_invoice(
+    db,
+    *,
+    buyer_id: str,
+    product_type: str,
+    title: str,
+    description: str,
+    price_stars: int,
+    partnership_id: str | None = None,
+    meta: dict | None = None,
+) -> tuple[str, str]:
+    """Общая механика счёта Stars (7.4): pending-платёж со снапшотом цены →
+    create_invoice_link. `meta` несёт контекст исполнения (8d): пакет капель,
+    ключ каталога полки, цена лота в каплях, игрок-получатель.
+
+    Возвращает (payment_id, invoice_link). Бросает HTTPException при отказе Telegram.
+    """
+    row: dict = {
+        "buyer_user_id": buyer_id,
+        "product_type": product_type,
+        "target_partnership_id": partnership_id,
+        "amount_stars": price_stars,
+        "status": "pending",
+    }
+    if meta:
+        row["meta"] = meta
+
+    ins_res = await db.table("payments").insert(row).execute()
+    if not ins_res.data:
+        raise HTTPException(status_code=500, detail="Failed to create payment")
+    payment_id = str(ins_res.data[0]["id"])
+
+    # Telegram: title ≤ 32, description ≤ 255. provider_token OMITTED for XTR.
+    safe_title = title[:32]
+    bot = get_bot()
+    try:
+        invoice_link = await bot.create_invoice_link(
+            title=safe_title,
+            description=description[:255],
+            payload=payment_id,
+            currency="XTR",
+            prices=[LabeledPrice(label=safe_title, amount=price_stars)],
+        )
+    except Exception as e:
+        logger.error("create_invoice_link failed payment=%s (%s): %s", payment_id, product_type, e)
+        await (
+            db.table("payments")
+            .update({"status": "failed"})
+            .eq("id", payment_id)
+            .eq("status", "pending")
+            .execute()
+        )
+        raise HTTPException(status_code=502, detail={"code": "INVOICE_FAILED"})
+
+    await db.table("payments").update({"invoice_link": invoice_link}).eq("id", payment_id).execute()
+    return payment_id, invoice_link
+
+
 # ---------------------------------------------------------------------------
-# GET /payments/products
+# Drop packs (8d) — пул капель Ответственного
 # ---------------------------------------------------------------------------
 
-@router.get("/products", response_model=list[ProductInfo])
-async def list_products(user: dict = Depends(get_current_user)):
+@router.get("/drop-packs", response_model=list[DropPackInfo])
+async def list_drop_packs(user: dict = Depends(get_current_user)):
+    """Пакеты капель для пула дарения Ответственного (§8.7). Цены — из БД."""
     db = await get_supabase()
     res = await (
-        db.table("star_products")
-        .select("product_type, title, description, price_stars")
+        db.table("drop_packs")
+        .select("key, drops, price_stars")
         .eq("is_active", True)
-        .order("price_stars")
+        .order("drops")
         .execute()
     )
-    return [ProductInfo(**row) for row in (res.data or [])]
+    return [DropPackInfo(**row) for row in (res.data or [])]
+
+
+@router.post("/drop-pack-invoice", response_model=InvoiceResponse)
+async def create_drop_pack_invoice(
+    body: DropPackInvoiceRequest,
+    user: dict = Depends(get_current_user),
+):
+    """Ответственный покупает пакет капель В СВОЙ пул дарения — партнёрство не
+    требуется (капли лежат у R до дарения). Игрок капли за Stars купить не может
+    (анти pay-to-win, §8.7) — эндпоинт закрыт ролью."""
+    if user.get("role") not in ("responsible", "admin"):
+        raise HTTPException(status_code=403, detail={"code": "RESPONSIBLE_ONLY"})
+
+    db = await get_supabase()
+    buyer_id = await _fetch_user_id(db, user["telegram_id"])
+
+    pack_res = await (
+        db.table("drop_packs")
+        .select("key, drops, price_stars, is_active")
+        .eq("key", body.pack_key)
+        .eq("is_active", True)
+        .maybe_single()
+        .execute()
+    )
+    if not pack_res or not pack_res.data:
+        raise HTTPException(status_code=400, detail={"code": "PACK_UNAVAILABLE"})
+    pack = pack_res.data
+    drops = int(pack["drops"])
+
+    payment_id, invoice_link = await create_stars_invoice(
+        db,
+        buyer_id=buyer_id,
+        product_type="drop_pack",
+        title=f"{drops} 💧 для игрока",
+        description=(
+            f"Пакет из {drops} капель в ваш пул подарков. "
+            "Капли дарятся игроку из панели наставника."
+        ),
+        price_stars=int(pack["price_stars"]),
+        meta={"pack_key": pack["key"], "drops": drops},
+    )
+    return InvoiceResponse(payment_id=payment_id, invoice_link=invoice_link)
 
 
 @router.get("/tier-prices", response_model=list[TierPriceInfo])
@@ -114,94 +219,6 @@ async def list_tier_prices_public(user: dict = Depends(get_current_user)):
     order = {"standard": 0, "premium": 1, "elite": 2}
     rows = sorted(res.data or [], key=lambda r: order.get(r["tier"], 9))
     return [TierPriceInfo(**r) for r in rows]
-
-
-# ---------------------------------------------------------------------------
-# POST /payments/invoice
-# ---------------------------------------------------------------------------
-
-@router.post("/invoice", response_model=InvoiceResponse)
-async def create_invoice(
-    body: InvoiceRequest,
-    user: dict = Depends(get_current_user),
-):
-    db = await get_supabase()
-    buyer_id = await _fetch_user_id(db, user["telegram_id"])
-
-    # Authorization: caller must be the Responsible of an ACTIVE partnership with player_id.
-    # (Partnerships are indefinite in 7.5 — liveness is status='active', not expires_at.)
-    part_res = await (
-        db.table("partnerships")
-        .select("id")
-        .eq("responsible_id", buyer_id)
-        .eq("player_id", body.player_id)
-        .eq("status", "active")
-        .maybe_single()
-        .execute()
-    )
-    if not part_res or not part_res.data:
-        raise HTTPException(status_code=403, detail={"code": "NOT_YOUR_PLAYER"})
-    partnership_id = part_res.data["id"]
-
-    # Product + price come ONLY from the DB.
-    prod_res = await (
-        db.table("star_products")
-        .select("product_type, title, description, price_stars, is_active")
-        .eq("product_type", body.product_type)
-        .eq("is_active", True)
-        .maybe_single()
-        .execute()
-    )
-    if not prod_res or not prod_res.data:
-        raise HTTPException(status_code=400, detail={"code": "PRODUCT_UNAVAILABLE"})
-    product = prod_res.data
-    price_stars = int(product["price_stars"])
-
-    # Insert pending payment (snapshot price) → get id for the invoice payload.
-    ins_res = await (
-        db.table("payments")
-        .insert({
-            "buyer_user_id": buyer_id,
-            "product_type": body.product_type,
-            "target_partnership_id": partnership_id,
-            "amount_stars": price_stars,
-            "status": "pending",
-        })
-        .execute()
-    )
-    if not ins_res.data:
-        raise HTTPException(status_code=500, detail="Failed to create payment")
-    payment_id = str(ins_res.data[0]["id"])
-
-    # Create the Telegram Stars invoice link. provider_token is OMITTED for XTR.
-    bot = get_bot()
-    try:
-        invoice_link = await bot.create_invoice_link(
-            title=product["title"],
-            description=product["description"],
-            payload=payment_id,
-            currency="XTR",
-            prices=[LabeledPrice(label=product["title"], amount=price_stars)],
-        )
-    except Exception as e:
-        logger.error("create_invoice_link failed payment=%s: %s", payment_id, e)
-        await (
-            db.table("payments")
-            .update({"status": "failed"})
-            .eq("id", payment_id)
-            .eq("status", "pending")
-            .execute()
-        )
-        raise HTTPException(status_code=502, detail={"code": "INVOICE_FAILED"})
-
-    await (
-        db.table("payments")
-        .update({"invoice_link": invoice_link})
-        .eq("id", payment_id)
-        .execute()
-    )
-
-    return InvoiceResponse(payment_id=payment_id, invoice_link=invoice_link)
 
 
 # ---------------------------------------------------------------------------
