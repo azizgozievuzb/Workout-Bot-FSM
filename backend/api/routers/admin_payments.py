@@ -1,7 +1,7 @@
 """Admin payment management (task 7.4). All endpoints require_admin.
 
   GET   /admin/payments               — ledger, newest first, with buyer + product.
-  POST  /admin/payments/{id}/refund   — refund Stars + deactivate boost + notify buyer.
+  POST  /admin/payments/{id}/refund   — refund Stars + notify buyer.
   GET   /admin/star-products          — product catalogue with prices.
   PATCH /admin/star-products/{type}   — edit price / is_active.
   GET   /admin/stars-balance          — bot's current Stars balance.
@@ -15,7 +15,6 @@ from pydantic import BaseModel, Field
 from ...core.deps import get_bot, require_admin
 from ...db.client import get_supabase
 from ...services.bot_notify import send_bot_message
-from ...services.boost_service import PRODUCT_TO_BOOST_TYPE
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +42,6 @@ class PaymentRow(BaseModel):
 
 class RefundResponse(BaseModel):
     refunded: bool
-    boost_deactivated: bool
 
 
 class StarProduct(BaseModel):
@@ -192,39 +190,15 @@ async def refund_payment(
         .execute()
     )
 
-    # Deactivate the boost this payment activated, if still active.
-    boost_deactivated = False
-    boost_type = PRODUCT_TO_BOOST_TYPE.get(p["product_type"])
-    if boost_type and p.get("target_partnership_id"):
-        now_iso = datetime.now(timezone.utc).isoformat()
-        boost_res = await (
-            db.table("boosts")
-            .select("id")
-            .eq("partnership_id", p["target_partnership_id"])
-            .eq("boost_type", boost_type)
-            .gt("expires_at", now_iso)
-            .order("activated_at", desc=True)
-            .limit(1)
-            .maybe_single()
-            .execute()
-        )
-        if boost_res and boost_res.data:
-            await (
-                db.table("boosts")
-                .update({"expires_at": now_iso})
-                .eq("id", boost_res.data["id"])
-                .execute()
-            )
-            boost_deactivated = True
-
+    # 8d: автоматической отмены товара при возврате нет. Купленный лот полки
+    # и зачисленные капли админ правит вручную (споры — §8.8a п.7).
     await send_bot_message(
         bot,
         buyer_tg,
-        "↩️ Возврат оформлен: звёзды возвращены на ваш баланс Telegram."
-        + (" Буст деактивирован." if boost_deactivated else ""),
+        "↩️ Возврат оформлен: звёзды возвращены на ваш баланс Telegram.",
     )
 
-    return RefundResponse(refunded=True, boost_deactivated=boost_deactivated)
+    return RefundResponse(refunded=True)
 
 
 # ---------------------------------------------------------------------------

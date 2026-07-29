@@ -421,9 +421,9 @@ async def apply_tier_downgrade(
             )
 
             # Best-effort cleanup: a failure here must not abort the eviction.
-            # NB: boosts cascade on the partnership delete above (boosts.partnership_id
-            # FK is ON DELETE CASCADE) — they are gone already, no player_id column.
-            for tbl in ("player_stats", "shop_items", "workout_sessions"):
+            # NB: полка (shelf_items) каскадится на удалении партнёрства выше
+            # (shelf_items.partnership_id FK ON DELETE CASCADE) — колонки player_id там нет.
+            for tbl in ("player_stats", "workout_sessions"):
                 try:
                     await db.table(tbl).delete().eq("player_id", player_id).execute()
                 except Exception:
@@ -667,6 +667,107 @@ async def update_app_shop_item(
     if not res.data:
         raise HTTPException(status_code=404, detail="Item not found")
     return AppShopItemRow(**res.data[0])
+
+
+# ===========================================================================
+# Полка наставника (8d): каталог Stars-предметов + пакеты капель
+# ===========================================================================
+# Цены — плейсхолдеры, правятся здесь (по образцу tier-prices/app-shop-items).
+# Лимиты цены лота полки живут в app_shop_items key='shelf_lot'
+# (price_drops = min, meta.max = max) — правятся редактором выше.
+
+class ShelfCatalogRow(BaseModel):
+    key: str
+    title: str
+    price_stars: int
+    is_active: bool
+    updated_at: str | None = None
+
+
+class UpdateShelfCatalogReq(BaseModel):
+    price_stars: int | None = Field(default=None, ge=1)
+    is_active: bool | None = None
+    title: str | None = None
+
+
+class DropPackRow(BaseModel):
+    key: str
+    drops: int
+    price_stars: int
+    is_active: bool
+    updated_at: str | None = None
+
+
+class UpdateDropPackReq(BaseModel):
+    drops: int | None = Field(default=None, ge=1)
+    price_stars: int | None = Field(default=None, ge=1)
+    is_active: bool | None = None
+
+
+@general_router.get("/shelf-catalog", response_model=list[ShelfCatalogRow])
+async def list_shelf_catalog(admin: dict = Depends(require_admin)):
+    db = await get_supabase()
+    res = await (
+        db.table("shelf_catalog")
+        .select("key, title, price_stars, is_active, updated_at")
+        .order("price_stars")
+        .execute()
+    )
+    return [ShelfCatalogRow(**r) for r in (res.data or [])]
+
+
+@general_router.patch("/shelf-catalog/{key}", response_model=ShelfCatalogRow)
+async def update_shelf_catalog(
+    key: str,
+    body: UpdateShelfCatalogReq,
+    admin: dict = Depends(require_admin),
+):
+    db = await get_supabase()
+    update: dict = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    for col in ("price_stars", "is_active", "title"):
+        val = getattr(body, col)
+        if val is not None:
+            update[col] = val
+    if len(update) == 1:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+
+    res = await db.table("shelf_catalog").update(update).eq("key", key).execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Catalog item not found")
+    return ShelfCatalogRow(**res.data[0])
+
+
+@general_router.get("/drop-packs", response_model=list[DropPackRow])
+async def list_drop_packs_admin(admin: dict = Depends(require_admin)):
+    db = await get_supabase()
+    res = await (
+        db.table("drop_packs")
+        .select("key, drops, price_stars, is_active, updated_at")
+        .order("drops")
+        .execute()
+    )
+    return [DropPackRow(**r) for r in (res.data or [])]
+
+
+@general_router.patch("/drop-packs/{key}", response_model=DropPackRow)
+async def update_drop_pack(
+    key: str,
+    body: UpdateDropPackReq,
+    admin: dict = Depends(require_admin),
+):
+    db = await get_supabase()
+    update: dict = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    for col in ("drops", "price_stars", "is_active"):
+        val = getattr(body, col)
+        if val is not None:
+            update[col] = val
+    if len(update) == 1:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+
+    res = await db.table("drop_packs").update(update).eq("key", key).execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Pack not found")
+    return DropPackRow(**res.data[0])
 
 
 # ===========================================================================
