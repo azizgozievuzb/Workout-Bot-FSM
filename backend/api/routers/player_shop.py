@@ -5,8 +5,9 @@
   * POST /players/me/restore-streak  — восстановление сломанного стрика (окно 72ч),
     цена = streak_restore.price × lost_streak_len, зажатая в [meta.min, meta.cap].
   * Фото-карточка (8.8b): purchase → upload (ai|raw) → choose | reroll.
+  * Полка наставника (8d): buy / fulfill / hide лотов своей пары.
 GET /players/me/shop — агрегат витрины: баланс, цены, счётчики, состояние
-фото-карточки, restore-офер.
+фото-карточки, restore-офер, полка наставника и «Мои покупки».
 """
 import asyncio
 import base64
@@ -15,12 +16,15 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from ...core.config import settings
-from ...core.deps import get_current_user
+from ...core.deps import get_bot, get_current_user
 from ...db.client import get_supabase
+from ...services import shelf as shelf_svc
+from ...services.bot_notify import send_bot_message
+from ...services.notifications import emit_notification
 from ...services.photo_styler import process_card_photo_variants
 
 logger = logging.getLogger(__name__)
@@ -64,6 +68,21 @@ class RestoreOffer(BaseModel):
     expires_at: str                      # конец 72ч-окна
 
 
+class ShelfItemOut(BaseModel):
+    """Лот полки наставника глазами игрока (8d)."""
+    id: str
+    type: str                            # 'promise' | 'star_item'
+    title: str
+    price_drops: int
+    status: str
+    star_catalog_key: str | None = None
+    has_video: bool = False
+    has_report: bool = False
+    created_at: str | None = None
+    purchased_at: str | None = None
+    fulfilled_at: str | None = None
+
+
 class PlayerShopState(BaseModel):
     drops_balance: int
     prices: dict[str, int]               # key → price_drops (только активные позиции)
@@ -76,6 +95,17 @@ class PlayerShopState(BaseModel):
     photo_card_ai_price: int | None = None
     photo_card_raw_price: int | None = None
     photo_reroll_price: int | None = None
+    # 8d: подаренные рероллы (тратятся вне прогрессии цен) + полка наставника.
+    reroll_credits: int = 0
+    shelf: list[ShelfItemOut] = []
+    my_purchases: list[ShelfItemOut] = []
+
+
+class ShelfBuyResp(BaseModel):
+    drops_balance: int
+    status: str
+    paid_freezes: int | None = None
+    reroll_credits: int | None = None
 
 
 class BuyFreezeResp(BaseModel):
@@ -197,6 +227,73 @@ def _card_state(user_row: dict) -> CardPhotoState:
     )
 
 
+def _shelf_out(row: dict) -> ShelfItemOut:
+    return ShelfItemOut(
+        id=str(row["id"]),
+        type=row["type"],
+        title=row.get("title") or "",
+        price_drops=int(row.get("price_drops") or 0),
+        status=row.get("status") or "active",
+        star_catalog_key=row.get("star_catalog_key"),
+        has_video=bool(row.get("video_path")),
+        has_report=bool(row.get("report_video_path")),
+        created_at=row.get("created_at"),
+        purchased_at=row.get("purchased_at"),
+        fulfilled_at=row.get("fulfilled_at"),
+    )
+
+
+async def _my_partnership(db, player_id: str) -> str | None:
+    res = await (
+        db.table("partnerships").select("id")
+        .eq("player_id", player_id).eq("status", "active")
+        .limit(1).execute()
+    )
+    rows = res.data or []
+    return str(rows[0]["id"]) if rows else None
+
+
+async def _my_shelf_item(db, player_id: str, item_id: str) -> dict:
+    """Лот, принадлежащий живой паре ЭТОГО игрока."""
+    partnership_id = await _my_partnership(db, player_id)
+    if not partnership_id:
+        raise HTTPException(status_code=404, detail={"code": "ITEM_NOT_FOUND"})
+    res = await (
+        db.table("shelf_items").select("*")
+        .eq("id", item_id).eq("partnership_id", partnership_id)
+        .maybe_single().execute()
+    )
+    if not res or not res.data:
+        raise HTTPException(status_code=404, detail={"code": "ITEM_NOT_FOUND"})
+    item = res.data
+    item["_partnership_id"] = partnership_id
+    return item
+
+
+async def _notify_mentor(db, partnership_id: str, *, type: str, title: str,
+                         message: str, payload: dict | None = None,
+                         bot_text: str | None = None) -> None:
+    pair = await (
+        db.table("partnerships").select("responsible_id")
+        .eq("id", partnership_id).maybe_single().execute()
+    )
+    resp_id = pair.data.get("responsible_id") if (pair and pair.data) else None
+    if not resp_id:
+        return
+    await emit_notification(db, user_id=resp_id, type=type, title=title,
+                            message=message, payload=payload or {})
+    if not bot_text:
+        return
+    try:
+        tg = await (
+            db.table("users").select("telegram_id").eq("id", resp_id).maybe_single().execute()
+        )
+        if tg and tg.data and tg.data.get("telegram_id"):
+            await send_bot_message(get_bot(), int(tg.data["telegram_id"]), bot_text)
+    except Exception as e:
+        logger.info("[shelf] mentor notify skipped pair=%s: %s", partnership_id, e)
+
+
 def _restore_offer(stats: dict, prices: dict[str, dict]) -> RestoreOffer | None:
     lost_len = int(stats.get("lost_streak_len") or 0)
     lost_at = _parse_dt(stats.get("lost_streak_at"))
@@ -229,10 +326,29 @@ async def get_shop_state(current_user: dict = Depends(get_current_user)) -> Play
 
     ps = await (
         db.table("player_stats")
-        .select("drops_balance, free_freezes_left, paid_freezes, lost_streak_len, lost_streak_at")
+        .select("drops_balance, free_freezes_left, paid_freezes, reroll_credits, "
+                "lost_streak_len, lost_streak_at")
         .eq("player_id", me["id"]).maybe_single().execute()
     )
     stats = ps.data if (ps and ps.data) else {}
+
+    # 8d: полка наставника — активные лоты пары + «Мои покупки».
+    shelf_rows: list[dict] = []
+    purchase_rows: list[dict] = []
+    partnership_id = await _my_partnership(db, me["id"])
+    if partnership_id:
+        sh = await (
+            db.table("shelf_items").select("*")
+            .eq("partnership_id", partnership_id)
+            .in_("status", ["active", "purchased", "fulfilled", "archived"])
+            .order("created_at").execute()
+        )
+        for r in (sh.data or []):
+            if r["status"] == "active":
+                shelf_rows.append(r)
+            else:
+                purchase_rows.append(r)
+        purchase_rows.sort(key=lambda r: str(r.get("purchased_at") or ""), reverse=True)
 
     def _safe(fn):
         try:
@@ -252,6 +368,9 @@ async def get_shop_state(current_user: dict = Depends(get_current_user)) -> Play
         photo_card_raw_price=_safe(lambda: _price_of(prices, "photo_card")),
         photo_reroll_price=_safe(lambda: _progressive_price(
             prices, "photo_reroll", int(me.get("card_rerolls") or 0), PHOTO_REROLL_CAP_DEFAULT)),
+        reroll_credits=int(stats.get("reroll_credits") or 0),
+        shelf=[_shelf_out(r) for r in shelf_rows],
+        my_purchases=[_shelf_out(r) for r in purchase_rows],
     )
 
 
@@ -323,6 +442,155 @@ async def restore_streak(current_user: dict = Depends(get_current_user)) -> Rest
         drops_balance=int(data.get("balance") or 0),
         current_streak=int(data.get("current_streak") or 0),
     )
+
+
+# ---------------------------------------------------------------------------
+# Полка наставника (8d): buy → fulfill | hide
+# ---------------------------------------------------------------------------
+
+@router.post("/me/shelf/{item_id}/buy", response_model=ShelfBuyResp)
+async def buy_shelf_item(
+    item_id: uuid.UUID, current_user: dict = Depends(get_current_user)
+) -> ShelfBuyResp:
+    """Покупка лота полки за капли. Всё одной транзакцией (RPC 038): гейт
+    status='active', кап заморозок ДО списания, эффект star_item, смена статуса.
+    Обещание → 'purchased' (у наставника «к исполнению»), Stars-предмет → 'fulfilled'."""
+    db = await get_supabase()
+    me = await _me(db, current_user["telegram_id"])
+
+    res = await db.rpc("buy_shelf_item", {
+        "p_player_id": me["id"], "p_item_id": str(item_id),
+    }).execute()
+    data = res.data if isinstance(res.data, dict) else {}
+    if not data.get("ok"):
+        code = data.get("code") or "ITEM_NOT_FOUND"
+        if code == "INSUFFICIENT_DROPS":
+            raise HTTPException(status_code=400, detail={
+                "code": code,
+                "balance": int(data.get("balance") or 0),
+                "price": int(data.get("price") or 0),
+            })
+        if code == "FREEZE_CAP":
+            raise HTTPException(status_code=400, detail={
+                "code": code, "paid_freezes": int(data.get("paid_freezes") or 0),
+            })
+        if code == "ITEM_NOT_FOUND":
+            raise HTTPException(status_code=404, detail={"code": code})
+        raise HTTPException(status_code=409, detail={"code": code, "status": data.get("status")})
+
+    # Свежие счётчики (эффект star_item уже применён внутри RPC).
+    fresh = await (
+        db.table("player_stats").select("paid_freezes, reroll_credits")
+        .eq("player_id", me["id"]).maybe_single().execute()
+    )
+    f = (fresh.data if (fresh and fresh.data) else {}) or {}
+
+    item = await _my_shelf_item(db, me["id"], str(item_id))
+    if data.get("type") == "promise":
+        await _notify_mentor(
+            db, item["_partnership_id"],
+            type="promise_purchased",
+            title="⏳ Обещание выкуплено",
+            message=f"«{item.get('title')}» — {item.get('price_drops')} 💧. Ждёт исполнения.",
+            payload={"item_id": str(item_id)},
+            bot_text=(f"⏳ Игрок выкупил твоё обещание «{item.get('title')}» "
+                      f"за {item.get('price_drops')} 💧. Пора исполнять!"),
+        )
+    else:
+        await _notify_mentor(
+            db, item["_partnership_id"],
+            type="shelf_item_bought",
+            title="🛒 Предмет с полки куплен",
+            message=f"«{item.get('title')}» — {item.get('price_drops')} 💧",
+            payload={"item_id": str(item_id)},
+        )
+
+    return ShelfBuyResp(
+        drops_balance=int(data.get("balance") or 0),
+        status=str(data.get("status") or ""),
+        paid_freezes=int(f.get("paid_freezes") or 0),
+        reroll_credits=int(f.get("reroll_credits") or 0),
+    )
+
+
+@router.post("/me/shelf/{item_id}/fulfill", response_model=ShelfItemOut)
+async def fulfill_shelf_item(
+    item_id: uuid.UUID,
+    video: UploadFile | None = File(default=None),
+    current_user: dict = Depends(get_current_user),
+) -> ShelfItemOut:
+    """Галочку «Выполнено» ставит ИГРОК (§8.8a п.5); видеоотчёт — опционально.
+    Авто-возврата нет: вечный pending давит на наставника, споры — админ вручную."""
+    db = await get_supabase()
+    me = await _me(db, current_user["telegram_id"])
+    item = await _my_shelf_item(db, me["id"], str(item_id))
+    if item["status"] != "purchased":
+        raise HTTPException(status_code=409, detail={"code": "NOT_PENDING", "status": item["status"]})
+
+    update: dict = {"status": "fulfilled", "fulfilled_at": datetime.now(UTC).isoformat()}
+
+    if video is not None:
+        payload = await video.read()
+        if len(payload) > shelf_svc.MAX_PROMISE_BYTES:
+            raise HTTPException(status_code=413, detail={"code": "VIDEO_TOO_LARGE"})
+        if payload:
+            mime = video.content_type or "video/webm"
+            if mime not in shelf_svc.PROMISE_MIMES:
+                mime = "video/webm"
+            path = shelf_svc.promise_path(item["_partnership_id"], "report")
+            try:
+                await shelf_svc.upload_promise_video(db, path, payload, mime)
+                update["report_video_path"] = path
+            except Exception as e:
+                logger.error("[shelf] report upload failed item=%s: %s", item_id, e)
+                raise HTTPException(status_code=500, detail={"code": "STORAGE_FAILED"})
+
+    res = await (
+        db.table("shelf_items").update(update)
+        .eq("id", str(item_id)).eq("status", "purchased").execute()
+    )
+    if not res.data:
+        raise HTTPException(status_code=409, detail={"code": "NOT_PENDING"})
+
+    await _notify_mentor(
+        db, item["_partnership_id"],
+        type="promise_fulfilled",
+        title="✅ Обещание исполнено",
+        message=f"Игрок отметил «{item.get('title')}» выполненным.",
+        payload={"item_id": str(item_id), "has_report": bool(update.get("report_video_path"))},
+        bot_text=f"✅ Игрок отметил обещание «{item.get('title')}» выполненным. Спасибо!",
+    )
+    return _shelf_out(res.data[0])
+
+
+@router.post("/me/shelf/{item_id}/hide", response_model=ShelfItemOut)
+async def hide_shelf_item(
+    item_id: uuid.UUID, current_user: dict = Depends(get_current_user)
+) -> ShelfItemOut:
+    """«Мне это неинтересно» — лот скрыт у игрока, наставник уведомлён (§8.8).
+    Слот остаётся занятым; наставник может сменить цену и перевыставить."""
+    db = await get_supabase()
+    me = await _me(db, current_user["telegram_id"])
+    item = await _my_shelf_item(db, me["id"], str(item_id))
+    if item["status"] != "active":
+        raise HTTPException(status_code=409, detail={"code": "ITEM_NOT_AVAILABLE", "status": item["status"]})
+
+    res = await (
+        db.table("shelf_items").update({"status": "hidden"})
+        .eq("id", str(item_id)).eq("status", "active").execute()
+    )
+    if not res.data:
+        raise HTTPException(status_code=409, detail={"code": "ITEM_NOT_AVAILABLE"})
+
+    await _notify_mentor(
+        db, item["_partnership_id"],
+        type="shelf_item_hidden",
+        title="🙈 Игроку это неинтересно",
+        message=f"«{item.get('title')}» скрыт. Можно сменить цену и перевыставить.",
+        payload={"item_id": str(item_id)},
+        bot_text=f"🙈 Игрок скрыл лот «{item.get('title')}». Попробуй другую цену или другое обещание.",
+    )
+    return _shelf_out(res.data[0])
 
 
 # ---------------------------------------------------------------------------
@@ -453,7 +721,11 @@ async def card_photo_choose(
 async def card_photo_reroll(current_user: dict = Depends(get_current_user)) -> CardPhotoState:
     """Реролл: 2 новых варианта из сохранённого селфи. Цена прогрессирует по
     card_rerolls (8c.1). Атомарно через RPC: двойной клик не списывает дважды —
-    второй запрос увидит статус processing → NOT_CHOOSING."""
+    второй запрос увидит статус processing → NOT_CHOOSING.
+
+    8d: если есть подаренные reroll_credits, RPC тратит кредит — капли не
+    списываются и счётчик прогрессии card_rerolls не двигается (подарок вне
+    прогрессии цен). Поэтому нехватка капель при наличии кредита не блокирует."""
     db = await get_supabase()
     me = await _me(db, current_user["telegram_id"])
     cand = me.get("card_photo_candidates") or {}

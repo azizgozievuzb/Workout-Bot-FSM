@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from ...core.deps import get_bot, get_current_user
 from ...db.client import get_supabase
+from ...services import shelf as shelf_svc
 from ...services.bot_notify import send_bot_message
 from ...services.notifications import emit_notification
 
@@ -38,6 +39,8 @@ class MyPlayerOut(BaseModel):
     days_left: int | None
     days_since_expired: int | None
     is_deactivated: bool
+    # 8d: бейдж «⏳ N» — выкупленные, но не исполненные обещания этой пары.
+    pending_promises: int = 0
 
 
 class DeletePartnershipResp(BaseModel):
@@ -142,6 +145,8 @@ async def my_players(current_user: dict = Depends(get_current_user)) -> list[MyP
     )
     users_by_id = {u["id"]: u for u in (users_res.data or [])}
 
+    pending_by_pair = await shelf_svc.pending_counts(db, [str(p["id"]) for p in pair_rows])
+
     now = datetime.now(timezone.utc)
     out: list[MyPlayerOut] = []
     for p in pair_rows:
@@ -183,6 +188,7 @@ async def my_players(current_user: dict = Depends(get_current_user)) -> list[MyP
             days_left=days_left,
             days_since_expired=days_since_expired,
             is_deactivated=bool(u.get("deactivated_at")),
+            pending_promises=pending_by_pair.get(str(p["id"]), 0),
         ))
 
     def sort_key(row: MyPlayerOut):
