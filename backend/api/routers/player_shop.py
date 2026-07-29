@@ -534,10 +534,8 @@ async def fulfill_shelf_item(
         if len(payload) > shelf_svc.MAX_PROMISE_BYTES:
             raise HTTPException(status_code=413, detail={"code": "VIDEO_TOO_LARGE"})
         if payload:
-            mime = video.content_type or "video/webm"
-            if mime not in shelf_svc.PROMISE_MIMES:
-                mime = "video/webm"
-            path = shelf_svc.promise_path(item["_partnership_id"], "report")
+            mime = shelf_svc.normalize_mime(video.content_type)
+            path = shelf_svc.promise_path(item["_partnership_id"], "report", mime)
             try:
                 await shelf_svc.upload_promise_video(db, path, payload, mime)
                 update["report_video_path"] = path

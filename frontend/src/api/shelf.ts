@@ -76,19 +76,34 @@ export async function getShelfCatalog(): Promise<ShelfCatalogState> {
     return data;
 }
 
+/** Расширение файла по реальному MIME блоба (Safari отдаёт mp4, Chrome — webm). */
+export function videoExt(blob: Blob): string {
+    const t = (blob.type || '').toLowerCase();
+    if (t.includes('mp4')) return 'mp4';
+    if (t.includes('quicktime') || t.includes('mov')) return 'mov';
+    return 'webm';
+}
+
 export async function createPromise(params: {
     playerId: string;
     title: string;
     priceDrops: number;
     video: Blob;
-    filename?: string;
+    onProgress?: (pct: number) => void;
 }): Promise<ShelfItem> {
     const form = new FormData();
     form.append('player_id', params.playerId);
     form.append('title', params.title);
     form.append('price_drops', String(params.priceDrops));
-    form.append('video', params.video, params.filename ?? 'promise.webm');
-    const { data } = await api.post('/shelf/promise', form, { timeout: 120_000 });
+    form.append('video', params.video, `promise.${videoExt(params.video)}`);
+    const { data } = await api.post('/shelf/promise', form, {
+        timeout: 120_000,
+        onUploadProgress: (e) => {
+            if (params.onProgress && e.total) {
+                params.onProgress(Math.round((e.loaded / e.total) * 100));
+            }
+        },
+    });
     return data;
 }
 
@@ -142,10 +157,17 @@ export async function buyShelfItem(itemId: string): Promise<ShelfBuyResult> {
     return data;
 }
 
-export async function fulfillShelfItem(itemId: string, video?: Blob | null): Promise<ShelfItem> {
+export async function fulfillShelfItem(
+    itemId: string, video?: Blob | null, onProgress?: (pct: number) => void,
+): Promise<ShelfItem> {
     const form = new FormData();
-    if (video) form.append('video', video, 'report.webm');
-    const { data } = await api.post(`/players/me/shelf/${itemId}/fulfill`, form, { timeout: 120_000 });
+    if (video) form.append('video', video, `report.${videoExt(video)}`);
+    const { data } = await api.post(`/players/me/shelf/${itemId}/fulfill`, form, {
+        timeout: 120_000,
+        onUploadProgress: (e) => {
+            if (onProgress && e.total) onProgress(Math.round((e.loaded / e.total) * 100));
+        },
+    });
     return data;
 }
 

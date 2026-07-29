@@ -93,6 +93,8 @@ const PlayerShop: React.FC = () => {
     const [photoFlow, setPhotoFlow] = useState(false);
     // 8d: отчёт по исполненному обещанию (опциональное видео)
     const [reportFor, setReportFor] = useState<ShelfItem | null>(null);
+    const [reportError, setReportError] = useState('');
+    const [reportProgress, setReportProgress] = useState<number | null>(null);
 
     const showToast = useCallback((msg: string) => {
         setToast(msg);
@@ -194,15 +196,24 @@ const PlayerShop: React.FC = () => {
 
     const markDone = useCallback(async (item: ShelfItem, video: Blob | null) => {
         if (buyingId) return;
-        setBuyingId(item.id);
+        setBuyingId(item.id); setReportError(''); setReportProgress(video ? 0 : null);
         try {
-            await fulfillShelfItem(item.id, video);
+            await fulfillShelfItem(item.id, video, setReportProgress);
             hapticNotification('success');
             showToast('✅ Отмечено выполненным');
             setReportFor(null);
             refreshShop();
-        } catch (e: any) { failToast(e, 'Не удалось отметить'); }
-        finally { setBuyingId(null); }
+        } catch (e: any) {
+            hapticNotification('error');
+            const d = e?.response?.data?.detail;
+            const code = typeof d === 'object' ? d?.code : '';
+            console.error('[shelf] fulfill failed', e?.response?.status, d ?? e?.message);
+            const msg = code === 'VIDEO_TOO_LARGE' ? 'Видео больше 30 МБ — снимите короче'
+                : code === 'NOT_PENDING' ? 'Обещание уже отмечено'
+                    : 'Не удалось отметить';
+            if (video) setReportError(msg); else failToast(e, msg);
+        }
+        finally { setBuyingId(null); setReportProgress(null); }
     }, [buyingId, showToast, failToast, refreshShop]);
 
     const openVideo = useCallback(async (item: ShelfItem, kind: 'promise' | 'report') => {
@@ -401,8 +412,10 @@ const PlayerShop: React.FC = () => {
                     hint={`«${reportFor.title}» — необязательно, но приятно наставнику.`}
                     confirmLabel="Отметить выполненным"
                     busy={buyingId === reportFor.id}
+                    error={reportError}
+                    progress={reportProgress}
                     onReady={(blob) => markDone(reportFor, blob)}
-                    onCancel={() => setReportFor(null)}
+                    onCancel={() => { setReportFor(null); setReportError(''); }}
                 />
             )}
 

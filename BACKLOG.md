@@ -76,13 +76,9 @@
 
 ---
 
-## 🐛 Tech-debt: AdminCube `total_stars_earned`
+## 🐛 Tech-debt: AdminCube `total_stars_earned` — ✅ ЗАКРЫТ (Session 56, 2026-07-29)
 
-**Контекст:** `frontend/src/components/cubes/AdminCube.tsx:219` рендерит `g.stats.total_stars_earned`, но бэкенд (`backend/api/routers/admin.py` → `ResponsibleStats`) и TS-типы (`frontend/src/api/admin.ts`) отдают `total_xp_earned`. Поле всегда `undefined`, в карточке Responsible видно `⭐undefined`.
-
-**Что делать:** заменить на `total_xp_earned` (или ввести отдельное `total_drops_earned` если бэкенд начнёт его агрегировать). 1-line fix.
-
-**Когда:** в любую следующую сессию по admin-панели или вместе с Phase 8 (там Responsible-панель будет переделываться).
+Починен попутно при включении настоящего tsc-гейта в смоук-сессии 8d (`total_stars_earned` → `total_xp_earned`; ⭐undefined в карточке Responsible ушёл). Там же удалён мёртвый `ensureMounted()` в haptic.ts.
 
 ---
 

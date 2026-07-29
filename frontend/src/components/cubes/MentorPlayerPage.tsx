@@ -39,6 +39,8 @@ const MentorPlayerPage: React.FC<Props> = ({ playerId, onClose }) => {
 
     const [promiseForm, setPromiseForm] = useState(false);
     const [recorder, setRecorder] = useState(false);
+    const [recError, setRecError] = useState('');
+    const [upProgress, setUpProgress] = useState<number | null>(null);
     const [pTitle, setPTitle] = useState('');
     const [pPrice, setPPrice] = useState('');
     const [starForm, setStarForm] = useState<{ key: string; title: string; stars: number } | null>(null);
@@ -79,16 +81,35 @@ const MentorPlayerPage: React.FC<Props> = ({ playerId, onClose }) => {
     const submitPromise = useCallback(async (blob: Blob) => {
         const price = parseInt(pPrice, 10);
         if (!page) return;
-        setBusy(true);
+        setBusy(true); setRecError(''); setUpProgress(0);
         try {
-            await createPromise({ playerId, title: pTitle.trim(), priceDrops: price, video: blob });
+            await createPromise({
+                playerId, title: pTitle.trim(), priceDrops: price, video: blob,
+                onProgress: setUpProgress,
+            });
             hapticNotification('success');
             show('🎁 Обещание на полке');
             setRecorder(false); setPromiseForm(false); setPTitle(''); setPPrice('');
             load();
-        } catch (e) { fail(e, 'Не удалось создать обещание'); }
-        finally { setBusy(false); }
-    }, [page, playerId, pTitle, pPrice, show, fail, load]);
+        } catch (e: any) {
+            // Экран записи НЕ закрываем — показываем причину прямо в нём,
+            // иначе тост уезжает под оверлей и отказ выглядит как «ничего не произошло».
+            hapticNotification('error');
+            const d = e?.response?.data?.detail;
+            const code = typeof d === 'object' ? d?.code : '';
+            const status = e?.response?.status;
+            console.error('[shelf] createPromise failed', status, d ?? e?.message);
+            setRecError(
+                code === 'PRICE_OUT_OF_LIMITS' ? `Цена должна быть от ${d.min} до ${d.max} 💧`
+                    : code === 'NO_FREE_SLOT' ? `Свободных слотов нет (${d.used}/${d.total})`
+                        : code === 'VIDEO_TOO_LARGE' ? 'Видео больше 30 МБ — снимите короче'
+                            : code === 'STORAGE_FAILED' ? 'Хранилище отвергло файл. Попробуйте ещё раз'
+                                : e?.code === 'ECONNABORTED' ? 'Загрузка не уложилась в таймаут — попробуйте ещё раз'
+                                    : `Не удалось создать обещание${status ? ` (HTTP ${status})` : ''}`,
+            );
+        }
+        finally { setBusy(false); setUpProgress(null); }
+    }, [page, playerId, pTitle, pPrice, show, load]);
 
     const promiseValid = (() => {
         if (!page) return false;
@@ -412,8 +433,10 @@ const MentorPlayerPage: React.FC<Props> = ({ playerId, onClose }) => {
                         hint={`«${pTitle.trim()}» — ${pPrice} 💧. До 30 секунд.`}
                         confirmLabel="На полку"
                         busy={busy}
+                        error={recError}
+                        progress={upProgress}
                         onReady={submitPromise}
-                        onCancel={() => setRecorder(false)}
+                        onCancel={() => { setRecorder(false); setRecError(''); }}
                     />
                 )}
                 {packs && <DropPackModal onClose={() => setPacks(false)} onCredited={load} />}

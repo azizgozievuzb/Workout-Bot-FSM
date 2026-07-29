@@ -125,8 +125,20 @@ async def pending_counts(db, partnership_ids: list[str]) -> dict[str, int]:
 # Storage (приватный бакет)
 # ---------------------------------------------------------------------------
 
-def promise_path(partnership_id: str, kind: str) -> str:
-    return f"{partnership_id}/{kind}_{uuid.uuid4().hex}.webm"
+_MIME_EXT = {"video/webm": "webm", "video/mp4": "mp4", "video/quicktime": "mov"}
+
+
+def normalize_mime(raw: str | None) -> str:
+    """Браузеры шлют 'video/webm;codecs=vp9,opus' или 'video/mp4;codecs=avc1'.
+    Бакет promises принимает только базовые типы — режем параметры и валидируем.
+    Неизвестное считаем webm (MediaRecorder по умолчанию отдаёт его)."""
+    base = (raw or "").split(";")[0].strip().lower()
+    return base if base in PROMISE_MIMES else "video/webm"
+
+
+def promise_path(partnership_id: str, kind: str, mime: str | None = None) -> str:
+    ext = _MIME_EXT.get(normalize_mime(mime), "webm")
+    return f"{partnership_id}/{kind}_{uuid.uuid4().hex}.{ext}"
 
 
 async def upload_promise_video(db, path: str, payload: bytes, mime: str) -> None:

@@ -14,6 +14,14 @@ const api = axios.create({
 api.interceptors.request.use((config) => {
   const t = getToken();
   if (t) config.headers.Authorization = `Bearer ${t}`;
+  // FormData НЕЛЬЗЯ отправлять с дефолтным application/json: axios в
+  // transformRequest видит JSON-тип и молча сериализует форму через
+  // formDataToJSON (Blob превращается в {}), сервер получает JSON вместо
+  // multipart → 422 без файла. Снимаем заголовок — браузер сам проставит
+  // multipart/form-data с boundary. (Поймано на смоуке 8d, шаг 2а.)
+  if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+    delete config.headers['Content-Type'];
+  }
   return config;
 });
 

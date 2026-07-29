@@ -339,19 +339,50 @@
 
 /* ---------- Запись обещания ---------- */
 
+/* Лист рекордера портируется в body и обязан жить внутри вьюпорта:
+   на десктопном Telegram Web высокий лист обрезался сверху и не скроллился
+   (находка смоука 8d, шаг 2а). */
+.promise-backdrop {
+    align-items: center;
+    padding: 8px;
+}
+
 .promise-recorder {
     max-width: 420px;
+    max-height: 96dvh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+    border-radius: 20px;
+    padding-bottom: 16px;
+    gap: 10px;
 }
 
 .promise-video-box {
     position: relative;
     width: 100%;
-    aspect-ratio: 3 / 4;
-    max-height: 45vh;
+    height: min(38dvh, 280px);
+    flex-shrink: 0;
     border-radius: 14px;
     overflow: hidden;
     background: #000;
-    margin: 8px 0;
+    margin: 4px 0;
+}
+
+.promise-video-placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    opacity: 0.45;
+}
+
+.promise-meta {
+    font-size: 12px;
+    opacity: 0.75;
+    text-align: center;
 }
 
 .promise-video {

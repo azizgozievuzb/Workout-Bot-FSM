@@ -339,15 +339,13 @@ async def create_promise(
         raise HTTPException(status_code=400, detail={"code": "EMPTY_VIDEO"})
     if len(payload) > shelf_svc.MAX_PROMISE_BYTES:
         raise HTTPException(status_code=413, detail={"code": "VIDEO_TOO_LARGE"})
-    mime = video.content_type or "video/webm"
-    if mime not in shelf_svc.PROMISE_MIMES:
-        mime = "video/webm"
-
-    path = shelf_svc.promise_path(partnership_id, "promise")
+    mime = shelf_svc.normalize_mime(video.content_type)
+    path = shelf_svc.promise_path(partnership_id, "promise", mime)
     try:
         await shelf_svc.upload_promise_video(db, path, payload, mime)
     except Exception as e:
-        logger.error("[shelf] promise upload failed pair=%s: %s", partnership_id, e)
+        logger.error("[shelf] promise upload failed pair=%s mime=%s (raw=%s): %s",
+                     partnership_id, mime, video.content_type, e)
         raise HTTPException(status_code=500, detail={"code": "STORAGE_FAILED"})
 
     ins = await (
