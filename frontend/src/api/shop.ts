@@ -86,6 +86,7 @@ export interface CardPhotoState {
     url: string | null;
     source: 'ai' | 'raw' | null;
     status: 'awaiting_photo' | 'processing' | 'choosing' | 'failed' | null;
+    mode: 'ai' | 'raw' | null;   // 8c.1: режим текущего флоу, оплачен при покупке
     variants: string[];
 }
 
@@ -104,6 +105,10 @@ export interface PlayerShopState {
     paid_freezes_cap: number;
     restore: RestoreOffer | null;
     card_photo: CardPhotoState;
+    // 8c.1: актуальные для юзера цены (прогрессия AI-смен/рероллов)
+    photo_card_ai_price: number | null;
+    photo_card_raw_price: number | null;
+    photo_reroll_price: number | null;
 }
 
 export async function getPlayerShop(): Promise<PlayerShopState> {
@@ -121,8 +126,8 @@ export async function restoreStreak(): Promise<{ drops_balance: number; current_
     return data;
 }
 
-export async function cardPhotoPurchase(): Promise<CardPhotoState> {
-    const { data } = await api.post('/players/me/card-photo/purchase');
+export async function cardPhotoPurchase(mode: 'ai' | 'raw'): Promise<CardPhotoState> {
+    const { data } = await api.post('/players/me/card-photo/purchase', { mode });
     return data;
 }
 

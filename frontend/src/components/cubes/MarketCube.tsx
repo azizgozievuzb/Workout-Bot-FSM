@@ -256,7 +256,10 @@ const PlayerShop: React.FC = () => {
     const unlockPrice = prices['light_unlock'] ?? sched?.light_unlock_price ?? 300;
     const lockPrice = prices['light_lock'] ?? sched?.light_lock_price ?? 500;
     const freezePrice = prices['freeze'] ?? 50;
-    const photoPrice = prices['photo_card'] ?? 200;
+    // 8c.1: актуальные для юзера цены (прогрессия AI-смен/рероллов, raw — фикс)
+    const photoAiPrice = shop.photo_card_ai_price ?? prices['photo_card'] ?? 200;
+    const photoRawPrice = shop.photo_card_raw_price ?? prices['photo_card'] ?? 200;
+    const rerollPrice = shop.photo_reroll_price ?? prices['photo_reroll'] ?? 60;
     const lightUnlocked = sched?.light_unlocked ?? false;
     const freezeCapReached = shop.paid_freezes >= shop.paid_freezes_cap;
 
@@ -309,7 +312,7 @@ const PlayerShop: React.FC = () => {
                     </div>
                     <button className="cube-btn-sm" disabled={busy || freezeCapReached}
                         onClick={(e) => { e.stopPropagation(); doBuyFreeze(); }}>
-                        {freezeCapReached ? 'Запас полон' : 'Купить'}
+                        {freezeCapReached ? 'Запас полон' : busy ? '…' : 'Купить'}
                     </button>
                 </div>
 
@@ -322,7 +325,7 @@ const PlayerShop: React.FC = () => {
                             : 'Наставник видит мультяшку. Поставь своё фото.'}
                     </div>
                     <div className="shop-item-price-row">
-                        <span className="shop-item-price">{photoPrice} 💧</span>
+                        <span className="shop-item-price">✨ {photoAiPrice} 💧 · 📷 {photoRawPrice} 💧</span>
                     </div>
                     <button className="cube-btn-sm" disabled={busy}
                         onClick={(e) => { e.stopPropagation(); setPhotoFlow(true); }}>
@@ -372,8 +375,10 @@ const PlayerShop: React.FC = () => {
             {photoFlow && (
                 <CardPhotoFlow
                     card={shop.card_photo}
-                    prices={prices}
                     balance={shop.drops_balance}
+                    aiPrice={photoAiPrice}
+                    rawPrice={photoRawPrice}
+                    rerollPrice={rerollPrice}
                     onClose={() => { setPhotoFlow(false); refreshShop(); }}
                     onChanged={refreshShop}
                 />

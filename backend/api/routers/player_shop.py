@@ -35,6 +35,13 @@ STREAK_RESTORE_WINDOW_HOURS = 72
 RESTORE_MIN_DEFAULT = 60
 RESTORE_CAP_DEFAULT = 400
 
+# 8c.1: прогрессирующие цены фото-карточки (дефолты, если meta пуста).
+# AI-смена №k = photo_card × mult^(k-1) (кап), реролл №m = photo_reroll × mult^(m-1) (кап);
+# raw-смена — всегда фикс. mult/cap — админ-редактируемые (app_shop_items.meta).
+PHOTO_MULT_DEFAULT = 2
+PHOTO_CARD_CAP_DEFAULT = 3200
+PHOTO_REROLL_CAP_DEFAULT = 960
+
 MAX_SELFIE_BYTES = 5 * 1024 * 1024
 
 
@@ -46,6 +53,7 @@ class CardPhotoState(BaseModel):
     url: str | None = None
     source: str | None = None            # 'ai' | 'raw'
     status: str | None = None            # None | awaiting_photo | processing | choosing | failed
+    mode: str | None = None              # режим текущего флоу ('ai'|'raw'), фиксируется при покупке
     variants: list[str] = []
 
 
@@ -64,6 +72,10 @@ class PlayerShopState(BaseModel):
     paid_freezes_cap: int = 3
     restore: RestoreOffer | None = None
     card_photo: CardPhotoState
+    # 8c.1: актуальные для юзера цены фото-карточки (прогрессия по счётчикам).
+    photo_card_ai_price: int | None = None
+    photo_card_raw_price: int | None = None
+    photo_reroll_price: int | None = None
 
 
 class BuyFreezeResp(BaseModel):
@@ -81,6 +93,10 @@ class CardUploadReq(BaseModel):
     mode: Literal["ai", "raw"]
 
 
+class CardPurchaseReq(BaseModel):
+    mode: Literal["ai", "raw"] = "ai"
+
+
 class CardChooseReq(BaseModel):
     index: int
 
@@ -93,7 +109,8 @@ async def _me(db, telegram_id: int) -> dict:
     res = await (
         db.table("users")
         .select("id, telegram_id, gender, has_player_access, "
-                "card_photo_url, card_photo_source, card_photo_candidates")
+                "card_photo_url, card_photo_source, card_photo_candidates, "
+                "card_ai_changes, card_rerolls")
         .eq("telegram_id", telegram_id)
         .maybe_single()
         .execute()
@@ -131,6 +148,15 @@ def _restore_price(prices: dict[str, dict], lost_len: int) -> int:
     return max(lo, min(unit * lost_len, hi))
 
 
+def _progressive_price(prices: dict[str, dict], key: str, count: int, cap_default: int) -> int:
+    """Цена №(count+1)-й операции: base × mult^count, зажатая капом (8c.1)."""
+    base = _price_of(prices, key)
+    meta = (prices.get(key) or {}).get("meta") or {}
+    mult = int(meta.get("mult") or PHOTO_MULT_DEFAULT)
+    cap = int(meta.get("cap") or cap_default)
+    return min(base * (mult ** max(0, count)), cap)
+
+
 def _parse_dt(v) -> datetime | None:
     if not v:
         return None
@@ -139,45 +165,6 @@ def _parse_dt(v) -> datetime | None:
         return dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt
     except (ValueError, TypeError):
         return None
-
-
-async def _charge_drops(db, player_id: str, price: int) -> int:
-    """Оптимистичное списание (compare-and-set, 2 попытки). Возвращает новый баланс."""
-    for _ in range(2):
-        ps = await (
-            db.table("player_stats").select("drops_balance")
-            .eq("player_id", player_id).maybe_single().execute()
-        )
-        bal = int((ps.data or {}).get("drops_balance") or 0) if ps else 0
-        if bal < price:
-            raise HTTPException(
-                status_code=400,
-                detail={"code": "INSUFFICIENT_DROPS", "balance": bal, "price": price},
-            )
-        upd = await (
-            db.table("player_stats").update({"drops_balance": bal - price})
-            .eq("player_id", player_id).eq("drops_balance", bal).execute()
-        )
-        if upd.data:
-            return bal - price
-    raise HTTPException(status_code=409, detail={"code": "RACE"})
-
-
-async def _refund_drops(db, player_id: str, amount: int) -> None:
-    """Возврат капель (best-effort, 3 попытки CAS)."""
-    for _ in range(3):
-        ps = await (
-            db.table("player_stats").select("drops_balance")
-            .eq("player_id", player_id).maybe_single().execute()
-        )
-        bal = int((ps.data or {}).get("drops_balance") or 0) if ps else 0
-        upd = await (
-            db.table("player_stats").update({"drops_balance": bal + amount})
-            .eq("player_id", player_id).eq("drops_balance", bal).execute()
-        )
-        if upd.data:
-            return
-    logger.critical("drops refund FAILED player=%s amount=%s", player_id, amount)
 
 
 def _decode_selfie(photo_base64: str) -> bytes:
@@ -205,6 +192,7 @@ def _card_state(user_row: dict) -> CardPhotoState:
         url=user_row.get("card_photo_url"),
         source=user_row.get("card_photo_source"),
         status=cand.get("status"),
+        mode=cand.get("mode"),
         variants=list(cand.get("variants") or []),
     )
 
@@ -246,6 +234,12 @@ async def get_shop_state(current_user: dict = Depends(get_current_user)) -> Play
     )
     stats = ps.data if (ps and ps.data) else {}
 
+    def _safe(fn):
+        try:
+            return fn()
+        except HTTPException:
+            return None  # позиция выключена в админке
+
     return PlayerShopState(
         drops_balance=int(stats.get("drops_balance") or 0),
         prices={k: int(r["price_drops"]) for k, r in prices.items() if r.get("is_active")},
@@ -253,6 +247,11 @@ async def get_shop_state(current_user: dict = Depends(get_current_user)) -> Play
         paid_freezes=int(stats.get("paid_freezes") or 0),
         restore=_restore_offer(stats, prices),
         card_photo=_card_state(me),
+        photo_card_ai_price=_safe(lambda: _progressive_price(
+            prices, "photo_card", int(me.get("card_ai_changes") or 0), PHOTO_CARD_CAP_DEFAULT)),
+        photo_card_raw_price=_safe(lambda: _price_of(prices, "photo_card")),
+        photo_reroll_price=_safe(lambda: _progressive_price(
+            prices, "photo_reroll", int(me.get("card_rerolls") or 0), PHOTO_REROLL_CAP_DEFAULT)),
     )
 
 
@@ -331,8 +330,14 @@ async def restore_streak(current_user: dict = Depends(get_current_user)) -> Rest
 # ---------------------------------------------------------------------------
 
 @router.post("/me/card-photo/purchase", response_model=CardPhotoState)
-async def card_photo_purchase(current_user: dict = Depends(get_current_user)) -> CardPhotoState:
-    """Покупка «Своё фото на карточке». Повторная смена позже — снова полная цена."""
+async def card_photo_purchase(
+    body: CardPurchaseReq | None = None,
+    current_user: dict = Depends(get_current_user),
+) -> CardPhotoState:
+    """Покупка смены фото. Режим выбирается ДО оплаты (8c.1): raw — фикс-цена,
+    ai — прогрессия по счётчику card_ai_changes. Атомарно через RPC (двойной клик
+    не списывает дважды: второй запрос увидит CARD_FLOW_PENDING)."""
+    mode = body.mode if body else "ai"
     db = await get_supabase()
     me = await _me(db, current_user["telegram_id"])
     cand = me.get("card_photo_candidates") or {}
@@ -340,14 +345,25 @@ async def card_photo_purchase(current_user: dict = Depends(get_current_user)) ->
         raise HTTPException(status_code=409, detail={"code": "CARD_FLOW_PENDING"})
 
     prices = await _prices(db)
-    price = _price_of(prices, "photo_card")
-    await _charge_drops(db, me["id"], price)
+    if mode == "ai":
+        price = _progressive_price(
+            prices, "photo_card", int(me.get("card_ai_changes") or 0), PHOTO_CARD_CAP_DEFAULT)
+    else:
+        price = _price_of(prices, "photo_card")
 
-    new_cand = {"status": "awaiting_photo"}
-    await (
-        db.table("users").update({"card_photo_candidates": new_cand})
-        .eq("id", me["id"]).execute()
-    )
+    res = await db.rpc("begin_card_purchase", {
+        "p_user_id": me["id"], "p_price": price, "p_mode": mode,
+    }).execute()
+    data = res.data if isinstance(res.data, dict) else {}
+    if not data.get("ok"):
+        code = data.get("code") or "CARD_FLOW_PENDING"
+        if code == "INSUFFICIENT_DROPS":
+            raise HTTPException(status_code=400, detail={
+                "code": code, "balance": int(data.get("balance") or 0), "price": price,
+            })
+        raise HTTPException(status_code=409, detail={"code": code})
+
+    new_cand = {"status": "awaiting_photo", "mode": mode}
     return _card_state({**me, "card_photo_candidates": new_cand})
 
 
@@ -362,6 +378,11 @@ async def card_photo_upload(
     cand = me.get("card_photo_candidates") or {}
     if cand.get("status") not in ("awaiting_photo", "failed"):
         raise HTTPException(status_code=409, detail={"code": "NOT_AWAITING_PHOTO"})
+    # 8c.1: режим оплачен при покупке — подмена на другой (иначе оплатив raw-фикс,
+    # можно было бы получить AI-обработку). Легаси-флоу без mode пропускаем.
+    paid_mode = cand.get("mode")
+    if paid_mode and paid_mode != body.mode:
+        raise HTTPException(status_code=409, detail={"code": "MODE_MISMATCH", "paid_mode": paid_mode})
 
     photo_bytes = _decode_selfie(body.photo_base64)
     tid = me["telegram_id"]
@@ -397,7 +418,7 @@ async def card_photo_upload(
     except Exception as e:
         logger.warning("card selfie store failed (reroll недоступен): %s", e)
 
-    new_cand = {"status": "processing"}
+    new_cand = {"status": "processing", "mode": "ai"}
     await (
         db.table("users").update({"card_photo_candidates": new_cand})
         .eq("id", me["id"]).execute()
@@ -430,7 +451,9 @@ async def card_photo_choose(
 
 @router.post("/me/card-photo/reroll", response_model=CardPhotoState)
 async def card_photo_reroll(current_user: dict = Depends(get_current_user)) -> CardPhotoState:
-    """Списание photo_reroll → 2 новых варианта взамен (из сохранённого селфи)."""
+    """Реролл: 2 новых варианта из сохранённого селфи. Цена прогрессирует по
+    card_rerolls (8c.1). Атомарно через RPC: двойной клик не списывает дважды —
+    второй запрос увидит статус processing → NOT_CHOOSING."""
     db = await get_supabase()
     me = await _me(db, current_user["telegram_id"])
     cand = me.get("card_photo_candidates") or {}
@@ -446,16 +469,19 @@ async def card_photo_reroll(current_user: dict = Depends(get_current_user)) -> C
         raise HTTPException(status_code=409, detail={"code": "SELFIE_MISSING"})
 
     prices = await _prices(db)
-    price = _price_of(prices, "photo_reroll")
-    await _charge_drops(db, me["id"], price)
+    price = _progressive_price(
+        prices, "photo_reroll", int(me.get("card_rerolls") or 0), PHOTO_REROLL_CAP_DEFAULT)
 
-    new_cand = {"status": "processing"}
-    upd = await (
-        db.table("users").update({"card_photo_candidates": new_cand})
-        .eq("id", me["id"]).execute()
-    )
-    if not upd.data:
-        await _refund_drops(db, me["id"], price)
-        raise HTTPException(status_code=409, detail={"code": "RACE"})
+    res = await db.rpc("begin_card_reroll", {"p_user_id": me["id"], "p_price": price}).execute()
+    data = res.data if isinstance(res.data, dict) else {}
+    if not data.get("ok"):
+        code = data.get("code") or "NOT_CHOOSING"
+        if code == "INSUFFICIENT_DROPS":
+            raise HTTPException(status_code=400, detail={
+                "code": code, "balance": int(data.get("balance") or 0), "price": price,
+            })
+        raise HTTPException(status_code=409, detail={"code": code})
+
+    new_cand = {"status": "processing", "mode": "ai"}
     asyncio.create_task(process_card_photo_variants(selfie, tid, me.get("gender")))
     return _card_state({**me, "card_photo_candidates": new_cand})

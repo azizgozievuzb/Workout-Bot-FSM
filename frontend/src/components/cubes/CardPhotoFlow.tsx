@@ -8,29 +8,35 @@ import { hapticNotification } from '../../utils/haptic';
 
 interface Props {
     card: CardPhotoState;
-    prices: Record<string, number>;
     balance: number;
+    aiPrice: number;        // 8c.1: актуальная для юзера цена AI-смены (прогрессия)
+    rawPrice: number;       // фикс-цена «как есть»
+    rerollPrice: number;    // актуальная цена реролла (прогрессия)
     onClose: () => void;
     // Синхронизация витрины после каждого шага (новый баланс подтянет родитель).
     onChanged: () => void;
 }
 
 /**
- * Фото-карточка (8.8b) — флоу: покупка → «AI / как есть» → селфи →
- * (AI) 2 варианта → выбрать / реролл → превью «так тебя видит наставник».
+ * Фото-карточка (8.8b + 8c.1) — флоу: выбор режима (AI прогрессивная цена /
+ * raw фикс) → покупка → селфи (камера getUserMedia / input capture / галерея) →
+ * (AI) 2 варианта → выбрать / реролл (прогрессия) → превью «так тебя видит наставник».
  */
-const CardPhotoFlow: React.FC<Props> = ({ card, prices, balance, onClose, onChanged }) => {
+const CardPhotoFlow: React.FC<Props> = ({ card, balance, aiPrice, rawPrice, rerollPrice, onClose, onChanged }) => {
     const [state, setState] = useState<CardPhotoState>(card);
     const [busy, setBusy] = useState(false);
+    const [busyLabel, setBusyLabel] = useState('');
     const [msg, setMsg] = useState('');
-    const [mode, setMode] = useState<'ai' | 'raw' | null>(null);
     const [chosenUrl, setChosenUrl] = useState<string | null>(null);
+    const [camOpen, setCamOpen] = useState(false);
     const fileRef = useRef<HTMLInputElement | null>(null);
     const cameraRef = useRef<HTMLInputElement | null>(null);
+    const videoRef = useRef<HTMLVideoElement | null>(null);
+    const streamRef = useRef<MediaStream | null>(null);
     const pollRef = useRef<number | null>(null);
 
-    const price = prices['photo_card'] ?? 200;
-    const rerollPrice = prices['photo_reroll'] ?? 60;
+    // Режим текущего флоу фиксируется сервером при покупке (state.mode).
+    const mode: 'ai' | 'raw' = state.mode ?? 'ai';
 
     const apply = useCallback((s: CardPhotoState) => {
         setState(s);
@@ -61,56 +67,109 @@ const CardPhotoFlow: React.FC<Props> = ({ card, prices, balance, onClose, onChan
         return () => { if (pollRef.current) { window.clearInterval(pollRef.current); pollRef.current = null; } };
     }, [state.status, apply]);
 
-    const doPurchase = useCallback(async () => {
+    const stopCamera = useCallback(() => {
+        streamRef.current?.getTracks().forEach(t => t.stop());
+        streamRef.current = null;
+        setCamOpen(false);
+    }, []);
+
+    useEffect(() => () => { streamRef.current?.getTracks().forEach(t => t.stop()); }, []);
+
+    // ---- действия (все с double-submit guard: busy до ответа сервера) ----
+
+    const doPurchase = useCallback(async (m: 'ai' | 'raw') => {
         if (busy) return;
-        setBusy(true); setMsg('');
+        setBusy(true); setBusyLabel('purchase:' + m); setMsg('');
         try {
-            apply(await cardPhotoPurchase());
+            apply(await cardPhotoPurchase(m));
             hapticNotification('success');
         } catch (e: any) { fail(e, 'Не удалось купить'); }
-        finally { setBusy(false); }
+        finally { setBusy(false); setBusyLabel(''); }
     }, [busy, apply, fail]);
 
-    const onFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        e.target.value = '';
-        if (!file || !mode) return;
-        setBusy(true); setMsg('');
+    const uploadB64 = useCallback(async (b64: string) => {
+        setBusy(true); setBusyLabel('upload'); setMsg('');
         try {
-            const b64 = await new Promise<string>((resolve, reject) => {
-                const r = new FileReader();
-                r.onload = () => resolve(String(r.result));
-                r.onerror = reject;
-                r.readAsDataURL(file);
-            });
             const s = await cardPhotoUpload(b64, mode);
             hapticNotification('success');
             if (mode === 'raw') setChosenUrl(s.url);
             apply(s);
         } catch (e: any) { fail(e, 'Не удалось загрузить фото'); }
-        finally { setBusy(false); }
+        finally { setBusy(false); setBusyLabel(''); }
     }, [mode, apply, fail]);
+
+    const onFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        e.target.value = '';
+        if (!file || busy) return;
+        const b64 = await new Promise<string>((resolve, reject) => {
+            const r = new FileReader();
+            r.onload = () => resolve(String(r.result));
+            r.onerror = reject;
+            r.readAsDataURL(file);
+        }).catch(() => null as string | null);
+        if (!b64) { setMsg('Не удалось прочитать файл'); return; }
+        await uploadB64(b64);
+    }, [busy, uploadB64]);
+
+    // Селфи-капчер (8c.1): getUserMedia с живым превью; фолбэки —
+    // input capture (мобильный шорткат) → файловый пикер.
+    const openCamera = useCallback(async () => {
+        if (busy) return;
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: 'user' }, audio: false,
+            });
+            streamRef.current = stream;
+            setCamOpen(true);
+            // видео-элемент появится после рендера
+            window.setTimeout(() => {
+                if (videoRef.current) {
+                    videoRef.current.srcObject = stream;
+                    videoRef.current.play().catch(() => undefined);
+                }
+            }, 0);
+        } catch {
+            // Камера недоступна (десктоп-webview/запрет) → нативный input capture,
+            // на десктопе он сам деградирует в файловый диалог.
+            cameraRef.current?.click();
+        }
+    }, [busy]);
+
+    const snapPhoto = useCallback(async () => {
+        const video = videoRef.current;
+        if (!video || busy) return;
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth || 720;
+        canvas.height = video.videoHeight || 960;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { stopCamera(); return; }
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const b64 = canvas.toDataURL('image/jpeg', 0.9);
+        stopCamera();
+        await uploadB64(b64);
+    }, [busy, stopCamera, uploadB64]);
 
     const doChoose = useCallback(async (index: number) => {
         if (busy) return;
-        setBusy(true); setMsg('');
+        setBusy(true); setBusyLabel('choose:' + index); setMsg('');
         try {
             const s = await cardPhotoChoose(index);
             hapticNotification('success');
             setChosenUrl(s.url);
             apply(s);
         } catch (e: any) { fail(e, 'Не удалось выбрать'); }
-        finally { setBusy(false); }
+        finally { setBusy(false); setBusyLabel(''); }
     }, [busy, apply, fail]);
 
     const doReroll = useCallback(async () => {
         if (busy) return;
-        setBusy(true); setMsg('');
+        setBusy(true); setBusyLabel('reroll'); setMsg('');
         try {
             apply(await cardPhotoReroll());
             hapticNotification('success');
         } catch (e: any) { fail(e, 'Не удалось сгенерировать'); }
-        finally { setBusy(false); }
+        finally { setBusy(false); setBusyLabel(''); }
     }, [busy, apply, fail]);
 
     // ---- этап флоу из состояния ----
@@ -127,6 +186,17 @@ const CardPhotoFlow: React.FC<Props> = ({ card, prices, balance, onClose, onChan
                 <button className="cube-btn-primary" onClick={onClose}>Отлично</button>
             </>
         );
+    } else if (camOpen) {
+        body = (
+            <>
+                <div className="cardflow-title">Улыбнись 📸</div>
+                <video ref={videoRef} className="cardflow-preview" playsInline muted autoPlay />
+                <button className="cube-btn-primary" disabled={busy} onClick={snapPhoto}>
+                    {busyLabel === 'upload' ? 'Загружаем…' : '📸 Снять'}
+                </button>
+                <button className="cube-btn-sm" disabled={busy} onClick={stopCamera}>Отмена</button>
+            </>
+        );
     } else if (status === 'choosing' && state.variants.length > 0) {
         body = (
             <>
@@ -136,13 +206,13 @@ const CardPhotoFlow: React.FC<Props> = ({ card, prices, balance, onClose, onChan
                         <div key={v} className="cardflow-variant">
                             <img src={v} alt={`Вариант ${i + 1}`} />
                             <button className="cube-btn-sm" disabled={busy} onClick={() => doChoose(i)}>
-                                Выбрать
+                                {busyLabel === 'choose:' + i ? '…' : 'Выбрать'}
                             </button>
                         </div>
                     ))}
                 </div>
                 <button className="cube-btn-sm" disabled={busy} onClick={doReroll}>
-                    🎲 Ещё 2 варианта ({rerollPrice} 💧)
+                    {busyLabel === 'reroll' ? 'Списываем…' : `🎲 Ещё 2 варианта (${rerollPrice} 💧)`}
                 </button>
             </>
         );
@@ -155,55 +225,34 @@ const CardPhotoFlow: React.FC<Props> = ({ card, prices, balance, onClose, onChan
             </>
         );
     } else if (status === 'awaiting_photo' || status === 'failed') {
+        // Режим уже оплачен — остался источник селфи.
         body = (
             <>
-                {mode === null ? (
-                    <>
-                        <div className="cardflow-title">{status === 'failed' ? 'Не получилось — попробуй ещё раз' : 'Загрузи селфи'}</div>
-                        <button
-                            className="cube-btn-primary"
-                            disabled={busy}
-                            onClick={() => setMode('ai')}
-                        >
-                            ✨ Обработать AI
-                        </button>
-                        <button
-                            className="cube-btn-sm"
-                            disabled={busy}
-                            onClick={() => setMode('raw')}
-                        >
-                            📷 Поставить как есть (без AI)
-                        </button>
-                        <div className="cardflow-hint">
-                            «Как есть» — фото не отправляется в AI и сразу становится карточкой.
-                        </div>
-                    </>
+                <div className="cardflow-title">
+                    {status === 'failed' ? 'Не получилось — попробуй ещё раз' : 'Откуда фото?'}
+                </div>
+                {busyLabel === 'upload' ? (
+                    <div className="cardflow-hint">Загружаем фото…</div>
                 ) : (
                     <>
-                        <div className="cardflow-title">Откуда фото?</div>
-                        <button
-                            className="cube-btn-primary"
-                            disabled={busy}
-                            onClick={() => cameraRef.current?.click()}
-                        >
+                        <button className="cube-btn-primary" disabled={busy} onClick={openCamera}>
                             📸 Сделать фото
                         </button>
-                        <button
-                            className="cube-btn-sm"
-                            disabled={busy}
-                            onClick={() => fileRef.current?.click()}
-                        >
+                        <button className="cube-btn-sm" disabled={busy}
+                            onClick={() => fileRef.current?.click()}>
                             🖼 Выбрать из галереи
                         </button>
-                        <button className="cube-btn-sm" disabled={busy} onClick={() => setMode(null)}>
-                            ← Назад
-                        </button>
+                        <div className="cardflow-hint">
+                            {mode === 'raw'
+                                ? 'Фото не отправляется в AI и сразу станет карточкой.'
+                                : 'AI сделает 2 варианта на выбор.'}
+                        </div>
                     </>
                 )}
             </>
         );
     } else {
-        // Покупка (первая или повторная смена — снова полная цена)
+        // Покупка: режим выбирается ДО оплаты (8c.1) — raw фикс, AI прогрессия.
         body = (
             <>
                 <div className="cardflow-title">Своё фото на карточке</div>
@@ -212,23 +261,30 @@ const CardPhotoFlow: React.FC<Props> = ({ card, prices, balance, onClose, onChan
                 )}
                 <div className="cardflow-hint">
                     {state.url
-                        ? 'Сейчас наставник видит это фото. Смена — снова полная цена.'
-                        : 'Пока наставник видит мультяшный образ. Поставь своё фото: AI-обработка (2 варианта на выбор) или «как есть».'}
+                        ? 'Сейчас наставник видит это фото. Смена AI дорожает с каждым разом, «как есть» — фикс.'
+                        : 'Пока наставник видит мультяшный образ. AI-обработка (2 варианта на выбор) или «как есть» без AI.'}
                 </div>
-                <button className="cube-btn-primary" disabled={busy || balance < price} onClick={doPurchase}>
-                    {state.url ? 'Сменить фото' : 'Купить'} — {price} 💧
+                <button className="cube-btn-primary" disabled={busy || balance < aiPrice}
+                    onClick={() => doPurchase('ai')}>
+                    {busyLabel === 'purchase:ai' ? 'Списываем…' : `✨ Обработать AI — ${aiPrice} 💧`}
                 </button>
-                {balance < price && <div className="cardflow-hint">Недостаточно капель ({balance}/{price})</div>}
+                <button className="cube-btn-sm" disabled={busy || balance < rawPrice}
+                    onClick={() => doPurchase('raw')}>
+                    {busyLabel === 'purchase:raw' ? 'Списываем…' : `📷 Как есть (без AI) — ${rawPrice} 💧`}
+                </button>
+                {balance < Math.min(aiPrice, rawPrice) && (
+                    <div className="cardflow-hint">Недостаточно капель ({balance}/{Math.min(aiPrice, rawPrice)})</div>
+                )}
             </>
         );
     }
 
     return (
-        <div className="cardflow-backdrop" onClick={() => { if (!busy) onClose(); }}>
+        <div className="cardflow-backdrop" onClick={() => { if (!busy && !camOpen) onClose(); }}>
             <div className="cardflow-card" onClick={(e) => e.stopPropagation()}>
                 {body}
                 {msg && <div className="cardflow-msg">{msg}</div>}
-                <button className="cardflow-close" onClick={onClose}>Закрыть</button>
+                <button className="cardflow-close" onClick={() => { stopCamera(); onClose(); }}>Закрыть</button>
                 <input
                     ref={fileRef}
                     type="file"
@@ -236,7 +292,7 @@ const CardPhotoFlow: React.FC<Props> = ({ card, prices, balance, onClose, onChan
                     style={{ display: 'none' }}
                     onChange={onFile}
                 />
-                {/* Съёмка камерой (фронталка) — хотфикс смоука 8c, находка №11 */}
+                {/* Мобильный шорткат съёмки (фолбэк, когда getUserMedia недоступен) */}
                 <input
                     ref={cameraRef}
                     type="file"

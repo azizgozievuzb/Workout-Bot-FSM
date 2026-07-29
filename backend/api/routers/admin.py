@@ -625,6 +625,7 @@ class AppShopItemRow(BaseModel):
     title: str
     price_drops: int
     is_active: bool
+    meta: dict | None = None             # 8c.1: mult/cap прогрессии, min/cap restore
     updated_at: str | None = None
 
 
@@ -632,6 +633,7 @@ class UpdateAppShopItemReq(BaseModel):
     price_drops: int | None = Field(default=None, ge=1)
     is_active: bool | None = None
     title: str | None = None
+    meta: dict | None = None
 
 
 @general_router.get("/app-shop-items", response_model=list[AppShopItemRow])
@@ -639,7 +641,7 @@ async def list_app_shop_items(admin: dict = Depends(require_admin)):
     db = await get_supabase()
     res = await (
         db.table("app_shop_items")
-        .select("key, title, price_drops, is_active, updated_at")
+        .select("key, title, price_drops, is_active, meta, updated_at")
         .order("key")
         .execute()
     )
@@ -654,7 +656,7 @@ async def update_app_shop_item(
 ):
     db = await get_supabase()
     update: dict = {"updated_at": datetime.now(timezone.utc).isoformat()}
-    for col in ("price_drops", "is_active", "title"):
+    for col in ("price_drops", "is_active", "title", "meta"):
         val = getattr(body, col)
         if val is not None:
             update[col] = val
