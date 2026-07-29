@@ -3,16 +3,11 @@ import { hapticFeedback } from '@telegram-apps/sdk-react';
 type ImpactStyle = 'light' | 'medium' | 'heavy' | 'rigid' | 'soft';
 type NotificationType = 'error' | 'success' | 'warning';
 
-function ensureMounted() {
-  try {
-    if (hapticFeedback.mount.isAvailable() && !hapticFeedback.isMounted()) {
-      hapticFeedback.mount();
-    }
-  } catch { /* silent */ }
-}
+// NB: в @telegram-apps/sdk 3.x hapticFeedback НЕ монтируется — достаточно
+// проверки isAvailable() у самого метода (бывший ensureMounted() всегда падал
+// в catch: hapticFeedback.mount === undefined).
 
 export function hapticImpact(style: ImpactStyle = 'light') {
-  ensureMounted();
   try {
     if (hapticFeedback.impactOccurred.isAvailable()) {
       hapticFeedback.impactOccurred(style);
@@ -21,7 +16,6 @@ export function hapticImpact(style: ImpactStyle = 'light') {
 }
 
 export function hapticNotification(type: NotificationType) {
-  ensureMounted();
   try {
     if (hapticFeedback.notificationOccurred.isAvailable()) {
       hapticFeedback.notificationOccurred(type);
@@ -30,7 +24,6 @@ export function hapticNotification(type: NotificationType) {
 }
 
 export function hapticSelection() {
-  ensureMounted();
   try {
     if (hapticFeedback.selectionChanged.isAvailable()) {
       hapticFeedback.selectionChanged();

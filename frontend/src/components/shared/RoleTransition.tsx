@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import type { Variants } from 'framer-motion';
 import { useTheme } from '../../contexts/ThemeContext';
 import '../../styles/role-transition.css';
 
@@ -10,14 +11,15 @@ interface RoleTransitionProps {
     view: 'player' | 'responsible';
     dual: boolean;
     onToggle: () => void;
-    lockedMessage: string;
+    /** Текст «нет доступа»; сейчас не рендерится — оставлен в контракте для 8e. */
+    lockedMessage?: string;
     children: React.ReactNode;
 }
 
 const VOID_MS = 120;
 
 /* --- Minimal fade — premium, no effects --- */
-const fadeVariants = {
+const fadeVariants: Variants = {
     initial: { opacity: 0 },
     animate: {
         opacity: 1,
@@ -30,14 +32,13 @@ const fadeVariants = {
 };
 
 const RoleTransition: React.FC<RoleTransitionProps> = ({
-    view, dual, onToggle, lockedMessage, children,
+    view, dual, onToggle, children,
 }) => {
     const theme = useTheme();
     const [phase, setPhase] = useState<Phase>('idle');
     const [showContent, setShowContent] = useState(true);
-    const [toast, setToast] = useState(false);
     const [denied, setDenied] = useState(false);
-    const timerRef = useRef<ReturnType<typeof setTimeout>>();
+    const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
     const isFirstRender = useRef(true);
     const prefersReduced = useRef(
         typeof window !== 'undefined'

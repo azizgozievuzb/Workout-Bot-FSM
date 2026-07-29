@@ -46,7 +46,6 @@ interface ErrState {
 async function acquireWakeLock(): Promise<WakeLockSentinel | null> {
   try {
     if ('wakeLock' in navigator) {
-      // @ts-expect-error — experimental
       return await navigator.wakeLock.request('screen');
     }
   } catch { /* ignored */ }

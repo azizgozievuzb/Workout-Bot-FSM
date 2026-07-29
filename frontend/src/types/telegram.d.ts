@@ -5,6 +5,7 @@ interface Window {
       initDataUnsafe: Record<string, any>;
       ready: () => void;
       expand: () => void;
+      platform: string;
     };
   };
 }

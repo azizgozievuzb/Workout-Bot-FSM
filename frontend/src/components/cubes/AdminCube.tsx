@@ -16,7 +16,6 @@ import {
     listPayments, refundPayment, listStarProducts, updateStarProduct, getStarsBalance,
 } from '../../api/adminPayments';
 import type { AdminPaymentRow, AdminStarProduct } from '../../api/adminPayments';
-import TierBadge from '../common/TierBadge';
 import BanUserModal from '../shared/BanUserModal';
 import '../../styles/cubes.css';
 
@@ -223,7 +222,7 @@ const ConnectionsPanel: React.FC = () => {
                                     <div className="cube-player-name">{g.display_name || g.username || `#${g.telegram_id}`}</div>
                                     <div className="cube-player-meta">
                                         {g.players.length} игр{g.players.length === 1 ? 'рок' : g.players.length < 5 ? 'рока' : 'роков'}
-                                        {g.stats && ` · ${g.stats.active_players} акт. · ⭐${g.stats.total_stars_earned}`}
+                                        {g.stats && ` · ${g.stats.active_players} акт. · ✨${g.stats.total_xp_earned} XP`}
                                     </div>
                                 </div>
                             </div>

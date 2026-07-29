@@ -339,17 +339,10 @@ const GlassCubes = forwardRef<GlassCubesHandle, GlassCubesProps>(({
                 const tGlassLit = isDark ? 60 : 35; // darker base in light theme
                 const tGlassA   = isDark ? glassAlpha : glassAlpha * 1.8;
                 
-                const tSheenL1  = isDark ? 90 : 100; // Pure white peak highlight
-                const tSheenL2  = isDark ? 70 : 85;
-                const tSheenL3  = isDark ? 50 : 60;
-                const tSheenA   = isDark ? 0.18 : 0.95; // Maximum intensity reflection
-                
                 const tEdgeSat  = isDark ? 80 : 100;
                 const tEdgeLit  = isDark ? 85 : 40; // darker, burnt edges
                 const tEdgeA    = isDark ? edgeAlpha : edgeAlpha * 1.4;
                 
-                const tTextSat  = isDark ? 20 : 60;
-                const tTextLit  = isDark ? 95 : 20; // very dark text in light theme
                 const tTextBaseA = isDark ? 0.35 : 0.75; // bolder text
                 
                 const tBlobHue  = isDark ? h : 25; // 25 is Orange (Fire/Flame)

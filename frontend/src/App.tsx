@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Backdrop from './design/backdrop/Backdrop';
 import type { GlassCubesHandle } from './design/backdrop/GlassCubes';

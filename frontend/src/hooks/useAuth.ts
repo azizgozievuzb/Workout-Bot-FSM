@@ -4,20 +4,8 @@ import api, { setToken } from '../api/client';
 import { useAuthStore } from '../stores/authStore';
 import { saveDetectedTimezone } from '../api/schedule';
 
-// Declare Telegram WebApp type
-declare global {
-  interface Window {
-    Telegram?: {
-      WebApp?: {
-        initData: string;
-        initDataUnsafe: Record<string, any>;
-        ready: () => void;
-        expand: () => void;
-        platform: string;
-      };
-    };
-  }
-}
+// Тип Window.Telegram — единственное объявление в src/types/telegram.d.ts
+// (дубль здесь конфликтовал по полю platform → TS2717).
 
 function getInitData(): string {
   // Method 1: Direct from Telegram WebApp object (loaded via script in index.html)
