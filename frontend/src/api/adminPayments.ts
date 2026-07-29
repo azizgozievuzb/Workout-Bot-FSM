@@ -17,7 +17,6 @@ export interface AdminPaymentRow {
 
 export interface RefundResponse {
     refunded: boolean;
-    boost_deactivated: boolean;
 }
 
 export interface AdminStarProduct {

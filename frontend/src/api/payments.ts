@@ -3,10 +3,9 @@ import type { AccessTier } from '../stores/authStore';
 
 export type SubscriptionPeriod = 'intro' | '1m' | '3m' | '12m';
 
-export interface StarProduct {
-    product_type: string;
-    title: string;
-    description: string;
+export interface DropPack {
+    key: string;
+    drops: number;
     price_stars: number;
 }
 
@@ -29,13 +28,13 @@ export interface PaymentStatusResponse {
     status: PaymentStatus;
 }
 
-export async function getProducts(): Promise<StarProduct[]> {
-    const { data } = await api.get('/payments/products');
+export async function getDropPacks(): Promise<DropPack[]> {
+    const { data } = await api.get('/payments/drop-packs');
     return data;
 }
 
-export async function createInvoice(productType: string, playerId: string): Promise<InvoiceResponse> {
-    const { data } = await api.post('/payments/invoice', { product_type: productType, player_id: playerId });
+export async function createDropPackInvoice(packKey: string): Promise<InvoiceResponse> {
+    const { data } = await api.post('/payments/drop-pack-invoice', { pack_key: packKey });
     return data;
 }
 

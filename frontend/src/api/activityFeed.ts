@@ -3,7 +3,7 @@ import api from './client';
 export interface FeedItem {
   id: string;
   source_user_id: string;
-  event_type: 'workout_done' | 'streak_lost' | 'shop_purchase' | 'boost_activated' | 'ping' | 'milestone';
+  event_type: 'workout_done' | 'streak_lost' | 'shop_purchase' | 'ping' | 'milestone';
   payload: Record<string, any>;
   is_read: boolean;
   created_at: string;
