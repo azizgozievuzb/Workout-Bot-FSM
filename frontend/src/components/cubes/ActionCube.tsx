@@ -1,26 +1,25 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import type { DualRoleUser } from '../../stores/authStore';
 import { canPlay, canMonitor, isDualRole } from '../../utils/roles';
 import api from '../../api/client';
 import { getMyStats } from '../../api/stats';
 import type { PlayerStats } from '../../api/stats';
-import { getActiveBoost } from '../../api/boosts';
-import type { ActiveBoost } from '../../api/boosts';
-import { getProducts, createInvoice, getPayment } from '../../api/payments';
-import type { StarProduct } from '../../api/payments';
 import { getMyPlayers } from '../../api/partnerships';
 import type { MyPlayer } from '../../api/partnerships';
 import { getPlayerShop, restoreStreak } from '../../api/shop';
 import type { PlayerShopState } from '../../api/shop';
 import { playerAvatarUrl } from '../../utils/playerAvatar';
 import { hapticImpact, hapticNotification } from '../../utils/haptic';
+import { getShelfCatalog } from '../../api/shelf';
 import RoleTransition from '../shared/RoleTransition';
-import GiftFreezeModal from './GiftFreezeModal';
+import MentorPlayerPage from './MentorPlayerPage';
+import DropPackModal from './DropPackModal';
 import WorkoutScreen from '../workout/WorkoutScreen';
 import { getSchedule, type ScheduleState } from '../../api/schedule';
 import type { SessionType } from '../../api/workout';
 import '../../styles/cubes.css';
+import '../../styles/shelf.css';
 
 type ActiveView = 'player' | 'responsible';
 
@@ -77,7 +76,6 @@ const PlayerView: React.FC = () => {
     const setRestDaysRemaining = useAuthStore((s) => s.setRestDaysRemaining);
 
     const [stats, setStats] = useState<PlayerStats | null>(null);
-    const [boost, setBoost] = useState<ActiveBoost | null>(null);
     const [loading, setLoading] = useState(true);
     const [restDayInFlight, setRestDayInFlight] = useState(false);
     const [restDayToast, setRestDayToast] = useState('');
@@ -124,10 +122,7 @@ const PlayerView: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        let done = 0;
-        const check = () => { if (++done >= 2) setLoading(false); };
-        getMyStats().then(setStats).catch(() => {}).finally(check);
-        getActiveBoost().then(setBoost).catch(() => {}).finally(check);
+        getMyStats().then(setStats).catch(() => {}).finally(() => setLoading(false));
     }, []);
 
     const handleUseRestDay = useCallback(async (e: React.MouseEvent) => {
@@ -275,17 +270,6 @@ const PlayerView: React.FC = () => {
                 </div>
             </div>
 
-            {boost && boost.active && (
-                <div className="cube-card">
-                    <div className="cube-stat">
-                        <span>Буст X2</span>
-                        <span className="cube-stat-value" style={{ color: '#CCFF00' }}>
-                            активен {Math.ceil(boost.hours_left || 0)}ч
-                        </span>
-                    </div>
-                </div>
-            )}
-
             <div className="cube-funfact">
                 Знаешь ли ты, что регулярные тренировки улучшают качество сна на 65%? Твоё тело скажет спасибо!
             </div>
@@ -297,8 +281,6 @@ const PlayerView: React.FC = () => {
 
 const TIER_PLAYER_LIMITS: Record<string, number> = { standard: 1, premium: 2, elite: 3 };
 
-type ModalKind = 'gift';
-
 const ResponsibleView: React.FC = () => {
     const ownAccessTier = useAuthStore((s) => s.ownAccessTier);
     const shopFreezeBalance = useAuthStore((s) => s.shopFreezeBalance);
@@ -307,130 +289,36 @@ const ResponsibleView: React.FC = () => {
     const subActive = subscription?.active ?? false;
     const [players, setPlayers] = useState<MyPlayer[]>([]);
     const [loading, setLoading] = useState(true);
-    const [toast, setToast] = useState('');
-    const [openMenuFor, setOpenMenuFor] = useState<string | null>(null);
-    const [modal, setModal] = useState<{ kind: ModalKind; partnershipId?: string; targetUserId?: string; playerName?: string | null } | null>(null);
-    const menuRef = useRef<HTMLDivElement | null>(null);
-
-    // Boost purchase (Telegram Stars)
-    const [boostModal, setBoostModal] = useState<{ playerId: string; playerName: string } | null>(null);
-    const [products, setProducts] = useState<StarProduct[]>([]);
-    const [boostBusy, setBoostBusy] = useState(false);
+    // 8d: тап по игроку открывает полноценную страницу (находка №9),
+    // висячая плашка с ⋮-меню удалена — все действия живут на странице.
+    const [openPlayer, setOpenPlayer] = useState<MyPlayer | null>(null);
+    const [giftBalance, setGiftBalance] = useState(0);
+    const [packs, setPacks] = useState(false);
 
     const fetchPlayers = useCallback(() => {
-        getMyPlayers()
-            .then(setPlayers)
-            .catch(() => {});
-    }, []);
-
-    useEffect(() => {
         getMyPlayers().then(setPlayers).catch(() => {});
-        setLoading(false);
+    }, []);
+
+    const fetchPool = useCallback(() => {
+        getShelfCatalog().then((c) => setGiftBalance(c.gift_balance)).catch(() => {});
     }, []);
 
     useEffect(() => {
-        const onVisible = () => {
-            if (document.visibilityState === 'visible') fetchPlayers();
-        };
-        document.addEventListener('visibilitychange', onVisible);
-        return () => document.removeEventListener('visibilitychange', onVisible);
+        fetchPlayers();
+        setLoading(false);
     }, [fetchPlayers]);
 
     useEffect(() => {
-        if (!openMenuFor) return;
-        const onDocClick = (e: MouseEvent) => {
-            if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-                setOpenMenuFor(null);
-            }
-        };
-        document.addEventListener('mousedown', onDocClick);
-        return () => document.removeEventListener('mousedown', onDocClick);
-    }, [openMenuFor]);
+        if (subActive) fetchPool();
+    }, [subActive, fetchPool]);
 
     useEffect(() => {
-        getProducts().then(setProducts).catch(() => {});
-    }, []);
-
-    const openBoostModal = useCallback((e: React.MouseEvent, playerId: string, playerName: string) => {
-        e.stopPropagation();
-        hapticImpact('light');
-        setBoostModal({ playerId, playerName });
-    }, []);
-
-    // Poll our own DB — the Telegram callback status is NOT the source of truth.
-    const pollPaymentStatus = useCallback(async (paymentId: string): Promise<string> => {
-        for (let i = 0; i < 15; i++) {
-            await new Promise((r) => setTimeout(r, 2000));
-            try {
-                const { status } = await getPayment(paymentId);
-                if (status === 'fulfilled') return 'fulfilled';
-                if (status === 'failed' || status === 'refunded') return status;
-            } catch { /* keep polling */ }
-        }
-        return 'timeout';
-    }, []);
-
-    const buyBoostProduct = useCallback(async (productType: string) => {
-        if (!boostModal || boostBusy) return;
-        const { playerId } = boostModal;
-        setBoostBusy(true);
-        try {
-            const { payment_id, invoice_link } = await createInvoice(productType, playerId);
-            const tg = (window as any).Telegram?.WebApp;
-            if (!tg?.openInvoice) {
-                setToast('Оплата недоступна в этом клиенте');
-                setBoostBusy(false);
-                setBoostModal(null);
-                setTimeout(() => setToast(''), 3000);
-                return;
-            }
-            tg.openInvoice(invoice_link, async (status: string) => {
-                if (status === 'paid') {
-                    setToast('Оплата получена, активируем буст...');
-                    const result = await pollPaymentStatus(payment_id);
-                    if (result === 'fulfilled') {
-                        hapticNotification('success');
-                        setToast('⚡ Буст X2 активирован!');
-                    } else if (result === 'timeout') {
-                        setToast('Оплата обрабатывается, буст активируется автоматически');
-                    } else {
-                        setToast('Не удалось активировать буст');
-                    }
-                } else if (status === 'cancelled') {
-                    setToast('Покупка отменена');
-                } else {
-                    setToast('Оплата не прошла');
-                }
-                setBoostBusy(false);
-                setBoostModal(null);
-                setTimeout(() => setToast(''), 4000);
-            });
-        } catch {
-            setToast('Не удалось создать счёт');
-            setBoostBusy(false);
-            setBoostModal(null);
-            setTimeout(() => setToast(''), 3000);
-        }
-    }, [boostModal, boostBusy, pollPaymentStatus]);
-
-    const openModal = useCallback((kind: ModalKind, p: MyPlayer) => {
-        hapticImpact('light');
-        setOpenMenuFor(null);
-        setModal({
-            kind,
-            partnershipId: p.partnership_id,
-            targetUserId: p.id,
-            playerName: p.first_name,
-        });
-    }, []);
-
-    const closeModal = useCallback(() => setModal(null), []);
-
-    const handleGiftSuccess = useCallback((msg: string) => {
-        setModal(null);
-        setToast(msg);
-        setTimeout(() => setToast(''), 3000);
-    }, []);
+        const onVisible = () => {
+            if (document.visibilityState === 'visible') { fetchPlayers(); fetchPool(); }
+        };
+        document.addEventListener('visibilitychange', onVisible);
+        return () => document.removeEventListener('visibilitychange', onVisible);
+    }, [fetchPlayers, fetchPool]);
 
     const slotLimit = TIER_PLAYER_LIMITS[ownAccessTier ?? 'standard'] ?? 1;
     const slotsUsed = players.length;
@@ -438,13 +326,21 @@ const ResponsibleView: React.FC = () => {
 
     return (
         <>
-            <div className="responsible-wallet-row">
-                <div className="wallet-chip">
-                    <span className="wallet-chip-label">❄️ Заморозок: {shopFreezeBalance + giftFreezeBalance}</span>
+            {/* Пул капель наставника + заморозки. Личный drops_balance в режиме
+                Responsible не показываем (§8.6). */}
+            <div className="mentor-pool-row">
+                <div>
+                    <div className="mentor-pool-value">💧 {giftBalance}</div>
+                    <div className="mentor-pool-label">капли для подарков</div>
                 </div>
+                <div className="wallet-chip">
+                    <span className="wallet-chip-label">❄️ {shopFreezeBalance + giftFreezeBalance}</span>
+                </div>
+                <button className="cube-btn-sm" disabled={!subActive}
+                    onClick={(e) => { e.stopPropagation(); hapticImpact('light'); setPacks(true); }}>
+                    Пополнить
+                </button>
             </div>
-
-            {toast && <div className="admin-toast">{toast}</div>}
 
             <div className="cube-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span>Мои Игроки</span>
@@ -470,40 +366,30 @@ const ResponsibleView: React.FC = () => {
                         const isActive = subActive && !p.is_deactivated;
                         const avatar = playerAvatarUrl(p);
                         return (
-                            <div className={rowClass} key={p.id}>
+                            <div
+                                className={rowClass}
+                                key={p.id}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (!isActive) return;
+                                    hapticImpact('light');
+                                    setOpenPlayer(p);
+                                }}
+                                style={{ cursor: isActive ? 'pointer' : 'default' }}
+                            >
                                 <div className="cube-avatar">
                                     {avatar
                                         ? <img src={avatar} alt={name} />
                                         : name.charAt(0)}
                                 </div>
                                 <div className="cube-player-info">
-                                    <div className="cube-player-name">
-                                        {name}
-                                    </div>
+                                    <div className="cube-player-name">{name}</div>
                                 </div>
-                                <div className="cube-player-actions" style={{ position: 'relative' }}>
-                                    {/* ⚡X2 легаси-бейдж убран (смоук 8c, находка №8); судьба бустов — 8d */}
-                                    <button
-                                        className="player-row-menu-btn"
-                                        aria-label="Действия"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            hapticImpact('light');
-                                            setOpenMenuFor(openMenuFor === p.id ? null : p.id);
-                                        }}
-                                    >
-                                        ⋮
-                                    </button>
-                                    {openMenuFor === p.id && (
-                                        <div ref={menuRef} className="player-context-menu">
-                                            <button
-                                                className="player-context-menu-item"
-                                                onClick={(e) => { e.stopPropagation(); openModal('gift', p); }}
-                                            >
-                                                Подарить заморозку
-                                            </button>
-                                        </div>
+                                <div className="cube-player-actions">
+                                    {p.pending_promises > 0 && (
+                                        <span className="shelf-pending-badge">⏳ {p.pending_promises}</span>
                                     )}
+                                    <span style={{ opacity: 0.4, marginLeft: 6 }}>›</span>
                                 </div>
                             </div>
                         );
@@ -511,46 +397,13 @@ const ResponsibleView: React.FC = () => {
                 </div>
             )}
 
-            {modal?.kind === 'gift' && modal.targetUserId && (
-                <GiftFreezeModal
-                    targetUserId={modal.targetUserId}
-                    playerName={modal.playerName ?? null}
-                    onClose={closeModal}
-                    onSuccess={handleGiftSuccess}
+            {openPlayer && (
+                <MentorPlayerPage
+                    playerId={openPlayer.id}
+                    onClose={() => { setOpenPlayer(null); fetchPlayers(); fetchPool(); }}
                 />
             )}
-
-            {boostModal && (
-                <div
-                    style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}
-                    onClick={() => { if (!boostBusy) setBoostModal(null); }}
-                >
-                    <div
-                        className="cube-card"
-                        style={{ maxWidth: 360, width: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <div className="cube-section-title">⚡ Буст X2 для {boostModal.playerName}</div>
-                        {products.length === 0 ? (
-                            <div className="cube-player-meta">Загрузка цен…</div>
-                        ) : (
-                            products.map((pr) => (
-                                <button
-                                    key={pr.product_type}
-                                    className="cube-btn-primary"
-                                    disabled={boostBusy}
-                                    onClick={() => buyBoostProduct(pr.product_type)}
-                                >
-                                    {pr.product_type === 'boost_1_day' ? 'День' : pr.product_type === 'boost_1_week' ? 'Неделя' : pr.title} — {pr.price_stars} ⭐
-                                </button>
-                            ))
-                        )}
-                        <button className="cube-btn-sm" disabled={boostBusy} onClick={() => setBoostModal(null)}>
-                            {boostBusy ? 'Обработка…' : 'Отмена'}
-                        </button>
-                    </div>
-                </div>
-            )}
+            {packs && <DropPackModal onClose={() => setPacks(false)} onCredited={fetchPool} />}
         </>
     );
 };

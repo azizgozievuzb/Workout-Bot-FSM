@@ -2,17 +2,23 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import type { DualRoleUser } from '../../stores/authStore';
 import { canPlay, canMonitor, isDualRole } from '../../utils/roles';
-import { buyFreeze, getPlayerShop, getShopItems, purchaseItem } from '../../api/shop';
-import type { PlayerShopState, ShopItem } from '../../api/shop';
+import { buyFreeze, getPlayerShop } from '../../api/shop';
+import type { PlayerShopState } from '../../api/shop';
+import { buyShelfItem, fulfillShelfItem, getItemVideoUrl, hideShelfItem } from '../../api/shelf';
+import type { ShelfItem } from '../../api/shelf';
 import { getSchedule, unlockLight, lockLight, type ScheduleState } from '../../api/schedule';
 import DisclaimerTest, { UNLOCK_QUESTIONS, LOCK_QUESTIONS } from '../schedule/DisclaimerTest';
 import CardPhotoFlow from './CardPhotoFlow';
 import { getMyPlayers } from '../../api/partnerships';
 import type { MyPlayer } from '../../api/partnerships';
-import GiftFreezeModal from './GiftFreezeModal';
-import { hapticNotification } from '../../utils/haptic';
+import MentorPlayerPage from './MentorPlayerPage';
+import DropPackModal from './DropPackModal';
+import PromiseRecorder from './PromiseRecorder';
+import { getShelfCatalog } from '../../api/shelf';
+import { hapticImpact, hapticNotification } from '../../utils/haptic';
 import RoleTransition from '../shared/RoleTransition';
 import '../../styles/cubes.css';
+import '../../styles/shelf.css';
 import '../schedule/schedule.css';
 
 type ActiveView = 'player' | 'responsible';
@@ -58,59 +64,6 @@ const MarketCube: React.FC = () => {
 };
 
 /* ============================================================
-   SHARED — ShopItemCard
-   ============================================================ */
-interface CardProps {
-    item: ShopItem;
-    buyingId: string | null;
-    onBuy?: (item: ShopItem) => void;
-    onGift?: (item: ShopItem) => void;
-    dimmed?: boolean;
-}
-
-const ShopItemCard: React.FC<CardProps> = ({ item, buyingId, onBuy, onGift, dimmed }) => {
-    const isFreeze = item.item_type === 'streak_freeze';
-    const isBuying = buyingId === item.id;
-    const showQty = item.freeze_count > 1;
-
-    return (
-        <div className={
-            'shop-item-card' +
-            (isFreeze ? ' shop-item-card--freeze' : '') +
-            (dimmed ? ' shop-item-card--dimmed' : '')
-        }>
-            <div className="shop-item-name">
-                {isFreeze ? '❄️ ' : ''}{item.name}
-            </div>
-            {item.description && (
-                <div className="shop-item-desc">{item.description}</div>
-            )}
-            <div className="shop-item-price-row">
-                <span className="shop-item-price">{item.price_drops} XP</span>
-                {showQty && <span className="shop-item-qty">×{item.freeze_count}</span>}
-            </div>
-            {onBuy && (
-                <button
-                    className="cube-btn-sm"
-                    onClick={(e) => { e.stopPropagation(); onBuy(item); }}
-                    disabled={isBuying}
-                >
-                    {isBuying ? '…' : 'Купить'}
-                </button>
-            )}
-            {onGift && (
-                <button
-                    className="cube-btn-sm"
-                    onClick={(e) => { e.stopPropagation(); onGift(item); }}
-                >
-                    Подарить ❄️
-                </button>
-            )}
-        </div>
-    );
-};
-
-/* ============================================================
    SHARED — Skeleton (3 cards)
    ============================================================ */
 const ShopSkeleton: React.FC = () => (
@@ -125,14 +78,12 @@ const ShopSkeleton: React.FC = () => (
 /*
  * 8c: витрина игрока — шапка с балансом 💧 + ровно 4 карточки (§8.8):
  * Unlock light / Lock light (дисклеймер-тесты), Заморозка (кап 3), Фото-карточка.
- * Ниже — лоты от наставника (legacy shop_items; полный редизайн полки — 8d).
+ * Ниже — полка наставника (8d): лоты пары + «Мои покупки».
  * Заглушки «Оплата Stars / TON скоро» убраны из витрины игрока.
  */
 const PlayerShop: React.FC = () => {
-    const { streakFreezeBalance, setStreakFreezeBalance } = useAuthStore();
     const [shop, setShop] = useState<PlayerShopState | null>(null);
     const [sched, setSched] = useState<ScheduleState | null>(null);
-    const [items, setItems] = useState<ShopItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [fetchError, setFetchError] = useState(false);
     const [toast, setToast] = useState('');
@@ -140,6 +91,8 @@ const PlayerShop: React.FC = () => {
     const [buyingId, setBuyingId] = useState<string | null>(null);
     const [test, setTest] = useState<'unlock' | 'lock' | null>(null);
     const [photoFlow, setPhotoFlow] = useState(false);
+    // 8d: отчёт по исполненному обещанию (опциональное видео)
+    const [reportFor, setReportFor] = useState<ShelfItem | null>(null);
 
     const showToast = useCallback((msg: string) => {
         setToast(msg);
@@ -149,13 +102,8 @@ const PlayerShop: React.FC = () => {
     const load = useCallback(() => {
         setLoading(true);
         setFetchError(false);
-        Promise.all([getPlayerShop(), getSchedule(), getShopItems().catch(() => [] as ShopItem[])])
-            .then(([s, sc, lots]) => {
-                setShop(s);
-                setSched(sc);
-                // Легаси-лоты показываем только адресные от наставника (8d переделает полку).
-                setItems(lots.filter(i => i.responsible_id));
-            })
+        Promise.all([getPlayerShop(), getSchedule()])
+            .then(([s, sc]) => { setShop(s); setSched(sc); })
             .catch(() => setFetchError(true))
             .finally(() => setLoading(false));
     }, []);
@@ -217,30 +165,53 @@ const PlayerShop: React.FC = () => {
         finally { setBusy(false); }
     }, [busy, showToast, failToast]);
 
-    // Покупка легаси-лота наставника (unchanged механика).
-    const handleBuyLot = async (item: ShopItem) => {
+    /* ---------- 8d: полка наставника ---------- */
+
+    const buyLot = useCallback(async (item: ShelfItem) => {
         if (buyingId) return;
         setBuyingId(item.id);
         try {
-            await purchaseItem(item.id);
+            const res = await buyShelfItem(item.id);
             hapticNotification('success');
-            showToast('Куплено!');
-            if (item.item_type === 'streak_freeze') {
-                setStreakFreezeBalance(streakFreezeBalance + item.freeze_count);
-                setItems(prev => prev.filter(i => i.id !== item.id));
-            }
+            showToast(res.status === 'purchased'
+                ? '🎬 Куплено! Наставник получил «к исполнению»'
+                : '🎁 Куплено!');
             refreshShop();
-        } catch (err: any) {
-            const detail = err?.response?.data?.detail;
-            const code = typeof detail === 'object' ? detail?.code : '';
-            if (code === 'NOT_YOUR_ITEM') showToast('Недоступно');
-            else if (typeof detail === 'string' && detail.includes('Недостаточно')) showToast('Недостаточно капель');
-            else showToast('Ошибка покупки');
-            hapticNotification('error');
-        } finally {
-            setBuyingId(null);
-        }
-    };
+        } catch (e: any) { failToast(e, 'Не удалось купить'); }
+        finally { setBuyingId(null); }
+    }, [buyingId, showToast, failToast, refreshShop]);
+
+    const hideLot = useCallback(async (item: ShelfItem) => {
+        if (buyingId) return;
+        setBuyingId(item.id);
+        try {
+            await hideShelfItem(item.id);
+            showToast('Скрыто. Наставник уведомлён');
+            refreshShop();
+        } catch (e: any) { failToast(e, 'Не удалось скрыть'); }
+        finally { setBuyingId(null); }
+    }, [buyingId, showToast, failToast, refreshShop]);
+
+    const markDone = useCallback(async (item: ShelfItem, video: Blob | null) => {
+        if (buyingId) return;
+        setBuyingId(item.id);
+        try {
+            await fulfillShelfItem(item.id, video);
+            hapticNotification('success');
+            showToast('✅ Отмечено выполненным');
+            setReportFor(null);
+            refreshShop();
+        } catch (e: any) { failToast(e, 'Не удалось отметить'); }
+        finally { setBuyingId(null); }
+    }, [buyingId, showToast, failToast, refreshShop]);
+
+    const openVideo = useCallback(async (item: ShelfItem, kind: 'promise' | 'report') => {
+        try {
+            const url = await getItemVideoUrl(item.id, kind);
+            const tg = (window as any).Telegram?.WebApp;
+            if (tg?.openLink) tg.openLink(url); else window.open(url, '_blank');
+        } catch { showToast('Видео недоступно'); }
+    }, [showToast]);
 
     if (loading) return <ShopSkeleton />;
     if (fetchError || !shop) return (
@@ -334,21 +305,105 @@ const PlayerShop: React.FC = () => {
                 </div>
             </div>
 
-            {/* Лоты от наставника (legacy; редизайн полки — 8d) */}
-            {items.length > 0 && (
+            {/* 8d: полка наставника — заменила легаси-секцию «🎁 От наставника» */}
+            {shop.shelf.length > 0 && (
                 <>
-                    <div className="cube-section-title" style={{ marginTop: 12 }}>🎁 От наставника</div>
+                    <div className="cube-section-title" style={{ marginTop: 12 }}>🎁 Полка наставника</div>
                     <div className="shop-item-grid">
-                        {items.map(item => (
-                            <ShopItemCard
-                                key={item.id}
-                                item={item}
-                                buyingId={buyingId}
-                                onBuy={handleBuyLot}
-                            />
-                        ))}
+                        {shop.shelf.map(item => {
+                            const isBusy = buyingId === item.id;
+                            return (
+                                <div key={item.id} className="shelf-player-card">
+                                    <div className="shelf-player-card-title">
+                                        {item.type === 'promise' ? '🎬 ' : '⭐ '}{item.title}
+                                    </div>
+                                    <div className="shelf-player-card-meta">
+                                        {item.price_drops} 💧
+                                        {item.type === 'promise' ? ' · реальное обещание наставника' : ''}
+                                    </div>
+                                    <div className="shelf-player-actions">
+                                        {item.has_video && (
+                                            <button className="cube-btn-sm" disabled={isBusy}
+                                                onClick={(e) => { e.stopPropagation(); openVideo(item, 'promise'); }}>
+                                                ▶ Смотреть
+                                            </button>
+                                        )}
+                                        <button className="cube-btn-sm" disabled={isBusy}
+                                            onClick={(e) => { e.stopPropagation(); buyLot(item); }}>
+                                            {isBusy ? '…' : 'Купить'}
+                                        </button>
+                                        <button className="cube-btn-sm" disabled={isBusy}
+                                            onClick={(e) => { e.stopPropagation(); hideLot(item); }}>
+                                            Неинтересно
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </div>
                 </>
+            )}
+
+            {/* 8d: Мои покупки — ожидающие исполнения + история трат */}
+            {shop.my_purchases.length > 0 && (
+                <>
+                    <div className="cube-section-title" style={{ marginTop: 12 }}>🧾 Мои покупки</div>
+                    {shop.my_purchases.map(item => {
+                        const isBusy = buyingId === item.id;
+                        const pending = item.status === 'purchased';
+                        return (
+                            <div key={item.id} className="shelf-purchase-row">
+                                <div className="shelf-lot-main">
+                                    <div className="shelf-lot-title">
+                                        {item.type === 'promise' ? '🎬 ' : '⭐ '}{item.title}
+                                    </div>
+                                    <div className="shelf-lot-meta">
+                                        {item.price_drops} 💧 · {pending ? '⏳ ждёт исполнения' : '✅ выполнено'}
+                                    </div>
+                                    {(item.has_video || item.has_report) && (
+                                        <div className="shelf-player-actions" style={{ marginTop: 6 }}>
+                                            {item.has_video && (
+                                                <button className="cube-btn-sm" disabled={isBusy}
+                                                    onClick={(e) => { e.stopPropagation(); openVideo(item, 'promise'); }}>
+                                                    💾 В галерею
+                                                </button>
+                                            )}
+                                            {item.has_report && (
+                                                <button className="cube-btn-sm" disabled={isBusy}
+                                                    onClick={(e) => { e.stopPropagation(); openVideo(item, 'report'); }}>
+                                                    🎞 Мой отчёт
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                                {pending && (
+                                    <div className="shelf-player-actions" style={{ flexDirection: 'column' }}>
+                                        <button className="cube-btn-sm" disabled={isBusy}
+                                            onClick={(e) => { e.stopPropagation(); markDone(item, null); }}>
+                                            {isBusy ? '…' : '✅ Выполнено'}
+                                        </button>
+                                        <button className="cube-btn-sm" disabled={isBusy}
+                                            onClick={(e) => { e.stopPropagation(); hapticImpact('light'); setReportFor(item); }}>
+                                            🎥 С видеоотчётом
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                </>
+            )}
+
+            {reportFor && (
+                <PromiseRecorder
+                    title="Видеоотчёт «как это было»"
+                    hint={`«${reportFor.title}» — необязательно, но приятно наставнику.`}
+                    confirmLabel="Отметить выполненным"
+                    busy={buyingId === reportFor.id}
+                    onReady={(blob) => markDone(reportFor, blob)}
+                    onCancel={() => setReportFor(null)}
+                />
             )}
 
             {test === 'unlock' && (
@@ -394,97 +449,78 @@ const ResponsibleShop: React.FC = () => {
     const subscription = useAuthStore((s) => s.subscription);
     const subActive = subscription?.active ?? false;
     const [players, setPlayers] = useState<MyPlayer[]>([]);
-    const [selectedPlayer, setSelectedPlayer] = useState<MyPlayer | null>(null);
-    const [items, setItems] = useState<ShopItem[]>([]);
     const [loadingPlayers, setLoadingPlayers] = useState(true);
-    const [loadingItems, setLoadingItems] = useState(false);
-    const [toast, setToast] = useState('');
-    const [giftTarget, setGiftTarget] = useState<ShopItem | null>(null);
+    const [giftBalance, setGiftBalance] = useState(0);
+    const [packs, setPacks] = useState(false);
+    const [openPlayer, setOpenPlayer] = useState<MyPlayer | null>(null);
 
-    const showToast = useCallback((msg: string) => {
-        setToast(msg);
-        setTimeout(() => setToast(''), 3000);
-    }, []);
-
-    useEffect(() => {
-        // Player activity is driven by the logged-in Responsible's subscription,
-        // not per-player expiry. Individually evicted players are still excluded.
+    const fetchPlayers = useCallback(() => {
+        // Активность игроков определяет подписка наставника, не per-player expiry;
+        // индивидуально выселенные всё равно исключаются.
         if (!subActive) { setLoadingPlayers(false); return; }
         getMyPlayers()
-            .then(ps => {
-                const active = ps.filter(p => !p.is_deactivated);
-                setPlayers(active);
-                if (active.length > 0) setSelectedPlayer(active[0]);
-            })
+            .then(ps => setPlayers(ps.filter(p => !p.is_deactivated)))
             .catch(() => {})
             .finally(() => setLoadingPlayers(false));
     }, [subActive]);
 
-    useEffect(() => {
-        if (!selectedPlayer) { setItems([]); return; }
-        setLoadingItems(true);
-        getShopItems(selectedPlayer.id)
-            .then(setItems)
-            .catch(() => setItems([]))
-            .finally(() => setLoadingItems(false));
-    }, [selectedPlayer]);
+    const fetchPool = useCallback(() => {
+        if (!subActive) return;
+        getShelfCatalog().then(c => setGiftBalance(c.gift_balance)).catch(() => {});
+    }, [subActive]);
+
+    useEffect(() => { fetchPlayers(); fetchPool(); }, [fetchPlayers, fetchPool]);
 
     if (loadingPlayers) return (
         <div className="cube-section-title" style={{ textAlign: 'center' }}>Загрузка...</div>
     );
 
-    if (players.length === 0) return (
-        <div className="cube-locked">
-            <div className="cube-locked-text">Нет активных игроков</div>
-        </div>
-    );
-
     return (
         <>
-            {toast && <div className="admin-toast">{toast}</div>}
-
-            <div className="market-player-selector">
-                {players.map(p => (
-                    <button
-                        key={p.id}
-                        className={`market-player-chip${selectedPlayer?.id === p.id ? ' active' : ''}`}
-                        onClick={(e) => { e.stopPropagation(); setSelectedPlayer(p); }}
-                    >
-                        {p.first_name || 'Игрок'}
-                    </button>
-                ))}
+            {/* Пул капель для подарков. Личный баланс игрока в режиме
+                Responsible не показываем (§8.6). */}
+            <div className="mentor-pool-row">
+                <div>
+                    <div className="mentor-pool-value">💧 {giftBalance}</div>
+                    <div className="mentor-pool-label">капли для подарков</div>
+                </div>
+                <button className="cube-btn-sm" disabled={!subActive}
+                    onClick={(e) => { e.stopPropagation(); hapticImpact('light'); setPacks(true); }}>
+                    Пополнить
+                </button>
             </div>
 
-            {loadingItems ? (
-                <ShopSkeleton />
-            ) : items.length === 0 ? (
+            {players.length === 0 ? (
                 <div className="cube-locked">
-                    <div className="cube-locked-text">У игрока нет лотов в магазине</div>
+                    <div className="cube-locked-text">Нет активных игроков</div>
                 </div>
             ) : (
-                <div className="shop-item-grid">
-                    {items.map(item => (
-                        <ShopItemCard
-                            key={item.id}
-                            item={item}
-                            buyingId={null}
-                            onGift={item.item_type === 'streak_freeze'
-                                ? (i) => setGiftTarget(i)
-                                : undefined}
-                            dimmed={item.item_type !== 'streak_freeze'}
-                        />
+                <>
+                    <div className="cube-section-title">Полки игроков</div>
+                    {players.map(p => (
+                        <div key={p.id} className="shelf-purchase-row"
+                            style={{ cursor: 'pointer' }}
+                            onClick={(e) => { e.stopPropagation(); hapticImpact('light'); setOpenPlayer(p); }}>
+                            <div className="shelf-lot-main">
+                                <div className="shelf-lot-title">{p.first_name || 'Игрок'}</div>
+                                <div className="shelf-lot-meta">открыть полку и подарки</div>
+                            </div>
+                            {p.pending_promises > 0 && (
+                                <span className="shelf-pending-badge">⏳ {p.pending_promises}</span>
+                            )}
+                            <span style={{ opacity: 0.4, marginLeft: 6 }}>›</span>
+                        </div>
                     ))}
-                </div>
+                </>
             )}
 
-            {giftTarget && selectedPlayer && (
-                <GiftFreezeModal
-                    targetUserId={selectedPlayer.id}
-                    playerName={selectedPlayer.first_name}
-                    onClose={() => setGiftTarget(null)}
-                    onSuccess={(msg) => { showToast(msg); setGiftTarget(null); }}
+            {openPlayer && (
+                <MentorPlayerPage
+                    playerId={openPlayer.id}
+                    onClose={() => { setOpenPlayer(null); fetchPlayers(); fetchPool(); }}
                 />
             )}
+            {packs && <DropPackModal onClose={() => setPacks(false)} onCredited={fetchPool} />}
         </>
     );
 };

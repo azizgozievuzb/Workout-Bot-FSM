@@ -104,6 +104,11 @@ const OnboardingFlow: React.FC = () => {
                 >
                     <h2 className="onb-title">{options.title}</h2>
                     <p className="onb-subtitle">{options.sub}</p>
+                    {step === 'gender' && (
+                        <p className="onb-subtitle" style={{ opacity: 0.6, fontSize: 12 }}>
+                            Пол, цель и уровень подготовки будут видны вашему наставнику.
+                        </p>
+                    )}
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
                         {options.items.map(([val, label]) => (

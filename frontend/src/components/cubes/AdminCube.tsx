@@ -875,9 +875,9 @@ const PaymentsPanel: React.FC = () => {
         setConfirmRefund(null);
         setRefunding(row.id);
         try {
-            const res = await refundPayment(row.id);
+            await refundPayment(row.id);
             hapticNotification('success');
-            showToast(res.boost_deactivated ? 'Возврат оформлен, буст деактивирован' : 'Возврат оформлен');
+            showToast('Возврат оформлен');
             reload();
         } catch (err: any) {
             hapticNotification('error');

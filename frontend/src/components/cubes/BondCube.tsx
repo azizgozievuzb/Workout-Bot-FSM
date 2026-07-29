@@ -22,7 +22,6 @@ const EVENT_ICONS: Record<string, string> = {
     workout_done: '💪',
     streak_lost: '💔',
     shop_purchase: '🛒',
-    boost_activated: '⚡',
     ping: '🔔',
     milestone: '🏆',
 };
@@ -33,7 +32,6 @@ function feedText(item: FeedItem): string {
         case 'workout_done': return `${p.player_name || 'Игрок'} завершил тренировку ${p.score ? `+${p.score}` : ''}`;
         case 'streak_lost': return `${p.player_name || 'Игрок'} потерял стрик`;
         case 'shop_purchase': return `${p.player_name || 'Игрок'} купил ${p.item_name || 'предмет'}`;
-        case 'boost_activated': return `Буст X2 активирован${p.hours ? ` на ${p.hours}ч` : ''}`;
         case 'ping': return `Пинг от ${p.sender_name || 'партнёра'}`;
         case 'milestone': return `Достижение: ${p.title || 'новое'}`;
         default: return item.event_type;
