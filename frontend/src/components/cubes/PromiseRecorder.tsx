@@ -62,6 +62,8 @@ const PromiseRecorder: React.FC<Props> = ({
     const stopStream = useCallback(() => {
         streamRef.current?.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
+        // Пока srcObject не снят, элемент игнорирует src → blob-превью не заиграет.
+        if (videoRef.current) videoRef.current.srcObject = null;
         if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     }, []);
 
@@ -170,10 +172,15 @@ const PromiseRecorder: React.FC<Props> = ({
                 {shownError && <div className="cube-modal-error">{shownError}</div>}
 
                 <div className="promise-video-box">
+                    {/* key разводит live и preview в РАЗНЫЕ DOM-элементы: иначе React
+                        переиспользует один <video>, а оставшийся на нём srcObject
+                        (MediaStream) перебивает src=blob → чёрный кадр 0:00. */}
                     {phase === 'preview' && previewUrl ? (
-                        <video src={previewUrl} controls playsInline className="promise-video" />
+                        <video key="preview" src={previewUrl} controls playsInline
+                            className="promise-video" />
                     ) : (
-                        <video ref={videoRef} playsInline muted className="promise-video" />
+                        <video key="live" ref={videoRef} playsInline muted
+                            className="promise-video promise-video--live" />
                     )}
                     {phase === 'recording' && (
                         <div className="promise-rec-badge">● {seconds}/{MAX_SECONDS} с</div>
