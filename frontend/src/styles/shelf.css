@@ -1,0 +1,440 @@
+/* 8d — полка наставника: страница игрока, лоты, запись обещаний, пакеты капель. */
+
+/* ---------- Страница игрока ---------- */
+
+.shelf-page-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.72);
+    z-index: 1200;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 12px;
+    overflow-y: auto;
+}
+
+.shelf-page {
+    position: relative;
+    width: 100%;
+    max-width: 420px;
+    background: #14161c;
+    border-radius: 18px;
+    padding: 16px 14px 28px;
+    color: #fff;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+
+.shelf-page-close {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    font-size: 15px;
+    cursor: pointer;
+}
+
+.shelf-hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+
+.shelf-hero-photo {
+    width: 120px;
+    height: 120px;
+    border-radius: 18px;
+    object-fit: cover;
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.shelf-hero-name {
+    font-size: 19px;
+    font-weight: 700;
+}
+
+.shelf-hero-profile {
+    font-size: 13px;
+    opacity: 0.7;
+    text-align: center;
+}
+
+.shelf-stat-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.shelf-stat {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 8px 4px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.06);
+    font-size: 11px;
+    opacity: 0.85;
+}
+
+.shelf-stat-value {
+    font-size: 16px;
+    font-weight: 700;
+    opacity: 1;
+}
+
+.shelf-xp-bar {
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.1);
+    overflow: hidden;
+}
+
+.shelf-xp-fill {
+    height: 100%;
+    background: #ccff00;
+    border-radius: 3px;
+    transition: width 0.4s ease;
+}
+
+.shelf-xp-hint {
+    font-size: 11px;
+    opacity: 0.6;
+    margin: 6px 0 14px;
+    text-align: center;
+}
+
+/* ---------- Секции и лоты ---------- */
+
+.shelf-section-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 14px;
+    font-weight: 600;
+    margin: 16px 0 8px;
+}
+
+.shelf-slots {
+    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.shelf-slots--full {
+    background: rgba(231, 76, 60, 0.25);
+    color: #ff9c8f;
+}
+
+.shelf-pending-badge {
+    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: rgba(255, 176, 32, 0.22);
+    color: #ffcf7a;
+}
+
+.shelf-empty {
+    font-size: 13px;
+    opacity: 0.55;
+    padding: 6px 2px 8px;
+}
+
+.shelf-lot {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.06);
+    margin-bottom: 8px;
+}
+
+.shelf-lot--hidden {
+    opacity: 0.55;
+}
+
+.shelf-lot--pending {
+    border: 1px solid rgba(255, 176, 32, 0.35);
+}
+
+.shelf-lot-main {
+    flex: 1;
+    min-width: 0;
+}
+
+.shelf-lot-title {
+    font-size: 14px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.shelf-lot-meta {
+    font-size: 11px;
+    opacity: 0.65;
+    margin-top: 2px;
+}
+
+.shelf-lot-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.shelf-lot-actions .cube-btn-sm {
+    width: auto;
+    padding: 4px 8px;
+}
+
+.shelf-add-row {
+    display: flex;
+    gap: 8px;
+    margin: 8px 0;
+}
+
+.shelf-add-row .cube-btn-sm {
+    flex: 1;
+}
+
+.shelf-inline-card,
+.shelf-inline-form {
+    padding: 10px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.05);
+    margin-bottom: 8px;
+}
+
+.shelf-inline-form {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.shelf-inline-form .cube-modal-input {
+    flex: 1;
+    min-width: 90px;
+}
+
+.shelf-inline-form .cube-btn-sm {
+    width: auto;
+    padding: 6px 10px;
+}
+
+.shelf-limit-hint {
+    font-size: 11px;
+    opacity: 0.6;
+}
+
+.shelf-catalog-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.shelf-gift-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.shelf-gift-row .cube-btn-sm {
+    width: auto;
+    padding: 5px 12px;
+}
+
+.shelf-gift-balance {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.shelf-reputation {
+    margin-top: 16px;
+    padding: 10px;
+    border-radius: 12px;
+    background: rgba(204, 255, 0, 0.1);
+    font-size: 13px;
+    text-align: center;
+}
+
+/* ---------- Шапка наставника (пул капель) ---------- */
+
+.mentor-pool-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.06);
+    margin-bottom: 10px;
+}
+
+.mentor-pool-value {
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.mentor-pool-label {
+    font-size: 11px;
+    opacity: 0.6;
+}
+
+.mentor-pool-row .cube-btn-sm {
+    width: auto;
+    padding: 5px 12px;
+}
+
+/* ---------- Пакеты капель ---------- */
+
+.drop-pack-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 10px 0;
+}
+
+.drop-pack-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.06);
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+.drop-pack-card:disabled {
+    opacity: 0.5;
+}
+
+.drop-pack-amount {
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.drop-pack-price {
+    font-size: 14px;
+    opacity: 0.8;
+}
+
+/* ---------- Запись обещания ---------- */
+
+.promise-recorder {
+    max-width: 420px;
+}
+
+.promise-video-box {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 3 / 4;
+    max-height: 45vh;
+    border-radius: 14px;
+    overflow: hidden;
+    background: #000;
+    margin: 8px 0;
+}
+
+.promise-video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.promise-rec-badge {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    padding: 3px 9px;
+    border-radius: 10px;
+    background: rgba(231, 76, 60, 0.9);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.promise-disclosure {
+    font-size: 11px;
+    line-height: 1.4;
+    opacity: 0.6;
+    margin: 4px 0 8px;
+}
+
+.promise-actions {
+    gap: 8px;
+}
+
+.promise-file-label {
+    display: block;
+    text-align: center;
+    font-size: 13px;
+    opacity: 0.75;
+    padding: 8px;
+    margin-bottom: 6px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.06);
+    cursor: pointer;
+}
+
+/* ---------- Полка глазами игрока ---------- */
+
+.shelf-player-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(204, 255, 0, 0.18);
+}
+
+.shelf-player-card-title {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.shelf-player-card-meta {
+    font-size: 12px;
+    opacity: 0.7;
+}
+
+.shelf-player-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.shelf-player-actions .cube-btn-sm {
+    width: auto;
+    flex: 1;
+    min-width: 90px;
+}
+
+.shelf-purchase-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.05);
+    margin-bottom: 8px;
+}
