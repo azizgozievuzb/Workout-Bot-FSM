@@ -67,6 +67,17 @@ const PromiseRecorder: React.FC<Props> = ({
         if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     }, []);
 
+    // Привязка живого потока строго после рендера live-фазы.
+    useEffect(() => {
+        if (phase !== 'live' && phase !== 'recording') return;
+        const v = videoRef.current;
+        const stream = streamRef.current;
+        if (!v || !stream || v.srcObject === stream) return;
+        v.srcObject = stream;
+        v.muted = true;
+        v.play().catch(() => { });
+    }, [phase]);
+
     useEffect(() => () => {
         stopStream();
         if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -84,14 +95,8 @@ const PromiseRecorder: React.FC<Props> = ({
             });
             streamRef.current = stream;
             setPhase('live');
-            // srcObject ставим после рендера live-фазы, иначе элемент ещё не смонтирован
-            requestAnimationFrame(() => {
-                if (videoRef.current) {
-                    videoRef.current.srcObject = stream;
-                    videoRef.current.muted = true;
-                    videoRef.current.play().catch(() => { });
-                }
-            });
+            // srcObject привязывается в useEffect ниже: rAF мог сработать до коммита
+            // DOM (ref === null) → на iOS превью оставалось чёрным.
         } catch {
             setLocalError('Не удалось включить камеру — разрешите доступ или загрузите файл.');
         }

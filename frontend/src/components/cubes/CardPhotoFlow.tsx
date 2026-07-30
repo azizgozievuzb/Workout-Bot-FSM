@@ -29,6 +29,8 @@ const CardPhotoFlow: React.FC<Props> = ({ card, balance, aiPrice, rawPrice, rero
     const [msg, setMsg] = useState('');
     const [chosenUrl, setChosenUrl] = useState<string | null>(null);
     const [camOpen, setCamOpen] = useState(false);
+    // Кадры реально пошли (есть videoWidth): без этого снимок был бы чёрным.
+    const [camReady, setCamReady] = useState(false);
     const fileRef = useRef<HTMLInputElement | null>(null);
     const cameraRef = useRef<HTMLInputElement | null>(null);
     const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -70,8 +72,29 @@ const CardPhotoFlow: React.FC<Props> = ({ card, balance, aiPrice, rawPrice, rero
     const stopCamera = useCallback(() => {
         streamRef.current?.getTracks().forEach(t => t.stop());
         streamRef.current = null;
+        if (videoRef.current) videoRef.current.srcObject = null;
+        setCamReady(false);
         setCamOpen(false);
     }, []);
+
+    // Привязка потока к <video> строго после рендера камеры (фикс iOS-webview:
+    // без этого превью оставалось чёрным, а снимок уходил пустым кадром).
+    useEffect(() => {
+        if (!camOpen) return;
+        const v = videoRef.current;
+        const stream = streamRef.current;
+        if (!v || !stream) return;
+        v.srcObject = stream;
+        v.muted = true;
+        const onReady = () => { if (v.videoWidth > 0) setCamReady(true); };
+        v.addEventListener('loadedmetadata', onReady);
+        v.addEventListener('canplay', onReady);
+        v.play().then(onReady).catch(() => undefined);
+        return () => {
+            v.removeEventListener('loadedmetadata', onReady);
+            v.removeEventListener('canplay', onReady);
+        };
+    }, [camOpen]);
 
     useEffect(() => () => { streamRef.current?.getTracks().forEach(t => t.stop()); }, []);
 
@@ -121,14 +144,10 @@ const CardPhotoFlow: React.FC<Props> = ({ card, balance, aiPrice, rawPrice, rero
                 video: { facingMode: 'user' }, audio: false,
             });
             streamRef.current = stream;
+            setCamReady(false);
             setCamOpen(true);
-            // видео-элемент появится после рендера
-            window.setTimeout(() => {
-                if (videoRef.current) {
-                    videoRef.current.srcObject = stream;
-                    videoRef.current.play().catch(() => undefined);
-                }
-            }, 0);
+            // srcObject привязывается в useEffect ниже — setTimeout(0) мог сработать
+            // до коммита DOM (videoRef.current === null) и поток не подключался вовсе.
         } catch {
             // Камера недоступна (десктоп-webview/запрет) → нативный input capture,
             // на десктопе он сам деградирует в файловый диалог.
@@ -139,9 +158,15 @@ const CardPhotoFlow: React.FC<Props> = ({ card, balance, aiPrice, rawPrice, rero
     const snapPhoto = useCallback(async () => {
         const video = videoRef.current;
         if (!video || busy) return;
+        // Гейт против чёрного кадра: пока кадров нет, videoWidth = 0 и drawImage
+        // рисует пустоту — именно так в AI уезжал однотонный JPEG на 12 КБ.
+        if (!video.videoWidth || !video.videoHeight) {
+            setMsg('Камера ещё не дала картинку — подождите секунду и снимите снова.');
+            return;
+        }
         const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth || 720;
-        canvas.height = video.videoHeight || 960;
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
         const ctx = canvas.getContext('2d');
         if (!ctx) { stopCamera(); return; }
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -190,9 +215,10 @@ const CardPhotoFlow: React.FC<Props> = ({ card, balance, aiPrice, rawPrice, rero
         body = (
             <>
                 <div className="cardflow-title">Улыбнись 📸</div>
-                <video ref={videoRef} className="cardflow-preview" playsInline muted autoPlay />
-                <button className="cube-btn-primary" disabled={busy} onClick={snapPhoto}>
-                    {busyLabel === 'upload' ? 'Загружаем…' : '📸 Снять'}
+                <video ref={videoRef} className="cardflow-preview cardflow-preview--live"
+                    playsInline muted autoPlay />
+                <button className="cube-btn-primary" disabled={busy || !camReady} onClick={snapPhoto}>
+                    {busyLabel === 'upload' ? 'Загружаем…' : camReady ? '📸 Снять' : 'Готовим камеру…'}
                 </button>
                 <button className="cube-btn-sm" disabled={busy} onClick={stopCamera}>Отмена</button>
             </>

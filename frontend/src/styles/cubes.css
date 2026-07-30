@@ -773,22 +773,34 @@
 
 /* --- Admin toast --- */
 
+/* Тост — фиксированный слой ПОВЕРХ страниц и модалок. Раньше он рендерился
+   в потоке у верха контейнера: игрок стоял внизу экрана и не видел ни
+   подтверждений, ни отказов (смоук 8d, находка №22 — отказ дарения выглядел
+   как мёртвая кнопка). z-index выше .cube-modal-backdrop (9000). */
 .admin-toast {
+    position: fixed;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: min(90vw, 420px);
+    z-index: 9500;
     text-align: center;
     padding: 8px 14px;
     border-radius: 10px;
     font-size: 13px;
     font-weight: 600;
+    box-shadow: 0 6px 22px rgba(0, 0, 0, 0.35);
     animation: fadeInOut 3s ease forwards;
+    pointer-events: none;
 }
 
 .dark-theme .admin-toast {
-    background: rgba(204, 255, 0, 0.1);
+    background: #23291a;
     color: #CCFF00;
 }
 
 .light-theme .admin-toast {
-    background: rgba(0, 122, 255, 0.08);
+    background: #eaf2ff;
     color: #007AFF;
 }
 

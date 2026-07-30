@@ -88,7 +88,9 @@ const PlayerShop: React.FC = () => {
     const [fetchError, setFetchError] = useState(false);
     const [toast, setToast] = useState('');
     const [busy, setBusy] = useState(false);
-    const [buyingId, setBuyingId] = useState<string | null>(null);
+    // {id, action} — иначе «…» садилось на «Купить» при любом действии с лотом
+    // и выглядело как списание, которого не было (смоук 8d, находка №21).
+    const [acting, setActing] = useState<{ id: string; action: 'buy' | 'hide' | 'done' } | null>(null);
     const [test, setTest] = useState<'unlock' | 'lock' | null>(null);
     const [photoFlow, setPhotoFlow] = useState(false);
     // 8d: отчёт по исполненному обещанию (опциональное видео)
@@ -170,8 +172,8 @@ const PlayerShop: React.FC = () => {
     /* ---------- 8d: полка наставника ---------- */
 
     const buyLot = useCallback(async (item: ShelfItem) => {
-        if (buyingId) return;
-        setBuyingId(item.id);
+        if (acting) return;
+        setActing({ id: item.id, action: 'buy' });
         try {
             const res = await buyShelfItem(item.id);
             hapticNotification('success');
@@ -180,23 +182,23 @@ const PlayerShop: React.FC = () => {
                 : '🎁 Куплено!');
             refreshShop();
         } catch (e: any) { failToast(e, 'Не удалось купить'); }
-        finally { setBuyingId(null); }
-    }, [buyingId, showToast, failToast, refreshShop]);
+        finally { setActing(null); }
+    }, [acting, showToast, failToast, refreshShop]);
 
     const hideLot = useCallback(async (item: ShelfItem) => {
-        if (buyingId) return;
-        setBuyingId(item.id);
+        if (acting) return;
+        setActing({ id: item.id, action: 'hide' });
         try {
             await hideShelfItem(item.id);
             showToast('Скрыто. Наставник уведомлён');
             refreshShop();
         } catch (e: any) { failToast(e, 'Не удалось скрыть'); }
-        finally { setBuyingId(null); }
-    }, [buyingId, showToast, failToast, refreshShop]);
+        finally { setActing(null); }
+    }, [acting, showToast, failToast, refreshShop]);
 
     const markDone = useCallback(async (item: ShelfItem, video: Blob | null) => {
-        if (buyingId) return;
-        setBuyingId(item.id); setReportError(''); setReportProgress(video ? 0 : null);
+        if (acting) return;
+        setActing({ id: item.id, action: 'done' }); setReportError(''); setReportProgress(video ? 0 : null);
         try {
             await fulfillShelfItem(item.id, video, setReportProgress);
             hapticNotification('success');
@@ -213,8 +215,8 @@ const PlayerShop: React.FC = () => {
                     : 'Не удалось отметить';
             if (video) setReportError(msg); else failToast(e, msg);
         }
-        finally { setBuyingId(null); setReportProgress(null); }
-    }, [buyingId, showToast, failToast, refreshShop]);
+        finally { setActing(null); setReportProgress(null); }
+    }, [acting, showToast, failToast, refreshShop]);
 
     const openVideo = useCallback(async (item: ShelfItem, kind: 'promise' | 'report') => {
         try {
@@ -322,7 +324,8 @@ const PlayerShop: React.FC = () => {
                     <div className="cube-section-title" style={{ marginTop: 12 }}>🎁 Полка наставника</div>
                     <div className="shop-item-grid">
                         {shop.shelf.map(item => {
-                            const isBusy = buyingId === item.id;
+                            const mine = acting?.id === item.id ? acting.action : null;
+                            const isBusy = acting !== null;
                             return (
                                 <div key={item.id} className="shelf-player-card">
                                     <div className="shelf-player-card-title">
@@ -341,11 +344,11 @@ const PlayerShop: React.FC = () => {
                                         )}
                                         <button className="cube-btn-sm" disabled={isBusy}
                                             onClick={(e) => { e.stopPropagation(); buyLot(item); }}>
-                                            {isBusy ? '…' : 'Купить'}
+                                            {mine === 'buy' ? 'Покупаем…' : 'Купить'}
                                         </button>
                                         <button className="cube-btn-sm" disabled={isBusy}
                                             onClick={(e) => { e.stopPropagation(); hideLot(item); }}>
-                                            Неинтересно
+                                            {mine === 'hide' ? 'Скрываем…' : 'Неинтересно'}
                                         </button>
                                     </div>
                                 </div>
@@ -360,7 +363,8 @@ const PlayerShop: React.FC = () => {
                 <>
                     <div className="cube-section-title" style={{ marginTop: 12 }}>🧾 Мои покупки</div>
                     {shop.my_purchases.map(item => {
-                        const isBusy = buyingId === item.id;
+                        const mine = acting?.id === item.id ? acting.action : null;
+                        const isBusy = acting !== null;
                         const pending = item.status === 'purchased';
                         return (
                             <div key={item.id} className="shelf-purchase-row">
@@ -392,7 +396,7 @@ const PlayerShop: React.FC = () => {
                                     <div className="shelf-player-actions" style={{ flexDirection: 'column' }}>
                                         <button className="cube-btn-sm" disabled={isBusy}
                                             onClick={(e) => { e.stopPropagation(); markDone(item, null); }}>
-                                            {isBusy ? '…' : '✅ Выполнено'}
+                                            {mine === 'done' ? 'Отмечаем…' : '✅ Выполнено'}
                                         </button>
                                         <button className="cube-btn-sm" disabled={isBusy}
                                             onClick={(e) => { e.stopPropagation(); hapticImpact('light'); setReportFor(item); }}>
@@ -411,7 +415,7 @@ const PlayerShop: React.FC = () => {
                     title="Видеоотчёт «как это было»"
                     hint={`«${reportFor.title}» — необязательно, но приятно наставнику.`}
                     confirmLabel="Отметить выполненным"
-                    busy={buyingId === reportFor.id}
+                    busy={acting?.id === reportFor.id}
                     error={reportError}
                     progress={reportProgress}
                     onReady={(blob) => markDone(reportFor, blob)}

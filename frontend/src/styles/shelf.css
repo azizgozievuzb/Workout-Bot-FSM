@@ -371,7 +371,8 @@
 
 /* Живое превью зеркалим — иначе движение головы кажется зеркальным.
    Записанный файл НЕ зеркалим: это стандарт селфи-камер (CSS на blob не влияет). */
-.promise-video--live {
+.promise-video--live,
+.cardflow-preview--live {
     transform: scaleX(-1);
 }
 
