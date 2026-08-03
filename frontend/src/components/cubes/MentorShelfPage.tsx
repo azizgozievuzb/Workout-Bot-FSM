@@ -225,7 +225,7 @@ const MentorShelfPage: React.FC<Props> = ({ page, reload, onBack, onOpenProfile,
                 {page.pending_count > 0 && <span className="shelf-pending-badge">⏳ {page.pending_count}</span>}
             </div>
             {page.pending.length === 0 ? (
-                <div className="mentor-empty">Долгов нет — всё выполнено.</div>
+                <div className="mentor-empty">Долгов нет</div>
             ) : page.pending.map((it) => (
                 <div key={it.id} className="shelf-lot shelf-lot--pending">
                     <div className="shelf-lot-main">
