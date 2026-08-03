@@ -52,6 +52,21 @@ def profile_line(user_row: dict) -> str:
     return " · ".join(p for p in parts if p)
 
 
+def profile_chips(user_row: dict) -> list[dict]:
+    """8d.1 (П.3a): те же атрибуты, но структурно — чипы столбиком у фото.
+    Плоская строка «Игрок: парень · выносливость · средний уровень» ломалась о
+    длинные слова и читалась как подпись, а не как досье."""
+    raw = (
+        ("👤", "Пол", GENDER_WORDS.get(user_row.get("gender") or "")),
+        ("🎯", "Цель", GOAL_WORDS.get(user_row.get("goal") or "")),
+        ("📈", "Подготовка", FITNESS_WORDS.get(user_row.get("fitness_level") or "")),
+    )
+    return [
+        {"icon": icon, "label": label, "value": value}
+        for icon, label, value in raw if value
+    ]
+
+
 def slots_for_tier(tier: str | None) -> int:
     return SHELF_SLOTS_BY_TIER.get(tier or "standard", SHELF_SLOTS_BY_TIER["standard"])
 
@@ -89,8 +104,10 @@ async def used_slots(db, partnership_id: str) -> int:
     return len(res.data or [])
 
 
-async def reputation_drops(db, partnership_id: str) -> int:
-    """«Исполнено обещаний на N 💧» — живой агрегат, НЕ денормализуем."""
+async def reputation(db, partnership_id: str) -> tuple[int, int]:
+    """Репутация наставника: (сколько обещаний исполнено, на сколько капель).
+    Живой агрегат, НЕ денормализуем. 8d.1 (Д3): в шапке полки главной цифрой
+    идёт СЧЁТ обещаний, сумма капель — расшифровкой под ним."""
     res = await (
         db.table("shelf_items")
         .select("price_drops")
@@ -99,7 +116,8 @@ async def reputation_drops(db, partnership_id: str) -> int:
         .in_("status", ["fulfilled", "archived"])
         .execute()
     )
-    return sum(int(r.get("price_drops") or 0) for r in (res.data or []))
+    rows = res.data or []
+    return len(rows), sum(int(r.get("price_drops") or 0) for r in rows)
 
 
 async def pending_counts(db, partnership_ids: list[str]) -> dict[str, int]:

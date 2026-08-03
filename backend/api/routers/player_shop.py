@@ -17,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ...core.config import settings
 from ...core.deps import get_bot, get_current_user
@@ -48,6 +48,9 @@ PHOTO_REROLL_CAP_DEFAULT = 960
 
 MAX_SELFIE_BYTES = 5 * 1024 * 1024
 
+# 8d.1 (Д7): «оставить как есть» на экране выбора вариантов.
+KEEP_ORIGINAL_INDEX = -1
+
 
 # ---------------------------------------------------------------------------
 # Schemas
@@ -59,6 +62,10 @@ class CardPhotoState(BaseModel):
     status: str | None = None            # None | awaiting_photo | processing | choosing | failed
     mode: str | None = None              # режим текущего флоу ('ai'|'raw'), фиксируется при покупке
     variants: list[str] = []
+    # 8d.1 (П.10): чем сделан variants[i] — 'weak' | 'deep'; фронт рисует подписи.
+    variant_modes: list[str] = []
+    # Оригинал селфи — показывается рядом с вариантами на экране выбора.
+    selfie_url: str | None = None
 
 
 class RestoreOffer(BaseModel):
@@ -99,6 +106,10 @@ class PlayerShopState(BaseModel):
     reroll_credits: int = 0
     shelf: list[ShelfItemOut] = []
     my_purchases: list[ShelfItemOut] = []
+    # 8d.1 (П.7, находка №23): секция полки видна ВСЕГДА при живом партнёрстве —
+    # пустые слоты рисуются заглушками, поэтому фронту нужно их число.
+    has_mentor: bool = False
+    shelf_slots_total: int = 0
 
 
 class ShelfBuyResp(BaseModel):
@@ -128,7 +139,9 @@ class CardPurchaseReq(BaseModel):
 
 
 class CardChooseReq(BaseModel):
-    index: int
+    # index >= 0 — AI-вариант; index == KEEP_ORIGINAL_INDEX — «оставить как есть»
+    # (8d.1 Д7): карточкой становится исходное селфи, без AI.
+    index: int = Field(ge=-1)
 
 
 # ---------------------------------------------------------------------------
@@ -224,7 +237,17 @@ def _card_state(user_row: dict) -> CardPhotoState:
         status=cand.get("status"),
         mode=cand.get("mode"),
         variants=list(cand.get("variants") or []),
+        variant_modes=list(cand.get("modes") or []),
+        selfie_url=cand.get("selfie_url"),
     )
+
+
+def _selfie_public_url(telegram_id: int, cache_token: str) -> str:
+    """Публичная ссылка на исходное селфи. Путь фиксированный и перезаписывается
+    каждым новым флоу — поэтому к нему прибит токен, иначе экран выбора показал бы
+    закешированный оригинал прошлой попытки."""
+    return (f"{_storage_base()}/storage/v1/object/public/avatars/"
+            f"{telegram_id}/card_selfie.jpg?v={cache_token}")
 
 
 def _shelf_out(row: dict) -> ShelfItemOut:
@@ -243,14 +266,33 @@ def _shelf_out(row: dict) -> ShelfItemOut:
     )
 
 
-async def _my_partnership(db, player_id: str) -> str | None:
+async def _my_pair(db, player_id: str) -> dict | None:
+    """Живая пара игрока: {id, responsible_id} или None."""
     res = await (
-        db.table("partnerships").select("id")
+        db.table("partnerships").select("id, responsible_id")
         .eq("player_id", player_id).eq("status", "active")
         .limit(1).execute()
     )
     rows = res.data or []
-    return str(rows[0]["id"]) if rows else None
+    return rows[0] if rows else None
+
+
+async def _my_partnership(db, player_id: str) -> str | None:
+    pair = await _my_pair(db, player_id)
+    return str(pair["id"]) if pair else None
+
+
+async def _mentor_shelf_slots(db, responsible_id: str | None) -> int:
+    """Сколько слотов на полке даёт ЖИВОЙ тариф наставника (std 2 / prm 4 / elt 6).
+    Нужно игроку, чтобы нарисовать пустые ячейки полки (8d.1 П.7)."""
+    if not responsible_id:
+        return 0
+    res = await (
+        db.table("users").select("responsible_access_tier")
+        .eq("id", responsible_id).maybe_single().execute()
+    )
+    row = res.data if (res and res.data) else {}
+    return shelf_svc.slots_for_tier((row or {}).get("responsible_access_tier"))
 
 
 async def _my_shelf_item(db, player_id: str, item_id: str) -> dict:
@@ -268,6 +310,25 @@ async def _my_shelf_item(db, player_id: str, item_id: str) -> dict:
     item = res.data
     item["_partnership_id"] = partnership_id
     return item
+
+
+async def _store_report_video(db, partnership_id: str, video: UploadFile | None) -> str | None:
+    """Видеоотчёт игрока в приватный бакет. None — файла нет/он пустой."""
+    if video is None:
+        return None
+    payload = await video.read()
+    if len(payload) > shelf_svc.MAX_PROMISE_BYTES:
+        raise HTTPException(status_code=413, detail={"code": "VIDEO_TOO_LARGE"})
+    if not payload:
+        return None
+    mime = shelf_svc.normalize_mime(video.content_type)
+    path = shelf_svc.promise_path(partnership_id, "report", mime)
+    try:
+        await shelf_svc.upload_promise_video(db, path, payload, mime)
+    except Exception as e:
+        logger.error("[shelf] report upload failed pair=%s: %s", partnership_id, e)
+        raise HTTPException(status_code=500, detail={"code": "STORAGE_FAILED"})
+    return path
 
 
 async def _notify_mentor(db, partnership_id: str, *, type: str, title: str,
@@ -335,7 +396,9 @@ async def get_shop_state(current_user: dict = Depends(get_current_user)) -> Play
     # 8d: полка наставника — активные лоты пары + «Мои покупки».
     shelf_rows: list[dict] = []
     purchase_rows: list[dict] = []
-    partnership_id = await _my_partnership(db, me["id"])
+    pair = await _my_pair(db, me["id"])
+    partnership_id = str(pair["id"]) if pair else None
+    slots_total = await _mentor_shelf_slots(db, pair.get("responsible_id") if pair else None)
     if partnership_id:
         sh = await (
             db.table("shelf_items").select("*")
@@ -371,6 +434,8 @@ async def get_shop_state(current_user: dict = Depends(get_current_user)) -> Play
         reroll_credits=int(stats.get("reroll_credits") or 0),
         shelf=[_shelf_out(r) for r in shelf_rows],
         my_purchases=[_shelf_out(r) for r in purchase_rows],
+        has_mentor=partnership_id is not None,
+        shelf_slots_total=slots_total,
     )
 
 
@@ -529,19 +594,9 @@ async def fulfill_shelf_item(
 
     update: dict = {"status": "fulfilled", "fulfilled_at": datetime.now(UTC).isoformat()}
 
-    if video is not None:
-        payload = await video.read()
-        if len(payload) > shelf_svc.MAX_PROMISE_BYTES:
-            raise HTTPException(status_code=413, detail={"code": "VIDEO_TOO_LARGE"})
-        if payload:
-            mime = shelf_svc.normalize_mime(video.content_type)
-            path = shelf_svc.promise_path(item["_partnership_id"], "report", mime)
-            try:
-                await shelf_svc.upload_promise_video(db, path, payload, mime)
-                update["report_video_path"] = path
-            except Exception as e:
-                logger.error("[shelf] report upload failed item=%s: %s", item_id, e)
-                raise HTTPException(status_code=500, detail={"code": "STORAGE_FAILED"})
+    path = await _store_report_video(db, item["_partnership_id"], video)
+    if path:
+        update["report_video_path"] = path
 
     res = await (
         db.table("shelf_items").update(update)
@@ -557,6 +612,55 @@ async def fulfill_shelf_item(
         message=f"Игрок отметил «{item.get('title')}» выполненным.",
         payload={"item_id": str(item_id), "has_report": bool(update.get("report_video_path"))},
         bot_text=f"✅ Игрок отметил обещание «{item.get('title')}» выполненным. Спасибо!",
+    )
+    return _shelf_out(res.data[0])
+
+
+@router.post("/me/shelf/{item_id}/report", response_model=ShelfItemOut)
+async def attach_shelf_report(
+    item_id: uuid.UUID,
+    video: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+) -> ShelfItemOut:
+    """8d.1 (П.8c, Д6): видеоотчёт ПОСЛЕ галочки.
+
+    Раньше отчёт принимался только вместе с `/fulfill` — игрок, отметивший
+    обещание без видео, приложить его уже не мог. Гейты: лот принадлежит живой
+    паре игрока, `status='fulfilled'`, отчёта ещё нет, тип — обещание.
+    Репутация наставника считается по исполненным обещаниям и здесь НЕ растёт:
+    статус лота не меняется, повторного начисления нет.
+    """
+    db = await get_supabase()
+    me = await _me(db, current_user["telegram_id"])
+    item = await _my_shelf_item(db, me["id"], str(item_id))
+    if item.get("type") != "promise":
+        raise HTTPException(status_code=409, detail={"code": "NOT_A_PROMISE"})
+    if item["status"] != "fulfilled":
+        raise HTTPException(status_code=409, detail={"code": "NOT_FULFILLED", "status": item["status"]})
+    if item.get("report_video_path"):
+        raise HTTPException(status_code=409, detail={"code": "REPORT_EXISTS"})
+
+    path = await _store_report_video(db, item["_partnership_id"], video)
+    if not path:
+        raise HTTPException(status_code=400, detail={"code": "EMPTY_VIDEO"})
+
+    res = await (
+        db.table("shelf_items").update({"report_video_path": path})
+        .eq("id", str(item_id)).eq("status", "fulfilled")
+        .is_("report_video_path", "null").execute()
+    )
+    if not res.data:
+        # Гонка: между гейтом и апдейтом отчёт уже прилетел — свой файл убираем.
+        await shelf_svc.remove_promise_videos(db, [path])
+        raise HTTPException(status_code=409, detail={"code": "REPORT_EXISTS"})
+
+    await _notify_mentor(
+        db, item["_partnership_id"],
+        type="promise_report",
+        title="🎥 Игрок приложил видеоотчёт",
+        message=f"«{item.get('title')}» — отчёт «как это было».",
+        payload={"item_id": str(item_id)},
+        bot_text=f"🎥 Игрок приложил видеоотчёт к обещанию «{item.get('title')}».",
     )
     return _shelf_out(res.data[0])
 
@@ -674,22 +778,27 @@ async def card_photo_upload(
         await db.table("users").update(update).eq("id", me["id"]).execute()
         return _card_state({**me, **update})
 
-    # mode == 'ai': селфи сохраняем (нужно для reroll), генерация фоном.
+    # mode == 'ai': селфи сохраняем (нужно для reroll и для показа оригинала
+    # рядом с вариантами — 8d.1 П.10), генерация фоном.
+    selfie_url: str | None = None
     try:
         await db.storage.from_("avatars").upload(
             path=f"{tid}/card_selfie.jpg",
             file=photo_bytes,
             file_options={"content-type": "image/jpeg", "x-upsert": "true"},
         )
+        selfie_url = _selfie_public_url(tid, uuid.uuid4().hex[:8])
     except Exception as e:
         logger.warning("card selfie store failed (reroll недоступен): %s", e)
 
-    new_cand = {"status": "processing", "mode": "ai"}
+    new_cand = {"status": "processing", "mode": "ai", "selfie_url": selfie_url}
     await (
         db.table("users").update({"card_photo_candidates": new_cand})
         .eq("id", me["id"]).execute()
     )
-    asyncio.create_task(process_card_photo_variants(photo_bytes, tid, me.get("gender")))
+    asyncio.create_task(
+        process_card_photo_variants(photo_bytes, tid, me.get("gender"), selfie_url)
+    )
     return _card_state({**me, "card_photo_candidates": new_cand})
 
 
@@ -697,22 +806,55 @@ async def card_photo_upload(
 async def card_photo_choose(
     body: CardChooseReq, current_user: dict = Depends(get_current_user)
 ) -> CardPhotoState:
+    """index >= 0 — выбранный AI-вариант; index == -1 — «оставить как есть»
+    (8d.1 Д7): карточкой становится исходное селфи. Смена уже оплачена, доплаты
+    нет — игрок просто отказался от обеих обработок."""
     db = await get_supabase()
     me = await _me(db, current_user["telegram_id"])
     cand = me.get("card_photo_candidates") or {}
     variants = list(cand.get("variants") or [])
     if cand.get("status") != "choosing" or not variants:
         raise HTTPException(status_code=409, detail={"code": "NOT_CHOOSING"})
-    if not (0 <= body.index < len(variants)):
-        raise HTTPException(status_code=422, detail={"code": "BAD_INDEX"})
 
-    update = {
-        "card_photo_url": variants[body.index],
-        "card_photo_source": "ai",
-        "card_photo_candidates": None,
-    }
+    if body.index == KEEP_ORIGINAL_INDEX:
+        update = {
+            "card_photo_url": await _keep_original_selfie(db, me["telegram_id"]),
+            "card_photo_source": "raw",
+            "card_photo_candidates": None,
+        }
+    else:
+        if body.index >= len(variants):
+            raise HTTPException(status_code=422, detail={"code": "BAD_INDEX"})
+        update = {
+            "card_photo_url": variants[body.index],
+            "card_photo_source": "ai",
+            "card_photo_candidates": None,
+        }
     await db.table("users").update(update).eq("id", me["id"]).execute()
     return _card_state({**me, **update})
+
+
+async def _keep_original_selfie(db, telegram_id: int) -> str:
+    """Копия селфи под уникальным именем. Нельзя ссылаться на card_selfie.jpg
+    напрямую: путь фиксированный, следующая AI-попытка перезапишет файл и молча
+    подменила бы уже установленную карточку."""
+    try:
+        raw = await db.storage.from_("avatars").download(f"{telegram_id}/card_selfie.jpg")
+    except Exception:
+        raw = None
+    if not raw:
+        raise HTTPException(status_code=409, detail={"code": "SELFIE_MISSING"})
+    path = f"{telegram_id}/card_raw_{uuid.uuid4().hex[:8]}.jpg"
+    try:
+        await db.storage.from_("avatars").upload(
+            path=path,
+            file=raw,
+            file_options={"content-type": "image/jpeg", "x-upsert": "true"},
+        )
+    except Exception as e:
+        logger.error("card keep-original upload failed for %s: %s", telegram_id, e)
+        raise HTTPException(status_code=500, detail={"code": "STORAGE_FAILED"})
+    return f"{_storage_base()}/storage/v1/object/public/avatars/{path}"
 
 
 @router.post("/me/card-photo/reroll", response_model=CardPhotoState)
@@ -752,6 +894,10 @@ async def card_photo_reroll(current_user: dict = Depends(get_current_user)) -> C
             })
         raise HTTPException(status_code=409, detail={"code": code})
 
-    new_cand = {"status": "processing", "mode": "ai"}
-    asyncio.create_task(process_card_photo_variants(selfie, tid, me.get("gender")))
+    # Селфи то же самое — ссылку на оригинал тянем из прошлого раунда (8d.1 П.10).
+    selfie_url = cand.get("selfie_url") or _selfie_public_url(tid, uuid.uuid4().hex[:8])
+    new_cand = {"status": "processing", "mode": "ai", "selfie_url": selfie_url}
+    asyncio.create_task(
+        process_card_photo_variants(selfie, tid, me.get("gender"), selfie_url)
+    )
     return _card_state({**me, "card_photo_candidates": new_cand})

@@ -7,13 +7,36 @@ import { hapticImpact, hapticNotification } from '../../utils/haptic';
    Дисклоз о хранении видео — строкой прямо на экране записи (решение S55).
 
    Хотфикс смоука 8d (шаг 2а, десктоп Telegram Web):
-   * рендер через портал в document.body — шторка страницы игрока обрезала лист;
+   * рендер через портал в document.body — иначе лист обрезался родительским
+     контейнером (в 8d это была полуэкранная шторка страницы игрока);
    * лист скроллится и ограничен по высоте, превью не выталкивает кнопки за экран;
    * тип блоба берётся из recorder.mimeType (наш guess врал → превью не игралось);
    * ошибки аплоада показываются ВНУТРИ рекордера, «Отмена» не блокируется. */
 
-const MAX_SECONDS = 30;
+/* Пресет записи «C» (решение S57, внедрено в 8d.1 §9) — для ОБОИХ рекордеров:
+   видео-обещание наставника и видеоотчёт игрока.
+
+   Зачем: MediaRecorder пишет без ограничения битрейта. Замер живого файла из
+   бакета дал 9.56 Мбит/с (~1.2 МБ/сек) — 30-секундный ролик весил бы ~36 МБ и
+   упирался в наш же потолок MAX_BYTES, то есть длинное обещание физически не
+   загружалось. Ограничение битрейта на записи снимает это без перекодирования
+   на клиенте. Ожидаемый вес 15 с ≈ 0.8 МБ. */
+const MAX_SECONDS = 15;
 const MAX_BYTES = 30 * 1024 * 1024;
+
+const VIDEO_BITS_PER_SECOND = 400_000;
+const AUDIO_BITS_PER_SECOND = 64_000;
+
+/** Разрешение просим У КАМЕРЫ (480×640 портрет), а не давим кадр после. */
+const CAPTURE_CONSTRAINTS: MediaStreamConstraints = {
+    video: {
+        facingMode: 'user',
+        width: { ideal: 480 },
+        height: { ideal: 640 },
+        frameRate: { ideal: 30, max: 30 },
+    },
+    audio: { channelCount: 1 },
+};
 
 interface Props {
     title: string;
@@ -90,9 +113,7 @@ const PromiseRecorder: React.FC<Props> = ({
             return;
         }
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: 'user' }, audio: true,
-            });
+            const stream = await navigator.mediaDevices.getUserMedia(CAPTURE_CONSTRAINTS);
             streamRef.current = stream;
             setPhase('live');
             // srcObject привязывается в useEffect ниже: rAF мог сработать до коммита
@@ -112,10 +133,16 @@ const PromiseRecorder: React.FC<Props> = ({
         hapticImpact('medium');
         chunksRef.current = [];
         const wanted = pickMime();
+        const opts: Record<string, unknown> = {
+            videoBitsPerSecond: VIDEO_BITS_PER_SECOND,
+            audioBitsPerSecond: AUDIO_BITS_PER_SECOND,
+        };
+        if (wanted) opts.mimeType = wanted;
         let rec: any;
         try {
-            rec = new (window as any).MediaRecorder(stream, wanted ? { mimeType: wanted } : undefined);
+            rec = new (window as any).MediaRecorder(stream, opts);
         } catch {
+            // Клиент не принял битрейты/кодек — пишем как получится, чем не пишем вовсе.
             rec = new (window as any).MediaRecorder(stream);
         }
         recorderRef.current = rec;

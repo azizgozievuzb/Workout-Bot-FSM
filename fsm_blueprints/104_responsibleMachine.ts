@@ -2,138 +2,270 @@ import { setup, assign } from 'xstate';
 
 /**
  * 104_RESPONSIBLE_MACHINE
- * 
- * Главный экран Ответственного (Второй Половинки).
- * Доступ сюда дается после успешной привязки и оплаты первоначального доступа.
- * Функционал: Мониторинг партнера, покупка Бустов X2 за Звезды, Пинги-напоминалки (раз в 6 часов).
+ *
+ * Панель Ответственного (наставника) после 8d + 8d.1.
+ *
+ * ⚠️ Машина переписана в 8d.1: прежняя версия описывала эпоху БУСТОВ (⚡X2 за
+ * Stars + пинги), а бусты снесены целиком ещё в 8d (решение S55) — таблица
+ * `boosts`, роутер, сервис и продукты Stars удалены. Оставлять их в «источнике
+ * правды» было опаснее, чем переписать.
+ *
+ * 8d.1 (П.1a) разносит панель наставника по двум кубам — одна роль на куб:
+ *   • Action  — НАБЛЮДЕНИЕ: досье игрока, дарение капель/заморозок. Полки нет.
+ *   • Market  — ПОЛКА игрока: лоты, слоты, цены, видео-обещания, «⏳ ждут
+ *               исполнения», пополнение пула капель.
+ *   • Bond    — только связи/партнёрства, карточки игрока там нет.
+ *
+ * Обе страницы полноэкранные (П.2). Между ними навигационная ПАРА: с профиля —
+ * строка-дверь «🎁 Полка X/N →», с полки — «👤 К профилю →». `returnTo` держит
+ * точку входа, чтобы «← Назад» вернул туда, откуда пришли (в коде это стек
+ * страниц в MentorPlayerScreens.tsx).
+ *
+ * Реализация: frontend/src/components/cubes/{ActionCube,MarketCube}.tsx →
+ * MentorPlayerScreens → {MentorPlayerProfile, MentorShelfPage};
+ * бэкенд backend/api/routers/shelf.py.
  */
+
+type Entry = 'action' | 'market';
 
 export const responsibleMachine = setup({
   types: {
     context: {} as {
       responsibleId: string;
-      playerId: string;
-      playerGlobalScore: number;
-      playerThreeDayScore: number;
-      activeBoost: '1_day' | '1_week' | null;
-      lastPingTimestamp: number | null; 
+      playerId: string | null;
+      /** Из какого куба вошли — определяет, куда вернёт «← Назад». */
+      returnTo: Entry;
+      /** Пул капель наставника для подарков (users.gift_balance). */
+      giftBalance: number;
+      /** Слоты полки ЭТОГО игрока: заняты / всего (по живому тарифу: 2/4/6). */
+      slotsUsed: number;
+      slotsTotal: number;
+      /** Купленные, но не исполненные обещания — бейдж «⏳ N» в списке Market. */
+      pendingPromises: number;
     },
     events: {} as
-      | { type: 'REFRESH_STATS'; stats: any }
-      | { type: 'OPEN_SHOP' }
-      | { type: 'BUY_DAY_BOOST' } // 50 Telegram Stars
-      | { type: 'BUY_WEEK_BOOST' } // 300 Telegram Stars
-      | { type: 'SEND_PING' }
-      | { type: 'PAYMENT_SUCCESS'; boostType: '1_day' | '1_week' }
-      | { type: 'PAYMENT_CANCEL' }
+      | { type: 'OPEN_PROFILE'; playerId: string; from: Entry }   // тап по строке в Action
+      | { type: 'OPEN_SHELF'; playerId: string; from: Entry }     // тап по строке в Market
+      | { type: 'GO_TO_SHELF' }                                   // дверь «🎁 Полка X/N →»
+      | { type: 'GO_TO_PROFILE' }                                 // ссылка «👤 К профилю →»
       | { type: 'BACK' }
+      | { type: 'PAGE_LOADED'; page: any }
+      | { type: 'TOP_UP_POOL' }                                   // «Пополнить» (drop packs)
+      | { type: 'GIFT_DROPS' }
+      | { type: 'GIFT_FREEZE' }
+      | { type: 'ADD_PROMISE' }
+      | { type: 'ADD_STAR_ITEM' }
+      | { type: 'VIDEO_READY'; blob: Blob }
+      | { type: 'EDIT_PRICE'; itemId: string }
+      | { type: 'REPUBLISH'; itemId: string }
+      | { type: 'REMOVE_ITEM'; itemId: string }
+      | { type: 'PLAY_VIDEO'; itemId: string; kind: 'promise' | 'report' }
+      | { type: 'CLOSE' }
+      | { type: 'PAYMENT_SUCCESS' }
+      | { type: 'PAYMENT_CANCEL' }
   },
   actions: {
-    updateStats: assign({
-      playerGlobalScore: ({ event }) => (event as any).stats.globalScore,
-      playerThreeDayScore: ({ event }) => (event as any).stats.threeDayScore,
-      activeBoost: ({ event }) => (event as any).stats.activeBoost,
-      lastPingTimestamp: ({ event }) => (event as any).stats.lastPingTimestamp
+    rememberEntry: assign({
+      playerId: ({ event }) => (event as any).playerId ?? null,
+      returnTo: ({ event }) => (event as any).from ?? 'action'
     }),
-    recordPingToken: assign({
-      lastPingTimestamp: () => Date.now()
-    }),
-    applyBoost: assign({
-      activeBoost: ({ event }) => event.type === 'PAYMENT_SUCCESS' ? event.boostType : null
+    applyPage: assign({
+      giftBalance: ({ event }) => (event as any).page.gift_balance,
+      slotsUsed: ({ event }) => (event as any).page.slots_used,
+      slotsTotal: ({ event }) => (event as any).page.slots_total,
+      pendingPromises: ({ event }) => (event as any).page.pending_count
     })
   },
   guards: {
-    canSendPing: ({ context }) => {
-      // Разрешено, если пинга еще не было, ИЛИ прошло больше 6 часов
-      if (!context.lastPingTimestamp) return true;
-      const sixHoursInMs = 6 * 60 * 60 * 1000;
-      return (Date.now() - context.lastPingTimestamp) >= sixHoursInMs;
-    }
+    // П.9: при полной полке кнопки не блокируются — тап показывает тост
+    // «Все слоты заняты…». Постоянной строки-предупреждения больше нет.
+    hasFreeSlot: ({ context }) => context.slotsUsed < context.slotsTotal,
+    cameFromAction: ({ context }) => context.returnTo === 'action'
   }
 }).createMachine({
   id: 'responsibleMachine',
-  initial: 'fetchingPartnerStats',
+  initial: 'cubeList',
   context: {
     responsibleId: 'resp_1',
-    playerId: 'player_1',
-    playerGlobalScore: 0,
-    playerThreeDayScore: 0,
-    activeBoost: null,
-    lastPingTimestamp: null
+    playerId: null,
+    returnTo: 'action',
+    giftBalance: 0,
+    slotsUsed: 0,
+    slotsTotal: 2,
+    pendingPromises: 0
   },
   states: {
-    // =============================
-    // Загрузка свежих данных Игрока
-    // =============================
-    fetchingPartnerStats: {
-      meta: { "@statelyai.color": "blue" },
-      invoke: {
-        // @ts-ignore
-        src: 'fetchPlayerStatsFromDB',
-        onDone: { target: 'responsibleDashboard', actions: 'updateStats' },
-        onError: 'responsibleDashboard' // fallback, если ошибка сети
+    // =====================================================================
+    // Списки игроков в кубах. Action — без бейджа «⏳» (Д1: он живёт в Market).
+    // =====================================================================
+    cubeList: {
+      meta: { '@statelyai.color': 'blue' },
+      on: {
+        OPEN_PROFILE: { target: 'loadingPage.toProfile', actions: 'rememberEntry' },
+        OPEN_SHELF: { target: 'loadingPage.toShelf', actions: 'rememberEntry' },
+        TOP_UP_POOL: 'dropPacks'
       }
     },
 
-    // =============================
-    // Главное меню (Дашборд)
-    // =============================
-    responsibleDashboard: {
-      meta: { "@statelyai.color": "green" },
+    // Один запрос GET /shelf/players/{id}/page обслуживает ОБЕ страницы —
+    // переход «профиль ⇄ полка» происходит без повторной загрузки.
+    loadingPage: {
+      meta: { '@statelyai.color': 'gray' },
+      initial: 'toProfile',
+      states: {
+        toProfile: {
+          on: { PAGE_LOADED: { target: '#responsibleMachine.playerProfile', actions: 'applyPage' } }
+        },
+        toShelf: {
+          on: { PAGE_LOADED: { target: '#responsibleMachine.playerShelf', actions: 'applyPage' } }
+        }
+      },
+      on: { BACK: 'cubeList' }
+    },
+
+    // =====================================================================
+    // Action (R): страница НАБЛЮДЕНИЯ — полноэкранная (П.2, П.3).
+    // Досье (фото + чипы столбиком), 3 плитки XP/стрик/рекорд с расшифровками,
+    // дарение, внизу дверь на полку. Управления полкой здесь НЕТ.
+    // XP-прогресс-бар удалён (Д4): системы уровней в игре нет.
+    // =====================================================================
+    playerProfile: {
+      meta: { '@statelyai.color': 'green' },
       on: {
-        OPEN_SHOP: 'boostShop',
-        SEND_PING: [
-          { target: 'sendingPush', guard: 'canSendPing' },
-          { target: 'pingCooldownError' } // Пользователь спамит кнопкой до истечения 6 часов
+        GO_TO_SHELF: 'playerShelf',       // дверь кликабельна даже при полной полке (П.9)
+        GIFT_DROPS: 'giftingDrops',
+        GIFT_FREEZE: 'giftingFreeze',
+        TOP_UP_POOL: 'dropPacks',         // Д2: шорткат из окна дарения, чтобы пустой пул не был тупиком
+        BACK: 'cubeList'
+      }
+    },
+
+    giftingDrops: {
+      meta: { '@statelyai.color': 'purple' },
+      invoke: {
+        // @ts-ignore
+        src: 'giftDropsRpc',              // POST /shelf/gift-drops → RPC gift_drops
+        onDone: 'playerProfile',
+        onError: 'playerProfile'
+      },
+      on: { CLOSE: 'playerProfile' }
+    },
+
+    giftingFreeze: {
+      meta: { '@statelyai.color': 'purple' },
+      invoke: {
+        // @ts-ignore
+        src: 'giftFreeze',                // POST /shop/gift-freeze
+        onDone: 'playerProfile',
+        onError: 'playerProfile'
+      },
+      on: { CLOSE: 'playerProfile' }
+    },
+
+    // =====================================================================
+    // Market (R): ПОЛКА игрока — полноэкранная (П.1c, П.2, П.9).
+    // Шапка-минимум: фото + имя + счётчик слотов + «👤 К профилю →».
+    // Живых цифр наблюдения (стрик/XP) в шапке нет — они в профиле.
+    // =====================================================================
+    playerShelf: {
+      meta: { '@statelyai.color': 'green' },
+      on: {
+        GO_TO_PROFILE: 'playerProfile',
+        ADD_PROMISE: [
+          { target: 'recordingPromise', guard: 'hasFreeSlot' },
+          { target: 'slotsFullToast' }
         ],
-        REFRESH_STATS: { target: 'fetchingPartnerStats' }
+        ADD_STAR_ITEM: [
+          { target: 'starItemInvoice', guard: 'hasFreeSlot' },
+          { target: 'slotsFullToast' }
+        ],
+        EDIT_PRICE: 'savingPrice',
+        REPUBLISH: 'savingPrice',         // PATCH status='active', повторной оплаты Stars нет
+        REMOVE_ITEM: 'removingItem',
+        PLAY_VIDEO: 'videoPlayer',
+        BACK: [
+          { target: 'playerProfile', guard: 'cameFromAction' },
+          { target: 'cubeList' }
+        ]
       }
     },
 
-    // =============================
-    // Мотивация партнера (Пинг)
-    // =============================
-    sendingPush: {
-      meta: { "@statelyai.color": "purple" },
-      invoke: {
-        // @ts-ignore
-        src: 'sendPushToPlayer',
-        onDone: { target: 'responsibleDashboard', actions: 'recordPingToken' },
-        onError: 'responsibleDashboard'
-      }
-    },
-    pingCooldownError: {
-      meta: { "@statelyai.color": "red" },
-      on: { BACK: 'responsibleDashboard' } // Сообщение: "Кулдаун 6 часов. Партнер уже уведомлен ранее!"
+    // П.9: тост поверх экрана, экран не меняется. Красный счётчик в шапке и
+    // серые кнопки — постоянные сигналы; тост объясняет причину по тапу.
+    slotsFullToast: {
+      meta: { '@statelyai.color': 'red' },
+      after: { 3500: 'playerShelf' },
+      on: { CLOSE: 'playerShelf' }
     },
 
-    // =============================
-    // Магазин Бустов (X2 Золото)
-    // =============================
-    boostShop: {
-      meta: { "@statelyai.color": "orange" },
+    // Рекордер живёт на полноэкранной полке (аргумент находки №17 закрыт).
+    // Пресет «C» (S57): 15 с · 480×640 · видео 400 кбит/с · аудио 64 кбит/с моно · 30 fps.
+    recordingPromise: {
+      meta: { '@statelyai.color': 'orange' },
       on: {
-        BUY_DAY_BOOST: 'processingPayment', // Цена: 50 Stars
-        BUY_WEEK_BOOST: 'processingPayment', // Цена: 300 Stars
-        BACK: 'responsibleDashboard'
+        VIDEO_READY: 'uploadingPromise',
+        CLOSE: 'playerShelf'
+      }
+    },
+    uploadingPromise: {
+      meta: { '@statelyai.color': 'yellow' },
+      invoke: {
+        // @ts-ignore
+        src: 'createPromise',             // POST /shelf/promise (multipart, приватный бакет)
+        onDone: 'playerShelf',
+        onError: 'recordingPromise'       // причина показывается ВНУТРИ рекордера
       }
     },
 
-    processingPayment: {
-      meta: { "@statelyai.color": "yellow" },
+    // Покупка Stars-предмета = сразу выставление на полку, инвентаря нет.
+    starItemInvoice: {
+      meta: { '@statelyai.color': 'orange' },
       invoke: {
         // @ts-ignore
-        src: 'telegramStarsPayment'
+        src: 'createStarItemInvoice'      // POST /shelf/star-item → invoice link
       },
       on: {
-        PAYMENT_SUCCESS: { target: 'boostActivatedMsg', actions: 'applyBoost' },
-        PAYMENT_CANCEL: 'boostShop'
+        PAYMENT_SUCCESS: 'playerShelf',   // лот создаёт fulfill платежа на бэке
+        PAYMENT_CANCEL: 'playerShelf',
+        CLOSE: 'playerShelf'
       }
     },
 
-    boostActivatedMsg: {
-      meta: { "@statelyai.color": "green" },
-      on: { BACK: 'responsibleDashboard' } // "Успешно! Ваш партнер теперь зарабатывает X2."
+    savingPrice: {
+      meta: { '@statelyai.color': 'yellow' },
+      invoke: {
+        // @ts-ignore
+        src: 'patchShelfItem',            // PATCH /shelf/items/{id}
+        onDone: 'playerShelf',
+        onError: 'playerShelf'
+      }
+    },
+    removingItem: {
+      meta: { '@statelyai.color': 'yellow' },
+      invoke: {
+        // @ts-ignore
+        src: 'deleteShelfItem',           // DELETE /shelf/items/{id} (только active/hidden)
+        onDone: 'playerShelf',
+        onError: 'playerShelf'
+      }
+    },
+
+    // П.6a (находка №18): видео играет ВНУТРИ приложения, подписанная ссылка
+    // грузится лениво по тапу. tg.openLink для просмотра больше не используется.
+    videoPlayer: {
+      meta: { '@statelyai.color': 'blue' },
+      on: { CLOSE: 'playerShelf' }
+    },
+
+    // Пополнение пула капель за Stars (drop packs). Канонический дом — Market,
+    // из окна дарения в Action открывается тем же модальным окном (Д2).
+    dropPacks: {
+      meta: { '@statelyai.color': 'orange' },
+      on: {
+        PAYMENT_SUCCESS: 'cubeList',
+        PAYMENT_CANCEL: 'cubeList',
+        CLOSE: 'cubeList'
+      }
     }
   }
 });

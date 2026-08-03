@@ -34,12 +34,20 @@ export interface PriceLimits {
     max: number;
 }
 
+/** 8d.1 (П.3a): атрибут досье — чип «👤 Пол: парень» у фото игрока. */
+export interface ProfileChip {
+    icon: string;
+    label: string;
+    value: string;
+}
+
 export interface PlayerPage {
     player_id: string;
     partnership_id: string;
     first_name: string | null;
     card_photo_url: string;
     profile_line: string;
+    profile_chips: ProfileChip[];
     gender: string | null;
     xp: number;
     current_streak: number;
@@ -49,7 +57,9 @@ export interface PlayerPage {
     slots_total: number;
     shelf: ShelfItem[];
     pending: ShelfItem[];
-    reputation_drops: number;
+    reports: ShelfItem[];       // исполненные обещания с видеоотчётом игрока
+    reputation_count: number;   // исполнено обещаний (Д3 — главная цифра)
+    reputation_drops: number;   // на сколько капель — расшифровка
     pending_count: number;
     gift_balance: number;
     gift_freeze_balance: number;
@@ -163,6 +173,21 @@ export async function fulfillShelfItem(
     const form = new FormData();
     if (video) form.append('video', video, `report.${videoExt(video)}`);
     const { data } = await api.post(`/players/me/shelf/${itemId}/fulfill`, form, {
+        timeout: 120_000,
+        onUploadProgress: (e) => {
+            if (onProgress && e.total) onProgress(Math.round((e.loaded / e.total) * 100));
+        },
+    });
+    return data;
+}
+
+/** 8d.1 (Д6): видеоотчёт ПОСЛЕ галочки — отдельным шагом, репутацию не растит. */
+export async function attachShelfReport(
+    itemId: string, video: Blob, onProgress?: (pct: number) => void,
+): Promise<ShelfItem> {
+    const form = new FormData();
+    form.append('video', video, `report.${videoExt(video)}`);
+    const { data } = await api.post(`/players/me/shelf/${itemId}/report`, form, {
         timeout: 120_000,
         onUploadProgress: (e) => {
             if (onProgress && e.total) onProgress(Math.round((e.loaded / e.total) * 100));

@@ -1,10 +1,20 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+    KEEP_ORIGINAL_INDEX,
     cardPhotoChoose, cardPhotoPurchase, cardPhotoReroll, cardPhotoUpload,
     getPlayerShop,
 } from '../../api/shop';
-import type { CardPhotoState } from '../../api/shop';
+import type { CardPhotoState, CardVariantMode } from '../../api/shop';
 import { hapticNotification } from '../../utils/haptic';
+
+/* 8d.1 (П.10, находка №27): подписи режимов обработки. Раньше выдавались два
+   случайных прогона одного промпта — сходство скакало и это читалось как баг.
+   Теперь варианты РАЗНЫЕ по замыслу, и экран прямо говорит, чем они отличаются
+   (П.3b: термин + короткая расшифровка). */
+const VARIANT_LABEL: Record<CardVariantMode, { title: string; hint: string }> = {
+    weak: { title: 'Слабая обработка', hint: 'максимум сходства с фото' },
+    deep: { title: 'Глубокая обработка', hint: 'заметная стилизация' },
+};
 
 interface Props {
     card: CardPhotoState;
@@ -228,14 +238,35 @@ const CardPhotoFlow: React.FC<Props> = ({ card, balance, aiPrice, rawPrice, rero
             <>
                 <div className="cardflow-title">Выбери вариант</div>
                 <div className="cardflow-variants">
-                    {state.variants.map((v, i) => (
-                        <div key={v} className="cardflow-variant">
-                            <img src={v} alt={`Вариант ${i + 1}`} />
-                            <button className="cube-btn-sm" disabled={busy} onClick={() => doChoose(i)}>
-                                {busyLabel === 'choose:' + i ? '…' : 'Выбрать'}
+                    {/* Оригинал рядом с вариантами (П.10): без него не с чем
+                        сравнивать «похоже / не похоже». Кнопка под ним —
+                        «оставить как есть» (Д7), доплаты нет. */}
+                    {state.selfie_url && (
+                        <div className="cardflow-variant cardflow-variant--origin">
+                            <img src={state.selfie_url} alt="Оригинал" />
+                            <div className="cardflow-variant-title">Оригинал</div>
+                            <div className="cardflow-variant-hint">твоё фото без обработки</div>
+                            <button className="cube-btn-sm" disabled={busy}
+                                onClick={() => doChoose(KEEP_ORIGINAL_INDEX)}>
+                                {busyLabel === 'choose:' + KEEP_ORIGINAL_INDEX ? '…' : 'Оставить как есть'}
                             </button>
                         </div>
-                    ))}
+                    )}
+                    {state.variants.map((v, i) => {
+                        const label = VARIANT_LABEL[state.variant_modes[i]];
+                        return (
+                            <div key={v} className="cardflow-variant">
+                                <img src={v} alt={label?.title ?? `Вариант ${i + 1}`} />
+                                <div className="cardflow-variant-title">
+                                    {label?.title ?? `Вариант ${i + 1}`}
+                                </div>
+                                {label && <div className="cardflow-variant-hint">{label.hint}</div>}
+                                <button className="cube-btn-sm" disabled={busy} onClick={() => doChoose(i)}>
+                                    {busyLabel === 'choose:' + i ? '…' : 'Выбрать'}
+                                </button>
+                            </div>
+                        );
+                    })}
                 </div>
                 <button className="cube-btn-sm" disabled={busy} onClick={doReroll}>
                     {busyLabel === 'reroll' ? 'Списываем…' : `🎲 Ещё 2 варианта (${rerollPrice} 💧)`}
@@ -246,7 +277,7 @@ const CardPhotoFlow: React.FC<Props> = ({ card, balance, aiPrice, rawPrice, rero
         body = (
             <>
                 <div className="cardflow-title">Обрабатываем…</div>
-                <div className="cardflow-hint">AI готовит 2 варианта — обычно до минуты. Можно не закрывать окно.</div>
+                <div className="cardflow-hint">AI готовит два варианта — слабую и глубокую обработку. Обычно до минуты, окно можно не закрывать.</div>
                 <div className="shop-skeleton-card" style={{ height: 120 }} />
             </>
         );
@@ -271,7 +302,7 @@ const CardPhotoFlow: React.FC<Props> = ({ card, balance, aiPrice, rawPrice, rero
                         <div className="cardflow-hint">
                             {mode === 'raw'
                                 ? 'Фото не отправляется в AI и сразу станет карточкой.'
-                                : 'AI сделает 2 варианта на выбор.'}
+                                : 'AI сделает два варианта на выбор — слабую и глубокую обработку. Оригинал тоже покажем.'}
                         </div>
                     </>
                 )}
@@ -288,7 +319,7 @@ const CardPhotoFlow: React.FC<Props> = ({ card, balance, aiPrice, rawPrice, rero
                 <div className="cardflow-hint">
                     {state.url
                         ? 'Сейчас наставник видит это фото. Смена AI дорожает с каждым разом, «как есть» — фикс.'
-                        : 'Пока наставник видит мультяшный образ. AI-обработка (2 варианта на выбор) или «как есть» без AI.'}
+                        : 'Пока наставник видит мультяшный образ. AI-обработка (слабая и глубокая на выбор) или «как есть» без AI.'}
                 </div>
                 <button className="cube-btn-primary" disabled={busy || balance < aiPrice}
                     onClick={() => doPurchase('ai')}>

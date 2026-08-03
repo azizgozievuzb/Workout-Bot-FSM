@@ -13,7 +13,7 @@ import { playerAvatarUrl } from '../../utils/playerAvatar';
 import { hapticImpact, hapticNotification } from '../../utils/haptic';
 import { getShelfCatalog } from '../../api/shelf';
 import RoleTransition from '../shared/RoleTransition';
-import MentorPlayerPage from './MentorPlayerPage';
+import MentorPlayerScreens from './MentorPlayerScreens';
 import DropPackModal from './DropPackModal';
 import WorkoutScreen from '../workout/WorkoutScreen';
 import { getSchedule, type ScheduleState } from '../../api/schedule';
@@ -289,8 +289,9 @@ const ResponsibleView: React.FC = () => {
     const subActive = subscription?.active ?? false;
     const [players, setPlayers] = useState<MyPlayer[]>([]);
     const [loading, setLoading] = useState(true);
-    // 8d: тап по игроку открывает полноценную страницу (находка №9),
-    // висячая плашка с ⋮-меню удалена — все действия живут на странице.
+    // 8d.1 (П.1a): тап по игроку открывает полноэкранную страницу НАБЛЮДЕНИЯ.
+    // Управление полкой ушло в Market — здесь только досье, дарение и дверь
+    // на полку. Бейдж «⏳ N» тоже переехал в Market (Д1): одна роль на куб.
     const [openPlayer, setOpenPlayer] = useState<MyPlayer | null>(null);
     const [giftBalance, setGiftBalance] = useState(0);
     const [packs, setPacks] = useState(false);
@@ -386,9 +387,6 @@ const ResponsibleView: React.FC = () => {
                                     <div className="cube-player-name">{name}</div>
                                 </div>
                                 <div className="cube-player-actions">
-                                    {p.pending_promises > 0 && (
-                                        <span className="shelf-pending-badge">⏳ {p.pending_promises}</span>
-                                    )}
                                     <span style={{ opacity: 0.4, marginLeft: 6 }}>›</span>
                                 </div>
                             </div>
@@ -398,8 +396,9 @@ const ResponsibleView: React.FC = () => {
             )}
 
             {openPlayer && (
-                <MentorPlayerPage
+                <MentorPlayerScreens
                     playerId={openPlayer.id}
+                    initial="profile"
                     onClose={() => { setOpenPlayer(null); fetchPlayers(); fetchPool(); }}
                 />
             )}

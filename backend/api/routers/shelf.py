@@ -32,6 +32,9 @@ router = APIRouter(prefix="/shelf", tags=["shelf"])
 
 UTC = timezone.utc
 
+# Сколько последних видеоотчётов игрока показывать наставнику на полке (8d.1).
+REPORTS_LIMIT = 10
+
 _MENTOR_COLS = (
     "id, telegram_id, first_name, is_admin, has_player_access, has_responsible_access, "
     "pricing_mode, subscription_expires_at, responsible_access_tier, "
@@ -75,12 +78,20 @@ class ShelfItemOut(BaseModel):
     fulfilled_at: str | None = None
 
 
+class ProfileChip(BaseModel):
+    """8d.1 (П.3a): атрибут досье отдельным чипом — иконка + подпись + значение."""
+    icon: str
+    label: str
+    value: str
+
+
 class PlayerPageResp(BaseModel):
     player_id: str
     partnership_id: str
     first_name: str | None
     card_photo_url: str
     profile_line: str
+    profile_chips: list[ProfileChip] = []
     gender: str | None = None
     xp: int
     current_streak: int
@@ -90,7 +101,12 @@ class PlayerPageResp(BaseModel):
     slots_total: int
     shelf: list[ShelfItemOut]
     pending: list[ShelfItemOut]
-    reputation_drops: int
+    # 8d.1 (П.6a): исполненные обещания с видеоотчётом — наставнику негде было
+    # его посмотреть (в 8d отчёт жил только в уведомлении). Файлы чистит ретеншн
+    # через 30 дней после исполнения, тогда строка отсюда пропадает сама.
+    reports: list[ShelfItemOut] = []
+    reputation_count: int          # сколько обещаний исполнено (Д3 — главная цифра)
+    reputation_drops: int          # на сколько капель — расшифровка под ней
     pending_count: int
     gift_balance: int
     gift_freeze_balance: int
@@ -276,7 +292,19 @@ async def player_page(
     shelf_rows = [r for r in rows if r["status"] in shelf_svc.OCCUPYING_STATUSES]
     pending_rows = [r for r in rows if r["status"] == "purchased"]
 
+    rep_res = await (
+        db.table("shelf_items")
+        .select("*")
+        .eq("partnership_id", partnership_id)
+        .eq("status", "fulfilled")
+        .not_.is_("report_video_path", "null")
+        .order("fulfilled_at", desc=True)
+        .limit(REPORTS_LIMIT).execute()
+    )
+    report_rows = rep_res.data or []
+
     lo, hi = await shelf_svc.price_limits(db)
+    rep_count, rep_drops = await shelf_svc.reputation(db, partnership_id)
     # NB: drops_balance игрока Ответственному не отдаём (§8.7).
     return PlayerPageResp(
         player_id=str(player_id),
@@ -284,6 +312,7 @@ async def player_page(
         first_name=player.get("first_name"),
         card_photo_url=player.get("card_photo_url") or _cartoon(player.get("gender")),
         profile_line=shelf_svc.profile_line(player),
+        profile_chips=[ProfileChip(**c) for c in shelf_svc.profile_chips(player)],
         gender=player.get("gender"),
         xp=int(stats.get("global_score") or 0),
         current_streak=int(stats.get("current_streak") or 0),
@@ -293,7 +322,9 @@ async def player_page(
         slots_total=shelf_svc.slots_for_tier(me.get("_tier")),
         shelf=[_item_out(r) for r in shelf_rows],
         pending=[_item_out(r) for r in pending_rows],
-        reputation_drops=await shelf_svc.reputation_drops(db, partnership_id),
+        reports=[_item_out(r) for r in report_rows],
+        reputation_count=rep_count,
+        reputation_drops=rep_drops,
         pending_count=len(pending_rows),
         gift_balance=int(me.get("gift_balance") or 0),
         gift_freeze_balance=int(me.get("gift_freeze_balance") or 0),

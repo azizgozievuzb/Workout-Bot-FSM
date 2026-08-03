@@ -49,16 +49,6 @@ FALLBACK_MODEL = "gemini-2.5-flash-image"
 # Тот же Gemini-image стек, что и wallpaper-стили выше.
 # ---------------------------------------------------------------------------
 
-_CARD_PROMPT_BASE = (
-    "You are given a selfie photo. Create a stylized PORTRAIT AVATAR (square 1:1) from it:\n"
-    "1. Keep the person's face clearly recognizable — same facial features, natural human eyes.\n"
-    "2. Apply a polished digital-art treatment: clean studio-like background with a soft gradient, "
-    "subtle rim light, painterly finish. NOT a photo with a filter — digital art.\n"
-    "3. Head-and-shoulders framing, face centered and large.\n"
-    "{gender_style}\n"
-    "IMPORTANT: flattering, respectful, no caricature. Edge to edge, no borders, no text."
-)
-
 CARD_STYLE_FEMALE = (
     "4. Style direction: feminine and graceful — softer light, gentle warm tones, "
     "smooth elegant color palette, delicate glow."
@@ -68,36 +58,92 @@ CARD_STYLE_MALE = (
     "cool steel/graphite tones, athletic heroic energy."
 )
 
-# Два варианта на выбор — разные художественные акценты поверх гендерного стиля.
-_CARD_VARIANT_FLAVORS = (
-    "Variant emphasis: cinematic lighting, rich deep background.",
-    "Variant emphasis: airy minimalist background, brighter key light.",
+# ---------------------------------------------------------------------------
+# 8d.1 (П.10, находка №27): одна попытка = ДВА РАЗНЫХ РЕЖИМА, а не два случайных
+# прогона одного промпта. Разброс генераций был багом («сходство скачет») —
+# теперь это осознанный выбор игрока: слабая обработка (сходство) vs глубокая
+# (стилизация). COGS не растёт: генераций по-прежнему 2 на попытку.
+# Порядок кортежа = порядок вариантов на экране выбора (индексы совпадают).
+# ---------------------------------------------------------------------------
+
+CARD_MODES: tuple[str, ...] = ("weak", "deep")
+
+# Слабая: ретушь, а не перерисовка. Главный критерий — узнаваемость.
+_CARD_PROMPT_WEAK = (
+    "You are given a selfie photo. Produce a CLEAN PORTRAIT AVATAR (square 1:1) of THE SAME PERSON.\n"
+    "This is RETOUCHING, not reinvention. The result must still read as a PHOTOGRAPH of this exact "
+    "person — someone who knows them must recognise them instantly.\n"
+    "1. PRESERVE EXACTLY, pixel-faithful: face geometry and proportions, eye shape and spacing, "
+    "nose, mouth, jawline, cheekbones, hairline, hairstyle, facial hair, glasses, skin tone, "
+    "apparent age and body weight, and any moles or scars. Do NOT beautify, slim, rejuvenate, "
+    "symmetrise or 'idealise' the face.\n"
+    "2. ONLY do this: replace the background with a plain soft studio gradient, even out the "
+    "lighting, add a subtle rim light, gentle colour grading, light skin cleanup (temporary "
+    "blemishes only).\n"
+    "3. FRAMING — CROP IN: head and shoulders only, cut at mid-chest, the head filling about "
+    "two thirds of the frame height, face centred, eyes open and looking at the camera. If the "
+    "source is a wider shot, crop into it; never extend the body or invent clothing.\n"
+    "{gender_style} Keep this direction VERY subtle — it is a hint of colour and light, nothing more.\n"
+    "IMPORTANT: photographic finish. NO painterly, illustrated, 3D-render, anime or 'digital art' "
+    "look. No added props, no text, no borders, edge to edge."
 )
 
+# Глубокая: сильная стилизация, но черты лица держим — иначе это чужой человек.
+_CARD_PROMPT_DEEP = (
+    "You are given a selfie photo. Create a STYLISED PORTRAIT AVATAR (square 1:1) of THIS person "
+    "as bold digital art.\n"
+    "1. LIKENESS IS THE HARD CONSTRAINT: keep the underlying facial geometry of the source photo — "
+    "eye shape and spacing, nose shape, mouth width, jawline, cheekbones, hairline, hairstyle, "
+    "facial hair, glasses, apparent age. The person must stay recognisable; the STYLE changes, "
+    "the FACE does not. Eyes stay natural and human. Do NOT slim the face, narrow the jaw, "
+    "enlarge the eyes or otherwise 'beautify' — that is exactly what destroys the likeness.\n"
+    "2. Apply a strong painterly digital-art treatment: dramatic cinematic key light and rim light, "
+    "sculpted shadows, rich colour grading, expressive brushwork on skin and hair, stylised "
+    "gradient background with depth and atmosphere.\n"
+    "3. FRAMING — CROP IN: head and shoulders only, cut at mid-chest, the head filling about "
+    "two thirds of the frame height, face centred — a hero portrait. If the source is a wider "
+    "shot, crop into it; never extend the body or invent clothing.\n"
+    "{gender_style}\n"
+    "IMPORTANT: flattering and respectful, no caricature, no exaggerated features, no distortion "
+    "of the face. No text, no borders, edge to edge."
+)
 
-def card_prompt(gender: str | None, variant: int) -> str:
+_CARD_MODE_PROMPTS = {"weak": _CARD_PROMPT_WEAK, "deep": _CARD_PROMPT_DEEP}
+
+
+def card_prompt(gender: str | None, mode: str) -> str:
+    """Промпт фото-карточки для режима 'weak' | 'deep' (8d.1 П.10)."""
     style = CARD_STYLE_FEMALE if gender == "female" else CARD_STYLE_MALE
-    base = _CARD_PROMPT_BASE.format(gender_style=style)
-    return f"{base}\n{_CARD_VARIANT_FLAVORS[variant % len(_CARD_VARIANT_FLAVORS)]}"
+    template = _CARD_MODE_PROMPTS.get(mode, _CARD_PROMPT_WEAK)
+    return template.format(gender_style=style)
 
 
-async def process_card_photo_variants(photo_bytes: bytes, telegram_id: int, gender: str | None) -> None:
-    """Генерирует 2 AI-варианта фото-карточки → users.card_photo_candidates.
+async def process_card_photo_variants(
+    photo_bytes: bytes,
+    telegram_id: int,
+    gender: str | None,
+    selfie_url: str | None = None,
+) -> None:
+    """Генерирует 2 AI-варианта фото-карточки (weak + deep) → users.card_photo_candidates.
 
     Статусы в card_photo_candidates: {'status': 'processing'} (ставит вызывающий
-    код) → {'status': 'choosing', 'variants': [url, url]} | {'status': 'failed'}.
+    код) → {'status': 'choosing', 'variants': [...], 'modes': ['weak','deep']} |
+    {'status': 'failed'}. `modes[i]` описывает `variants[i]` — фронт рисует подписи.
+    `selfie_url` — оригинал селфи, показывается рядом с вариантами (П.10).
     """
     db = None
+    carry = {"mode": "ai", "selfie_url": selfie_url}
     try:
         client = genai.Client(api_key=settings.GEMINI_API_KEY)
         db = await get_supabase()
         base = settings.SUPABASE_URL.strip().strip("'").strip('"').rstrip("/")
 
         urls: list[str] = []
-        for i in range(2):
-            styled = await _generate_styled(client, photo_bytes, card_prompt(gender, i))
+        modes: list[str] = []
+        for mode in CARD_MODES:
+            styled = await _generate_styled(client, photo_bytes, card_prompt(gender, mode))
             if not styled:
-                logger.error(f"card variant {i} generation failed for user {telegram_id}")
+                logger.error(f"card variant {mode} generation failed for user {telegram_id}")
                 continue
             import uuid as _uuid
             path = f"{telegram_id}/card_v_{_uuid.uuid4().hex[:8]}.jpg"
@@ -108,25 +154,27 @@ async def process_card_photo_variants(photo_bytes: bytes, telegram_id: int, gend
                     file_options={"content-type": "image/jpeg", "x-upsert": "true"},
                 )
                 urls.append(f"{base}/storage/v1/object/public/avatars/{path}")
+                modes.append(mode)
             except Exception as e:
                 logger.error(f"card variant upload failed: {e}")
 
         candidates = (
-            {"status": "choosing", "variants": urls} if len(urls) == 2
-            else {"status": "failed"}
+            {"status": "choosing", "variants": urls, "modes": modes, **carry}
+            if len(urls) == len(CARD_MODES)
+            else {"status": "failed", **carry}
         )
         await (
             db.table("users").update({"card_photo_candidates": candidates})
             .eq("telegram_id", telegram_id).execute()
         )
-        logger.info(f"card photo variants done for user {telegram_id}: {len(urls)}")
+        logger.info(f"card photo variants done for user {telegram_id}: {modes}")
     except Exception as e:
         logger.error(f"process_card_photo_variants failed for {telegram_id}: {e}")
         try:
             if db is None:
                 db = await get_supabase()
             await (
-                db.table("users").update({"card_photo_candidates": {"status": "failed"}})
+                db.table("users").update({"card_photo_candidates": {"status": "failed", **carry}})
                 .eq("telegram_id", telegram_id).execute()
             )
         except Exception:

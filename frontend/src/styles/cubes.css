@@ -2763,16 +2763,20 @@
     border-radius: 12px;
 }
 
+/* 8d.1 (П.10): на экране выбора теперь ТРИ колонки — оригинал + слабая и
+   глубокая обработка рядом, иначе сравнить сходство не с чем. auto-fit держит
+   раскладку и в старом случае двух вариантов. */
 .cardflow-variants {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
+    grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+    gap: 8px;
 }
 
 .cardflow-variant {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
+    text-align: center;
 }
 
 .cardflow-variant img {

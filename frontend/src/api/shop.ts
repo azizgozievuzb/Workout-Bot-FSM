@@ -28,12 +28,18 @@ export async function giftFreeze(req: GiftFreezeRequest): Promise<GiftFreezeResp
    8c: витрина игрока (app_shop_items) — /players/me/shop
    ============================================================ */
 
+/** 8d.1 (П.10): чем обработан вариант — слабая или глубокая обработка. */
+export type CardVariantMode = 'weak' | 'deep';
+
 export interface CardPhotoState {
     url: string | null;
     source: 'ai' | 'raw' | null;
     status: 'awaiting_photo' | 'processing' | 'choosing' | 'failed' | null;
     mode: 'ai' | 'raw' | null;   // 8c.1: режим текущего флоу, оплачен при покупке
     variants: string[];
+    // 8d.1: variant_modes[i] описывает variants[i]; selfie_url — оригинал рядом.
+    variant_modes: CardVariantMode[];
+    selfie_url: string | null;
 }
 
 export interface RestoreOffer {
@@ -59,6 +65,10 @@ export interface PlayerShopState {
     reroll_credits: number;
     shelf: ShelfItem[];
     my_purchases: ShelfItem[];
+    // 8d.1 (П.7): полка видна всегда при живом партнёрстве — пустые слоты
+    // рисуются заглушками, их количество = слотам тарифа наставника.
+    has_mentor: boolean;
+    shelf_slots_total: number;
 }
 
 export async function getPlayerShop(): Promise<PlayerShopState> {
@@ -88,6 +98,9 @@ export async function cardPhotoUpload(photoBase64: string, mode: 'ai' | 'raw'): 
     }, { timeout: 60_000 });
     return data;
 }
+
+/** 8d.1 (Д7): «оставить как есть» — карточкой станет исходное селфи без AI. */
+export const KEEP_ORIGINAL_INDEX = -1;
 
 export async function cardPhotoChoose(index: number): Promise<CardPhotoState> {
     const { data } = await api.post('/players/me/card-photo/choose', { index });

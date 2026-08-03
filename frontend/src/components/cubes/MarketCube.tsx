@@ -4,24 +4,41 @@ import type { DualRoleUser } from '../../stores/authStore';
 import { canPlay, canMonitor, isDualRole } from '../../utils/roles';
 import { buyFreeze, getPlayerShop } from '../../api/shop';
 import type { PlayerShopState } from '../../api/shop';
-import { buyShelfItem, fulfillShelfItem, getItemVideoUrl, hideShelfItem } from '../../api/shelf';
+import { attachShelfReport, buyShelfItem, fulfillShelfItem, hideShelfItem } from '../../api/shelf';
 import type { ShelfItem } from '../../api/shelf';
 import { getSchedule, unlockLight, lockLight, type ScheduleState } from '../../api/schedule';
 import DisclaimerTest, { UNLOCK_QUESTIONS, LOCK_QUESTIONS } from '../schedule/DisclaimerTest';
 import CardPhotoFlow from './CardPhotoFlow';
 import { getMyPlayers } from '../../api/partnerships';
 import type { MyPlayer } from '../../api/partnerships';
-import MentorPlayerPage from './MentorPlayerPage';
+import MentorPlayerScreens from './MentorPlayerScreens';
 import DropPackModal from './DropPackModal';
 import PromiseRecorder from './PromiseRecorder';
+import VideoPlayerModal from './VideoPlayerModal';
+import { downloadItemVideo } from '../../utils/videoDownload';
 import { getShelfCatalog } from '../../api/shelf';
 import { hapticImpact, hapticNotification } from '../../utils/haptic';
 import RoleTransition from '../shared/RoleTransition';
 import '../../styles/cubes.css';
 import '../../styles/shelf.css';
-import '../schedule/schedule.css';
 
 type ActiveView = 'player' | 'responsible';
+
+/* 8d.1 (П.7, находка №23): текст пустой ячейки полки. Черновик — финальную
+   формулировку даст эконом-сессия (единая подача каналов), поэтому он вынесен
+   отдельной константой, а не зашит в разметку. */
+const EMPTY_SHELF_SLOT_TEXT = 'Здесь появятся подарки наставника';
+
+/* 8d.1 (П.8b, находка №26): у Stars-предмета свой текст — «выполнено» это
+   статус ОБЕЩАНИЯ, к предмету он приклеился по ошибке. Строка отвечает игроку
+   на вопрос «что мне это дало». Дефолт страхует расширение каталога. */
+const STAR_ITEM_EFFECT: Record<string, string> = {
+    freeze: '✅ +1 заморозка в запасе',
+    photo_reroll: '✅ +1 попытка смены фото',
+};
+const STAR_ITEM_EFFECT_DEFAULT = '✅ Получено';
+
+type VideoTarget = { itemId: string; kind: 'promise' | 'report'; title: string };
 
 /* ============================================================
    ROOT
@@ -78,8 +95,9 @@ const ShopSkeleton: React.FC = () => (
 /*
  * 8c: витрина игрока — шапка с балансом 💧 + ровно 4 карточки (§8.8):
  * Unlock light / Lock light (дисклеймер-тесты), Заморозка (кап 3), Фото-карточка.
- * Ниже — полка наставника (8d): лоты пары + «Мои покупки».
- * Заглушки «Оплата Stars / TON скоро» убраны из витрины игрока.
+ * Ниже — полка наставника (8d) + «Мои покупки».
+ * 8d.1: полка видна всегда (П.7), карточка фото — «хамелеон» (П.8a),
+ * видео смотрим во встроенном плеере (П.6a), кнопки покупок — по иерархии (П.8c).
  */
 const PlayerShop: React.FC = () => {
     const [shop, setShop] = useState<PlayerShopState | null>(null);
@@ -90,13 +108,16 @@ const PlayerShop: React.FC = () => {
     const [busy, setBusy] = useState(false);
     // {id, action} — иначе «…» садилось на «Купить» при любом действии с лотом
     // и выглядело как списание, которого не было (смоук 8d, находка №21).
-    const [acting, setActing] = useState<{ id: string; action: 'buy' | 'hide' | 'done' } | null>(null);
+    const [acting, setActing] = useState<{ id: string; action: 'buy' | 'hide' | 'done' | 'report' } | null>(null);
     const [test, setTest] = useState<'unlock' | 'lock' | null>(null);
     const [photoFlow, setPhotoFlow] = useState(false);
-    // 8d: отчёт по исполненному обещанию (опциональное видео)
+    // 8d.1 (П.8c): отчёт — всегда ОТДЕЛЬНЫЙ шаг после галочки (Д6). Прежняя
+    // кнопка «🎥 С видеоотчётом» рядом с «✅ Выполнено» ставила игрока перед
+    // выбором из двух равных действий — теперь карточка ведёт по шагам.
     const [reportFor, setReportFor] = useState<ShelfItem | null>(null);
     const [reportError, setReportError] = useState('');
     const [reportProgress, setReportProgress] = useState<number | null>(null);
+    const [playing, setPlaying] = useState<VideoTarget | null>(null);
 
     const showToast = useCallback((msg: string) => {
         setToast(msg);
@@ -196,34 +217,53 @@ const PlayerShop: React.FC = () => {
         finally { setActing(null); }
     }, [acting, showToast, failToast, refreshShop]);
 
-    const markDone = useCallback(async (item: ShelfItem, video: Blob | null) => {
+    const markDone = useCallback(async (item: ShelfItem) => {
         if (acting) return;
-        setActing({ id: item.id, action: 'done' }); setReportError(''); setReportProgress(video ? 0 : null);
+        setActing({ id: item.id, action: 'done' });
         try {
-            await fulfillShelfItem(item.id, video, setReportProgress);
+            await fulfillShelfItem(item.id);
             hapticNotification('success');
             showToast('✅ Отмечено выполненным');
+            refreshShop();
+        } catch (e: any) {
+            const d = e?.response?.data?.detail;
+            const code = typeof d === 'object' ? d?.code : '';
+            console.error('[shelf] fulfill failed', e?.response?.status, d ?? e?.message);
+            failToast(e, code === 'NOT_PENDING' ? 'Обещание уже отмечено' : 'Не удалось отметить');
+        }
+        finally { setActing(null); }
+    }, [acting, showToast, failToast, refreshShop]);
+
+    /* Д6: отчёт ПОСЛЕ галочки — отдельный шаг, репутацию повторно не растит. */
+    const attachReport = useCallback(async (item: ShelfItem, video: Blob) => {
+        if (acting) return;
+        setActing({ id: item.id, action: 'report' }); setReportError(''); setReportProgress(0);
+        try {
+            await attachShelfReport(item.id, video, setReportProgress);
+            hapticNotification('success');
+            showToast('🎥 Отчёт приложен');
             setReportFor(null);
             refreshShop();
         } catch (e: any) {
             hapticNotification('error');
             const d = e?.response?.data?.detail;
             const code = typeof d === 'object' ? d?.code : '';
-            console.error('[shelf] fulfill failed', e?.response?.status, d ?? e?.message);
-            const msg = code === 'VIDEO_TOO_LARGE' ? 'Видео больше 30 МБ — снимите короче'
-                : code === 'NOT_PENDING' ? 'Обещание уже отмечено'
-                    : 'Не удалось отметить';
-            if (video) setReportError(msg); else failToast(e, msg);
+            console.error('[shelf] attach report failed', e?.response?.status, d ?? e?.message);
+            setReportError(
+                code === 'VIDEO_TOO_LARGE' ? 'Видео больше 30 МБ — снимите короче'
+                    : code === 'REPORT_EXISTS' ? 'Отчёт уже приложен'
+                        : 'Не удалось приложить отчёт',
+            );
         }
         finally { setActing(null); setReportProgress(null); }
-    }, [acting, showToast, failToast, refreshShop]);
+    }, [acting, showToast, refreshShop]);
 
-    const openVideo = useCallback(async (item: ShelfItem, kind: 'promise' | 'report') => {
+    const saveVideo = useCallback(async (item: ShelfItem, kind: 'promise' | 'report') => {
         try {
-            const url = await getItemVideoUrl(item.id, kind);
-            const tg = (window as any).Telegram?.WebApp;
-            if (tg?.openLink) tg.openLink(url); else window.open(url, '_blank');
-        } catch { showToast('Видео недоступно'); }
+            hapticImpact('light');
+            const ok = await downloadItemVideo(item.id, kind, item.title);
+            if (!ok) showToast('Не удалось скачать видео');
+        } catch { showToast('Не удалось скачать видео'); }
     }, [showToast]);
 
     if (loading) return <ShopSkeleton />;
@@ -246,6 +286,16 @@ const PlayerShop: React.FC = () => {
     const rerollPrice = shop.photo_reroll_price ?? prices['photo_reroll'] ?? 60;
     const lightUnlocked = sched?.light_unlocked ?? false;
     const freezeCapReached = shop.paid_freezes >= shop.paid_freezes_cap;
+
+    // П.8a: карточка-хамелеон. Флоу в процессе → «Продолжить» (резюм/реролл),
+    // фото уже стоит → миниатюра + «установлено» + «Сменить» по актуальной цене.
+    const photoFlowPending = Boolean(shop.card_photo.status);
+    const photoInstalled = Boolean(shop.card_photo.url) && !photoFlowPending;
+
+    // П.7: пустые слоты полки рисуем всегда, пока есть наставник.
+    const emptyShelfSlots = shop.has_mentor
+        ? Math.max(0, shop.shelf_slots_total - shop.shelf.length)
+        : 0;
 
     return (
         <>
@@ -300,26 +350,37 @@ const PlayerShop: React.FC = () => {
                     </button>
                 </div>
 
-                {/* 4. Фото-карточка */}
+                {/* 4. Фото-карточка — хамелеон по состоянию (П.8a, находка №25) */}
                 <div className="shop-item-card">
                     <div className="shop-item-name">🖼 Фото-карточка</div>
-                    <div className="shop-item-desc">
-                        {shop.card_photo.url
-                            ? 'Наставник видит твоё фото. Можно сменить.'
-                            : 'Наставник видит мультяшку. Поставь своё фото.'}
-                    </div>
+                    {photoInstalled ? (
+                        <>
+                            <img className="photo-card-thumb" src={shop.card_photo.url!}
+                                alt="Твоя фото-карточка" />
+                            <div className="photo-card-installed">установлено</div>
+                            <div className="shop-item-desc">Так тебя видит наставник.</div>
+                        </>
+                    ) : (
+                        <div className="shop-item-desc">
+                            {photoFlowPending
+                                ? 'Смена фото не закончена — продолжи с того же места.'
+                                : 'Наставник видит мультяшку. Поставь своё фото.'}
+                        </div>
+                    )}
                     <div className="shop-item-price-row">
                         <span className="shop-item-price">✨ {photoAiPrice} 💧 · 📷 {photoRawPrice} 💧</span>
                     </div>
                     <button className="cube-btn-sm" disabled={busy}
                         onClick={(e) => { e.stopPropagation(); setPhotoFlow(true); }}>
-                        {shop.card_photo.status ? 'Продолжить' : 'Открыть'}
+                        {photoFlowPending ? 'Продолжить' : photoInstalled ? 'Сменить' : 'Открыть'}
                     </button>
                 </div>
             </div>
 
-            {/* 8d: полка наставника — заменила легаси-секцию «🎁 От наставника» */}
-            {shop.shelf.length > 0 && (
+            {/* 8d.1 (П.7): секция полки видна ВСЕГДА при живом партнёрстве —
+                пустые слоты рисуются пунктирными заглушками, иначе механика
+                оставалась невидимкой (находка №23). */}
+            {shop.has_mentor && (
                 <>
                     <div className="cube-section-title" style={{ marginTop: 12 }}>🎁 Полка наставника</div>
                     <div className="shop-item-grid">
@@ -338,7 +399,10 @@ const PlayerShop: React.FC = () => {
                                     <div className="shelf-player-actions">
                                         {item.has_video && (
                                             <button className="cube-btn-sm" disabled={isBusy}
-                                                onClick={(e) => { e.stopPropagation(); openVideo(item, 'promise'); }}>
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setPlaying({ itemId: item.id, kind: 'promise', title: `Обещание «${item.title}»` });
+                                                }}>
                                                 ▶ Смотреть
                                             </button>
                                         )}
@@ -354,11 +418,18 @@ const PlayerShop: React.FC = () => {
                                 </div>
                             );
                         })}
+                        {Array.from({ length: emptyShelfSlots }, (_, i) => (
+                            <div key={`slot-${i}`} className="shelf-slot-placeholder">
+                                {EMPTY_SHELF_SLOT_TEXT}
+                            </div>
+                        ))}
                     </div>
                 </>
             )}
 
-            {/* 8d: Мои покупки — ожидающие исполнения + история трат */}
+            {/* 8d: Мои покупки — ожидающие исполнения + история трат.
+                8d.1 (П.8c, находка №19): одна крупная кнопка текущего шага,
+                вторичные — мелкие в ряд; карточка сама ведёт по шагам. */}
             {shop.my_purchases.length > 0 && (
                 <>
                     <div className="cube-section-title" style={{ marginTop: 12 }}>🧾 Мои покупки</div>
@@ -366,44 +437,68 @@ const PlayerShop: React.FC = () => {
                         const mine = acting?.id === item.id ? acting.action : null;
                         const isBusy = acting !== null;
                         const pending = item.status === 'purchased';
+                        const isPromise = item.type === 'promise';
+                        const needsReport = isPromise && !pending && !item.has_report && item.status === 'fulfilled';
+                        const closed = isPromise && !pending && !needsReport;
+
+                        const statusLine = !isPromise
+                            ? (STAR_ITEM_EFFECT[item.star_catalog_key ?? ''] ?? STAR_ITEM_EFFECT_DEFAULT)
+                            : pending ? '⏳ ждёт исполнения' : '✅ выполнено';
+
                         return (
-                            <div key={item.id} className="shelf-purchase-row">
-                                <div className="shelf-lot-main">
-                                    <div className="shelf-lot-title">
-                                        {item.type === 'promise' ? '🎬 ' : '⭐ '}{item.title}
-                                    </div>
-                                    <div className="shelf-lot-meta">
-                                        {item.price_drops} 💧 · {pending ? '⏳ ждёт исполнения' : '✅ выполнено'}
-                                    </div>
-                                    {(item.has_video || item.has_report) && (
-                                        <div className="shelf-player-actions" style={{ marginTop: 6 }}>
-                                            {item.has_video && (
-                                                <button className="cube-btn-sm" disabled={isBusy}
-                                                    onClick={(e) => { e.stopPropagation(); openVideo(item, 'promise'); }}>
-                                                    💾 В галерею
-                                                </button>
-                                            )}
-                                            {item.has_report && (
-                                                <button className="cube-btn-sm" disabled={isBusy}
-                                                    onClick={(e) => { e.stopPropagation(); openVideo(item, 'report'); }}>
-                                                    🎞 Мой отчёт
-                                                </button>
-                                            )}
-                                        </div>
+                            <div key={item.id} className="shelf-purchase-card">
+                                <div className="shelf-lot-title">
+                                    {isPromise ? '🎬 ' : '⭐ '}{item.title}
+                                </div>
+                                <div className="shelf-lot-meta">{item.price_drops} 💧 · {statusLine}</div>
+
+                                {/* Главная кнопка текущего шага — во всю ширину */}
+                                {pending && (
+                                    <button className="purchase-main-btn" disabled={isBusy}
+                                        onClick={(e) => { e.stopPropagation(); markDone(item); }}>
+                                        {mine === 'done' ? 'Отмечаем…' : '✓ Отметить выполненным'}
+                                    </button>
+                                )}
+                                {needsReport && (
+                                    <button className="purchase-main-btn" disabled={isBusy}
+                                        onClick={(e) => {
+                                            e.stopPropagation(); hapticImpact('light');
+                                            setReportFor(item);
+                                        }}>
+                                        {mine === 'report' ? 'Загружаем…' : '🎥 Приложить отчёт'}
+                                    </button>
+                                )}
+
+                                {/* Вторичные — мелкие в ряд */}
+                                <div className="purchase-mini-row">
+                                    {pending && item.has_video && (
+                                        <button className="cube-btn-sm" disabled={isBusy}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setPlaying({ itemId: item.id, kind: 'promise', title: `Обещание «${item.title}»` });
+                                            }}>▶ Смотреть</button>
+                                    )}
+                                    {closed && item.has_video && (
+                                        <button className="cube-btn-sm" disabled={isBusy}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setPlaying({ itemId: item.id, kind: 'promise', title: `Обещание «${item.title}»` });
+                                            }}>▶ Обещание</button>
+                                    )}
+                                    {closed && item.has_report && (
+                                        <button className="cube-btn-sm" disabled={isBusy}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setPlaying({ itemId: item.id, kind: 'report', title: `Мой отчёт «${item.title}»` });
+                                            }}>▶ Мой отчёт</button>
+                                    )}
+                                    {closed && item.has_video && (
+                                        <button className="cube-btn-sm" disabled={isBusy}
+                                            onClick={(e) => { e.stopPropagation(); saveVideo(item, 'promise'); }}>
+                                            ⬇ Скачать
+                                        </button>
                                     )}
                                 </div>
-                                {pending && (
-                                    <div className="shelf-player-actions" style={{ flexDirection: 'column' }}>
-                                        <button className="cube-btn-sm" disabled={isBusy}
-                                            onClick={(e) => { e.stopPropagation(); markDone(item, null); }}>
-                                            {mine === 'done' ? 'Отмечаем…' : '✅ Выполнено'}
-                                        </button>
-                                        <button className="cube-btn-sm" disabled={isBusy}
-                                            onClick={(e) => { e.stopPropagation(); hapticImpact('light'); setReportFor(item); }}>
-                                            🎥 С видеоотчётом
-                                        </button>
-                                    </div>
-                                )}
                             </div>
                         );
                     })}
@@ -413,13 +508,20 @@ const PlayerShop: React.FC = () => {
             {reportFor && (
                 <PromiseRecorder
                     title="Видеоотчёт «как это было»"
-                    hint={`«${reportFor.title}» — необязательно, но приятно наставнику.`}
-                    confirmLabel="Отметить выполненным"
+                    hint={`«${reportFor.title}» — покажи наставнику, как всё прошло.`}
+                    confirmLabel="Приложить отчёт"
                     busy={acting?.id === reportFor.id}
                     error={reportError}
                     progress={reportProgress}
-                    onReady={(blob) => markDone(reportFor, blob)}
+                    onReady={(blob) => attachReport(reportFor, blob)}
                     onCancel={() => { setReportFor(null); setReportError(''); }}
+                />
+            )}
+
+            {playing && (
+                <VideoPlayerModal
+                    itemId={playing.itemId} kind={playing.kind} title={playing.title}
+                    onClose={() => setPlaying(null)} onError={showToast}
                 />
             )}
 
@@ -460,8 +562,11 @@ const PlayerShop: React.FC = () => {
 };
 
 /* ============================================================
-   RESPONSIBLE SHOP
+   RESPONSIBLE SHOP — магазин наставника (8d.1 П.1a)
    ============================================================ */
+/* Тап по игроку ведёт СРАЗУ на его полку: Market = «где я управляю подарками».
+   Бейдж «⏳ N» переехал сюда из Action (Д1) — долги по обещаниям это метрика
+   полки, а не наблюдения. */
 const ResponsibleShop: React.FC = () => {
     const subscription = useAuthStore((s) => s.subscription);
     const subActive = subscription?.active ?? false;
@@ -532,8 +637,9 @@ const ResponsibleShop: React.FC = () => {
             )}
 
             {openPlayer && (
-                <MentorPlayerPage
+                <MentorPlayerScreens
                     playerId={openPlayer.id}
+                    initial="shelf"
                     onClose={() => { setOpenPlayer(null); fetchPlayers(); fetchPool(); }}
                 />
             )}
