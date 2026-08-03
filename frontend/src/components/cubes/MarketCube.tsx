@@ -403,7 +403,7 @@ const PlayerShop: React.FC = () => {
                                                     e.stopPropagation();
                                                     setPlaying({ itemId: item.id, kind: 'promise', title: `Обещание «${item.title}»` });
                                                 }}>
-                                                ▶ Смотреть
+                                                ▶︎ Смотреть
                                             </button>
                                         )}
                                         <button className="cube-btn-sm" disabled={isBusy}
@@ -476,21 +476,21 @@ const PlayerShop: React.FC = () => {
                                             onClick={(e) => {
                                                 e.stopPropagation();
                                                 setPlaying({ itemId: item.id, kind: 'promise', title: `Обещание «${item.title}»` });
-                                            }}>▶ Смотреть</button>
+                                            }}>▶︎ Смотреть</button>
                                     )}
                                     {closed && item.has_video && (
                                         <button className="cube-btn-sm" disabled={isBusy}
                                             onClick={(e) => {
                                                 e.stopPropagation();
                                                 setPlaying({ itemId: item.id, kind: 'promise', title: `Обещание «${item.title}»` });
-                                            }}>▶ Обещание</button>
+                                            }}>▶︎ Обещание</button>
                                     )}
                                     {closed && item.has_report && (
                                         <button className="cube-btn-sm" disabled={isBusy}
                                             onClick={(e) => {
                                                 e.stopPropagation();
                                                 setPlaying({ itemId: item.id, kind: 'report', title: `Мой отчёт «${item.title}»` });
-                                            }}>▶ Мой отчёт</button>
+                                            }}>▶︎ Мой отчёт</button>
                                     )}
                                     {closed && item.has_video && (
                                         <button className="cube-btn-sm" disabled={isBusy}

@@ -238,7 +238,7 @@ const MentorShelfPage: React.FC<Props> = ({ page, reload, onBack, onOpenProfile,
                                 <button className="cube-btn-sm" onClick={(e) => {
                                     e.stopPropagation();
                                     setVideo({ itemId: it.id, kind: 'promise', title: `Обещание «${it.title}»` });
-                                }}>▶ Смотреть</button>
+                                }}>▶︎ Смотреть</button>
                             </div>
                         )}
                     </div>
@@ -262,12 +262,12 @@ const MentorShelfPage: React.FC<Props> = ({ page, reload, onBack, onOpenProfile,
                                     <button className="cube-btn-sm" onClick={(e) => {
                                         e.stopPropagation();
                                         setVideo({ itemId: it.id, kind: 'report', title: `Отчёт «${it.title}»` });
-                                    }}>▶ Смотреть отчёт</button>
+                                    }}>▶︎ Смотреть отчёт</button>
                                     {it.has_video && (
                                         <button className="cube-btn-sm" onClick={(e) => {
                                             e.stopPropagation();
                                             setVideo({ itemId: it.id, kind: 'promise', title: `Обещание «${it.title}»` });
-                                        }}>▶ Обещание</button>
+                                        }}>▶︎ Обещание</button>
                                     )}
                                 </div>
                             </div>
@@ -294,7 +294,7 @@ const MentorShelfPage: React.FC<Props> = ({ page, reload, onBack, onOpenProfile,
                                 <button className="cube-btn-sm" onClick={(e) => {
                                     e.stopPropagation();
                                     setVideo({ itemId: it.id, kind: 'promise', title: `Обещание «${it.title}»` });
-                                }}>▶ Смотреть</button>
+                                }}>▶︎ Смотреть</button>
                             </div>
                         )}
                     </div>
