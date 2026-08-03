@@ -8,7 +8,7 @@ import { hapticImpact } from '../../utils/haptic';
 
    Раньше видео открывалось внешней вкладкой браузера через tg.openLink — это
    рвало опыт: игрок уходил из Mini App и возвращался «в никуда». Теперь окно
-   поверх текущего экрана, крестик возвращает ровно туда, откуда пришёл.
+   поверх текущего экрана, «‹ Назад» возвращает ровно туда, откуда пришёл.
 
    Один компонент на все три места: полка наставника, «Мои покупки» игрока,
    просмотр отчёта наставником. Подписанная ссылка грузится ЛЕНИВО — по тапу,
@@ -57,34 +57,39 @@ const VideoPlayerModal: React.FC<Props> = ({ itemId, kind, title, onClose, onErr
             <div className="videoplayer-window" onClick={(e) => e.stopPropagation()}>
                 <div className="videoplayer-head">
                     <span className="videoplayer-title">{title}</span>
-                    <button className="videoplayer-close" aria-label="Закрыть"
-                        onClick={(e) => { e.stopPropagation(); onClose(); }}>✕</button>
                 </div>
 
                 <div className="videoplayer-stage">
                     {failed ? (
                         <div className="videoplayer-msg">Видео недоступно</div>
                     ) : url ? (
-                        /* controls + playsInline обязательны: без playsInline iOS
-                           уводит ролик в нативный полноэкранный плеер и модалка
-                           теряет контекст, ради которого её и делали. */
+                        /* playsInline + legacy webkit-playsinline: без них iOS
+                           уводит ролик в НАТИВНЫЙ полноэкранный плеер со своим
+                           «Готово» — и рядом с нашей кнопкой выхода появляется
+                           второй, чужой выход (находка смоука 8d.1). Старый
+                           атрибут нужен отдельно: React рендерит только
+                           playsinline, а часть iOS-webview читает webkit-. */
                         <video className="videoplayer-video" src={url}
-                            controls autoPlay playsInline preload="metadata" />
+                            controls autoPlay playsInline preload="metadata"
+                            disablePictureInPicture
+                            {...{ 'webkit-playsinline': 'true' }} />
                     ) : (
                         <div className="videoplayer-msg">Загружаем видео…</div>
                     )}
                 </div>
 
+                {/* Иерархия П.8c: выход из плеера — ОДИН и крупный, «Скачать»
+                    рядом мелкой вторичной. Крестика нет намеренно. */}
                 <div className="videoplayer-actions">
-                    <button className="cube-modal-btn cube-modal-btn--ghost" disabled={saving || failed}
+                    <button className="cube-btn-sm" disabled={saving || failed}
                         onClick={(e) => { e.stopPropagation(); save(); }}>
                         {saving ? 'Сохраняем…' : '⬇ Скачать'}
                     </button>
-                    <button className="cube-modal-btn cube-modal-btn--primary"
-                        onClick={(e) => { e.stopPropagation(); onClose(); }}>
-                        Готово
-                    </button>
                 </div>
+                <button className="cube-modal-btn cube-modal-btn--primary videoplayer-back"
+                    onClick={(e) => { e.stopPropagation(); onClose(); }}>
+                    ‹ Назад
+                </button>
             </div>
         </div>,
         document.body,

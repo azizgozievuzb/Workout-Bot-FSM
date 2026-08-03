@@ -423,18 +423,6 @@
     white-space: nowrap;
 }
 
-.videoplayer-close {
-    width: 30px;
-    height: 30px;
-    flex-shrink: 0;
-    border: none;
-    border-radius: 50%;
-    background: rgba(127, 127, 127, 0.2);
-    color: inherit;
-    font-size: 14px;
-    cursor: pointer;
-}
-
 .videoplayer-stage {
     position: relative;
     width: 100%;
@@ -462,6 +450,13 @@
 .videoplayer-actions {
     display: flex;
     gap: 8px;
+    justify-content: center;
+}
+
+/* Единственный выход из плеера — крупный, во всю ширину окна (крестик убран,
+   чтобы на iOS не соседствовал с нативным «Готово»). */
+.videoplayer-back {
+    width: 100%;
 }
 
 /* ---------- Секции и лоты ---------- */

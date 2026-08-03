@@ -1,3 +1,17 @@
+/* Смоук 8d.1: при свайпе куба на iPhone справа всплывал системный ползунок и
+   лип поверх интерфейса. Прячем полосу прокрутки ВИЗУАЛЬНО во всём приложении —
+   сама прокрутка (в т.ч. инерционная) не трогается. */
+*,
+*::before,
+*::after {
+  scrollbar-width: none;      /* Firefox */
+  -ms-overflow-style: none;   /* legacy Edge */
+}
+
+*::-webkit-scrollbar {
+  display: none;              /* WebKit: Safari, iOS webview, Chrome */
+}
+
 :root {
   --text: #6b6375;
   --text-h: #08060d;
