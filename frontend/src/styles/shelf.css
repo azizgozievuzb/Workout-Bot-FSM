@@ -453,6 +453,27 @@
     justify-content: center;
 }
 
+/* Тема задаётся ТОЛЬКО tg-переменными (они на :root и работают в портале),
+   а не классами .dark-theme/.light-theme — те до портала не дотягиваются.
+   -webkit-appearance:none обязателен, иначе iOS подменяет фон нативным. */
+.videoplayer-download {
+    -webkit-appearance: none;
+    appearance: none;
+    padding: 7px 16px;
+    border: none;
+    border-radius: 9px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    background: var(--tg-theme-secondary-bg-color, rgba(255, 255, 255, 0.08));
+    color: var(--tg-theme-hint-color, rgba(255, 255, 255, 0.7));
+}
+
+.videoplayer-download:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
 /* Единственный выход из плеера — крупный, во всю ширину окна (крестик убран,
    чтобы на iOS не соседствовал с нативным «Готово»). */
 .videoplayer-back {

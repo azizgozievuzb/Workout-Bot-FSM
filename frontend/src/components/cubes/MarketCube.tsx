@@ -38,7 +38,11 @@ const STAR_ITEM_EFFECT: Record<string, string> = {
 };
 const STAR_ITEM_EFFECT_DEFAULT = '✅ Получено';
 
-type VideoTarget = { itemId: string; kind: 'promise' | 'report'; title: string };
+type VideoTarget = {
+    itemId: string; kind: 'promise' | 'report'; title: string;
+    /** Невыкупленное обещание — только просмотр (решение смоука 8d.1). */
+    allowDownload?: boolean;
+};
 
 /* ============================================================
    ROOT
@@ -401,7 +405,11 @@ const PlayerShop: React.FC = () => {
                                             <button className="cube-btn-sm" disabled={isBusy}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    setPlaying({ itemId: item.id, kind: 'promise', title: `Обещание «${item.title}»` });
+                                                    setPlaying({
+                                                        itemId: item.id, kind: 'promise',
+                                                        title: `Обещание «${item.title}»`,
+                                                        allowDownload: false,
+                                                    });
                                                 }}>
                                                 ▶︎ Смотреть
                                             </button>
@@ -521,6 +529,7 @@ const PlayerShop: React.FC = () => {
             {playing && (
                 <VideoPlayerModal
                     itemId={playing.itemId} kind={playing.kind} title={playing.title}
+                    allowDownload={playing.allowDownload !== false}
                     onClose={() => setPlaying(null)} onError={showToast}
                 />
             )}

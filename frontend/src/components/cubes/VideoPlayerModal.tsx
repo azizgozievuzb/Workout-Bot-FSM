@@ -22,9 +22,11 @@ interface Props {
     onClose: () => void;
     /** Тост родителя: единый слой сообщений на экране. */
     onError?: (message: string) => void;
+    /** Обещание до выкупа игрок может только СМОТРЕТЬ — «Скачать» прячем. */
+    allowDownload?: boolean;
 }
 
-const VideoPlayerModal: React.FC<Props> = ({ itemId, kind, title, onClose, onError }) => {
+const VideoPlayerModal: React.FC<Props> = ({ itemId, kind, title, onClose, onError, allowDownload = true }) => {
     const [url, setUrl] = useState('');
     const [failed, setFailed] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -79,13 +81,18 @@ const VideoPlayerModal: React.FC<Props> = ({ itemId, kind, title, onClose, onErr
                 </div>
 
                 {/* Иерархия П.8c: выход из плеера — ОДИН и крупный, «Скачать»
-                    рядом мелкой вторичной. Крестика нет намеренно. */}
-                <div className="videoplayer-actions">
-                    <button className="cube-btn-sm" disabled={saving || failed}
-                        onClick={(e) => { e.stopPropagation(); save(); }}>
-                        {saving ? 'Сохраняем…' : '⬇ Скачать'}
-                    </button>
-                </div>
+                    рядом мелкой вторичной. Крестика нет намеренно.
+                    Класс СВОЙ, не .cube-btn-sm: модалка живёт в портале body,
+                    куда .dark-theme/.light-theme не достают, и тема-зависимая
+                    кнопка оставалась без фона — iOS рисовал нативную. */}
+                {allowDownload && (
+                    <div className="videoplayer-actions">
+                        <button className="videoplayer-download" disabled={saving || failed}
+                            onClick={(e) => { e.stopPropagation(); save(); }}>
+                            {saving ? 'Сохраняем…' : '⬇ Скачать'}
+                        </button>
+                    </div>
+                )}
                 <button className="cube-modal-btn cube-modal-btn--primary videoplayer-back"
                     onClick={(e) => { e.stopPropagation(); onClose(); }}>
                     ‹ Назад
