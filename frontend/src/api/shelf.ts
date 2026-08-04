@@ -170,9 +170,18 @@ export async function buyShelfItem(itemId: string): Promise<ShelfBuyResult> {
 export async function fulfillShelfItem(
     itemId: string, video?: Blob | null, onProgress?: (pct: number) => void,
 ): Promise<ShelfItem> {
+    const url = `/players/me/shelf/${itemId}/fulfill`;
+    /* ПУСТУЮ FormData слать нельзя: браузер отправляет тело из одной закрывающей
+       границы («--X--»), и парсер Starlette валится с 400 «error parsing the
+       body» — галочка без видеоотчёта не проходила вообще (смоук 8d.1, п.11).
+       Без тела запрос доходит до обработчика и video приезжает как None. */
+    if (!video) {
+        const { data } = await api.post(url, undefined, { timeout: 120_000 });
+        return data;
+    }
     const form = new FormData();
-    if (video) form.append('video', video, `report.${videoExt(video)}`);
-    const { data } = await api.post(`/players/me/shelf/${itemId}/fulfill`, form, {
+    form.append('video', video, `report.${videoExt(video)}`);
+    const { data } = await api.post(url, form, {
         timeout: 120_000,
         onUploadProgress: (e) => {
             if (onProgress && e.total) onProgress(Math.round((e.loaded / e.total) * 100));

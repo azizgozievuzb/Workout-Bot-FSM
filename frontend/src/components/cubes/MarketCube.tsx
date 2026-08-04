@@ -152,7 +152,11 @@ const PlayerShop: React.FC = () => {
         } else if (code === 'FREEZE_CAP') {
             showToast('Запас купленных заморозок полон (3/3)');
         } else {
-            showToast(fallback);
+            /* HTTP-код в тексте: на смоуке 8d.1 «Не удалось отметить» стоило
+               целого круга переписки, чтобы выяснить, что это 400 от парсера
+               тела. На телефоне консоли нет — пусть код будет виден глазу. */
+            const status = e?.response?.status;
+            showToast(status ? `${fallback} (HTTP ${status})` : fallback);
         }
     }, [showToast]);
 
