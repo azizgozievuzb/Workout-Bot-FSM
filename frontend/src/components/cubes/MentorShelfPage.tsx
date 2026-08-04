@@ -44,6 +44,7 @@ const MentorShelfPage: React.FC<Props> = ({ page, reload, onBack, onOpenProfile,
     const [busy, setBusy] = useState(false);
     const [editing, setEditing] = useState<{ id: string; price: string } | null>(null);
     const [video, setVideo] = useState<VideoTarget | null>(null);
+    const [nudge, setNudge] = useState<'promise' | 'star' | null>(null);
 
     const [promiseForm, setPromiseForm] = useState(false);
     const [recorder, setRecorder] = useState(false);
@@ -171,19 +172,27 @@ const MentorShelfPage: React.FC<Props> = ({ page, reload, onBack, onOpenProfile,
         finally { setBusy(false); }
     }, [busy, show, fail, reload]);
 
+    /* Отказ по слотам обязан ВЫГЛЯДЕТЬ как нажатие, иначе серая кнопка читается
+       как мёртвая (смоук 8d.1). Класс снимаем по таймеру — повторный тап должен
+       проигрывать анимацию заново. */
+    const bounce = useCallback((which: 'promise' | 'star') => {
+        setNudge(which);
+        setTimeout(() => setNudge((n) => (n === which ? null : n)), 300);
+    }, []);
+
     const addPromise = useCallback(() => {
-        if (slotsFull) { hapticNotification('warning'); show(SLOTS_FULL_TOAST); return; }
+        if (slotsFull) { hapticNotification('warning'); bounce('promise'); show(SLOTS_FULL_TOAST); return; }
         hapticImpact('light'); setPromiseForm(true);
-    }, [slotsFull, show]);
+    }, [slotsFull, show, bounce]);
 
     const addStarItem = useCallback(() => {
-        if (slotsFull) { hapticNotification('warning'); show(SLOTS_FULL_TOAST); return; }
+        if (slotsFull) { hapticNotification('warning'); bounce('star'); show(SLOTS_FULL_TOAST); return; }
         hapticImpact('light');
         const first = page.catalog[0];
         if (!first) { show('Каталог пуст'); return; }
         setStarForm({ key: first.key, title: first.title, stars: first.price_stars });
         setStarPrice(String(page.price_limits.min));
-    }, [slotsFull, page.catalog, page.price_limits.min, show]);
+    }, [slotsFull, page.catalog, page.price_limits.min, show, bounce]);
 
     return (
         <div className="mentor-page-inner">
@@ -330,11 +339,15 @@ const MentorShelfPage: React.FC<Props> = ({ page, reload, onBack, onOpenProfile,
 
             {/* П.9: кнопки при полной полке серые, но живые — тап объясняет причину. */}
             <div className="mentor-btn-row">
-                <button className={`cube-btn-sm${slotsFull ? ' cube-btn-sm--muted' : ''}`} disabled={busy}
+                <button
+                    className={`cube-btn-sm${slotsFull ? ' cube-btn-sm--muted' : ''}${nudge === 'promise' ? ' cube-btn-sm--nudge' : ''}`}
+                    disabled={busy}
                     onClick={(e) => { e.stopPropagation(); addPromise(); }}>
                     ➕ Обещание
                 </button>
-                <button className={`cube-btn-sm${slotsFull ? ' cube-btn-sm--muted' : ''}`} disabled={busy}
+                <button
+                    className={`cube-btn-sm${slotsFull ? ' cube-btn-sm--muted' : ''}${nudge === 'star' ? ' cube-btn-sm--nudge' : ''}`}
+                    disabled={busy}
                     onClick={(e) => { e.stopPropagation(); addStarItem(); }}>
                     ⭐ Предмет
                 </button>

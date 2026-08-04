@@ -193,6 +193,19 @@
     color: rgba(150, 150, 150, 0.85) !important;
 }
 
+/* Серая кнопка выглядела мёртвой: :active со scale успевал отработать лишь
+   частично при быстром клике, а цвет не менялся вовсе. Отклик даём классом с
+   ФИКСИРОВАННОЙ длительностью — он не зависит от того, как долго держали. */
+.cube-btn-sm--nudge {
+    animation: btnNudge 0.28s ease;
+}
+
+@keyframes btnNudge {
+    0% { transform: scale(1); }
+    35% { transform: scale(0.9); background: rgba(127, 127, 127, 0.34); }
+    100% { transform: scale(1); }
+}
+
 .mentor-inline-card,
 .mentor-inline-form {
     padding: 10px;
