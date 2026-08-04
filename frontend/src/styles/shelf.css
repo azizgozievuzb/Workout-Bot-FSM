@@ -731,6 +731,21 @@
     width: 100%;
 }
 
+/* Разворот длинного списка (отчёты игрока) — ссылка, а не кнопка: это не
+   действие над данными, а показать/скрыть. */
+.mentor-more-link {
+    display: block;
+    width: 100%;
+    padding: 8px;
+    border: none;
+    background: none;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    color: var(--tg-theme-link-color, #6ab7ff);
+    cursor: pointer;
+}
+
 .promise-file-label {
     display: block;
     text-align: center;

@@ -32,6 +32,12 @@ const STATUS_LABEL: Record<string, string> = {
    счётчик в шапке, серые кнопки и вот этот тост по тапу. */
 const SLOTS_FULL_TOAST = 'Все слоты полки заняты. Убери лот или дождись, пока игрок его выкупит.';
 
+/* Сколько отчётов показываем сразу. Полка — это МАГАЗИН, а отчёты здесь архив:
+   бэк и так отдаёт максимум 10 и чистит их ретеншном через 30 дней, но даже
+   десять карточек с видео превращают рабочий экран в простыню (смоук 8d.1).
+   Остальные — по тапу. */
+const REPORTS_PREVIEW = 3;
+
 function fmtDate(iso: string | null): string {
     if (!iso) return '—';
     const d = new Date(iso);
@@ -45,6 +51,7 @@ const MentorShelfPage: React.FC<Props> = ({ page, reload, onBack, onOpenProfile,
     const [editing, setEditing] = useState<{ id: string; price: string } | null>(null);
     const [video, setVideo] = useState<VideoTarget | null>(null);
     const [nudge, setNudge] = useState<'promise' | 'star' | null>(null);
+    const [allReports, setAllReports] = useState(false);
 
     const [promiseForm, setPromiseForm] = useState(false);
     const [recorder, setRecorder] = useState(false);
@@ -260,7 +267,7 @@ const MentorShelfPage: React.FC<Props> = ({ page, reload, onBack, onOpenProfile,
             {page.reports.length > 0 && (
                 <>
                     <div className="mentor-section-title"><span>🎥 Отчёты игрока</span></div>
-                    {page.reports.map((it) => (
+                    {(allReports ? page.reports : page.reports.slice(0, REPORTS_PREVIEW)).map((it) => (
                         <div key={it.id} className="shelf-lot">
                             <div className="shelf-lot-main">
                                 <div className="shelf-lot-title">🎬 {it.title}</div>
@@ -282,6 +289,14 @@ const MentorShelfPage: React.FC<Props> = ({ page, reload, onBack, onOpenProfile,
                             </div>
                         </div>
                     ))}
+                    {page.reports.length > REPORTS_PREVIEW && (
+                        <button className="mentor-more-link"
+                            onClick={(e) => { e.stopPropagation(); setAllReports((v) => !v); }}>
+                            {allReports
+                                ? 'Свернуть'
+                                : `Показать все (${page.reports.length}) →`}
+                        </button>
+                    )}
                 </>
             )}
 
