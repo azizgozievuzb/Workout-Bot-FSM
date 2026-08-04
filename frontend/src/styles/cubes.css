@@ -122,8 +122,17 @@
     white-space: nowrap;
 }
 
-.cube-btn-sm:active {
+.cube-btn-sm:active:not(:disabled) {
     transform: scale(0.93);
+}
+
+/* Смоук 8d.1: на время запроса кнопки уже были заблокированы логикой (acting),
+   но выглядели обычными — правила :disabled у мелких кнопок не существовало
+   (у крупных .cube-modal-btn оно есть). Игрок жал по «Смотреть»/«Неинтересно»
+   рядом с только что нажатой «Купить» и не понимал, почему ничего не выходит. */
+.cube-btn-sm:disabled {
+    opacity: 0.45;
+    cursor: default;
 }
 
 .dark-theme .cube-btn-sm {
