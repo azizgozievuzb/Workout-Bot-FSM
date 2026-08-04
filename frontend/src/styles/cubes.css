@@ -2777,11 +2777,9 @@
    фото-карточки показываем целиком, а не обрезанным под ширину блока. */
 .cardflow-preview {
     display: block;
-    height: min(42dvh, 320px);
+    width: 100%;
     aspect-ratio: 3 / 4;
-    width: auto;
-    max-width: 100%;
-    margin: 0 auto;
+    height: auto;
     object-fit: contain;
     background: #000;
     border-radius: 12px;
