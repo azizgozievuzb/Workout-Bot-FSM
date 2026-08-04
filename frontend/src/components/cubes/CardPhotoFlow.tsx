@@ -267,7 +267,10 @@ const CardPhotoFlow: React.FC<Props> = ({
                                 <div className="cardflow-variant-title">
                                     {label?.title ?? `Вариант ${i + 1}`}
                                 </div>
-                                {label && <div className="cardflow-variant-hint">{label.hint}</div>}
+                                {/* Пустая расшифровка всё равно рисуется: у колонки
+                                    фиксированные строки сетки, и пропуск элемента
+                                    сдвинул бы кнопку на строку выше соседних. */}
+                                <div className="cardflow-variant-hint">{label?.hint ?? ''}</div>
                                 <button className="cube-btn-sm" disabled={busy} onClick={() => doChoose(i)}>
                                     {busyLabel === 'choose:' + i ? '…' : 'Выбрать'}
                                 </button>

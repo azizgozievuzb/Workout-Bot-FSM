@@ -2788,16 +2788,24 @@
 /* 8d.1 (П.10): на экране выбора теперь ТРИ колонки — оригинал + слабая и
    глубокая обработка рядом, иначе сравнить сходство не с чем. auto-fit держит
    раскладку и в старом случае двух вариантов. */
+/* Три колонки ЖЁСТКО: auto-fit при узком экране менял их число, и раскладка
+   плыла. minmax(0,1fr) обязателен — иначе колонка не даёт себя сжать ниже
+   содержимого и наезжает на соседнюю (смоук 8d.1, п.13). */
 .cardflow-variants {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px;
+    align-items: stretch;
 }
 
+/* Свои строки: фото · термин · расшифровка · кнопка. Расшифровка забирает
+   остаток высоты (1fr), поэтому кнопки всех трёх колонок стоят на ОДНОЙ
+   нижней линии независимо от того, на сколько строк разошёлся текст. */
 .cardflow-variant {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-rows: auto auto 1fr auto;
     gap: 4px;
+    min-width: 0;
     text-align: center;
 }
 
@@ -2806,6 +2814,17 @@
     aspect-ratio: 1;
     object-fit: cover;
     border-radius: 12px;
+}
+
+/* Кнопка живёт в своей колонке и переносится по словам: у .cube-btn-sm стоит
+   white-space:nowrap, из-за которого «Оставить как есть» вылезала за границу
+   колонки и накрывала подпись соседней. */
+.cardflow-variant .cube-btn-sm {
+    width: 100%;
+    padding: 6px 4px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    align-self: end;
 }
 
 .cardflow-close {
