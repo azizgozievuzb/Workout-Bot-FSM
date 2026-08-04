@@ -654,15 +654,22 @@
     gap: 10px;
 }
 
+/* Кадр превью обязан совпадать с тем, что реально пишется в файл (смоук 8d.1).
+   Раньше коробка была широкой и низкой, а поток — портретный 3:4: object-fit
+   cover обрезал верх и низ, человек видел крупный план, а в записи оказывалось
+   заметно больше кадра. Держим саму коробку в пропорции потока и вписываем
+   кадр целиком. */
 .promise-video-box {
     position: relative;
-    width: 100%;
-    height: min(38dvh, 280px);
+    height: min(46dvh, 340px);
+    aspect-ratio: 3 / 4;
+    width: auto;
+    max-width: 100%;
     flex-shrink: 0;
     border-radius: 14px;
     overflow: hidden;
     background: #000;
-    margin: 4px 0;
+    margin: 4px auto;
 }
 
 /* Живое превью зеркалим — иначе движение головы кажется зеркальным.
@@ -691,7 +698,8 @@
 .promise-video {
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    /* contain, НЕ cover: обрезка кадра в превью = обман снимающего. */
+    object-fit: contain;
 }
 
 .promise-rec-badge {

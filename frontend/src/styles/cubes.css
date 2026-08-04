@@ -2773,10 +2773,17 @@
     color: #ff8a8a;
 }
 
+/* Та же правда кадра, что и в рекордере обещаний (смоук 8d.1): селфи для
+   фото-карточки показываем целиком, а не обрезанным под ширину блока. */
 .cardflow-preview {
-    width: 100%;
-    max-height: 300px;
-    object-fit: cover;
+    display: block;
+    height: min(42dvh, 320px);
+    aspect-ratio: 3 / 4;
+    width: auto;
+    max-width: 100%;
+    margin: 0 auto;
+    object-fit: contain;
+    background: #000;
     border-radius: 12px;
 }
 

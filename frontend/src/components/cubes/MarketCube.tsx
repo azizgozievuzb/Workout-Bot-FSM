@@ -15,7 +15,6 @@ import MentorPlayerScreens from './MentorPlayerScreens';
 import DropPackModal from './DropPackModal';
 import PromiseRecorder from './PromiseRecorder';
 import VideoPlayerModal from './VideoPlayerModal';
-import { downloadItemVideo } from '../../utils/videoDownload';
 import { getShelfCatalog } from '../../api/shelf';
 import { hapticImpact, hapticNotification } from '../../utils/haptic';
 import RoleTransition from '../shared/RoleTransition';
@@ -266,14 +265,6 @@ const PlayerShop: React.FC = () => {
         finally { setActing(null); setReportProgress(null); }
     }, [acting, showToast, refreshShop]);
 
-    const saveVideo = useCallback(async (item: ShelfItem, kind: 'promise' | 'report') => {
-        try {
-            hapticImpact('light');
-            const ok = await downloadItemVideo(item.id, kind, item.title);
-            if (!ok) showToast('Не удалось скачать видео');
-        } catch { showToast('Не удалось скачать видео'); }
-    }, [showToast]);
-
     if (loading) return <ShopSkeleton />;
     if (fetchError || !shop) return (
         <div className="cube-locked">
@@ -504,12 +495,10 @@ const PlayerShop: React.FC = () => {
                                                 setPlaying({ itemId: item.id, kind: 'report', title: `Мой отчёт «${item.title}»` });
                                             }}>▶︎ Мой отчёт</button>
                                     )}
-                                    {closed && item.has_video && (
-                                        <button className="cube-btn-sm" disabled={isBusy}
-                                            onClick={(e) => { e.stopPropagation(); saveVideo(item, 'promise'); }}>
-                                            ⬇ Скачать
-                                        </button>
-                                    )}
+                                    {/* «⬇ Скачать» здесь БЫЛА и убрана (смоук 8d.1): она
+                                        двусмысленна — рядом два ролика, а кнопка одна, и
+                                        качала только обещание. Скачивание живёт внутри
+                                        плеера, где видно, что именно качаешь. */}
                                 </div>
                             </div>
                         );
