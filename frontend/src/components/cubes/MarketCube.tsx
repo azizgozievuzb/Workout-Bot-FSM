@@ -369,6 +369,15 @@ const PlayerShop: React.FC = () => {
                     <div className="shop-item-price-row">
                         <span className="shop-item-price">✨ {photoAiPrice} 💧 · 📷 {photoRawPrice} 💧</span>
                     </div>
+                    {/* Подаренная наставником попытка тратится на шаге «ещё 2 варианта»,
+                        а не на самой покупке фото — без этой строки игрок ждал, что
+                        карточка станет бесплатной (смоук 8d.1, п.12). */}
+                    {shop.reroll_credits > 0 && (
+                        <div className="shop-item-desc">
+                            🎁 От наставника: {shop.reroll_credits} бесплатн{shop.reroll_credits === 1 ? 'ая попытка' : 'ых попытки'} обновить
+                            варианты — тратится внутри, на шаге «ещё 2 варианта».
+                        </div>
+                    )}
                     <button className="cube-btn-sm" disabled={busy}
                         onClick={(e) => { e.stopPropagation(); setPhotoFlow(true); }}>
                         {photoFlowPending ? 'Продолжить' : photoInstalled ? 'Сменить' : 'Открыть'}
@@ -555,6 +564,7 @@ const PlayerShop: React.FC = () => {
                     aiPrice={photoAiPrice}
                     rawPrice={photoRawPrice}
                     rerollPrice={rerollPrice}
+                    rerollCredits={shop.reroll_credits}
                     onClose={() => { setPhotoFlow(false); refreshShop(); }}
                     onChanged={refreshShop}
                 />

@@ -22,6 +22,11 @@ interface Props {
     aiPrice: number;        // 8c.1: актуальная для юзера цена AI-смены (прогрессия)
     rawPrice: number;       // фикс-цена «как есть»
     rerollPrice: number;    // актуальная цена реролла (прогрессия)
+    /* 8d: подаренные наставником попытки. RPC begin_card_reroll тратит их ПЕРВЫМИ
+       (капли не списываются, прогрессия цены не растёт), но в UI их не было
+       видно вовсе — игрок с оплаченным кредитом смотрел на цену в каплях и не
+       понимал, за что платит (смоук 8d.1, п.12). */
+    rerollCredits: number;
     onClose: () => void;
     // Синхронизация витрины после каждого шага (новый баланс подтянет родитель).
     onChanged: () => void;
@@ -32,7 +37,9 @@ interface Props {
  * raw фикс) → покупка → селфи (камера getUserMedia / input capture / галерея) →
  * (AI) 2 варианта → выбрать / реролл (прогрессия) → превью «так тебя видит наставник».
  */
-const CardPhotoFlow: React.FC<Props> = ({ card, balance, aiPrice, rawPrice, rerollPrice, onClose, onChanged }) => {
+const CardPhotoFlow: React.FC<Props> = ({
+    card, balance, aiPrice, rawPrice, rerollPrice, rerollCredits, onClose, onChanged,
+}) => {
     const [state, setState] = useState<CardPhotoState>(card);
     const [busy, setBusy] = useState(false);
     const [busyLabel, setBusyLabel] = useState('');
@@ -269,8 +276,17 @@ const CardPhotoFlow: React.FC<Props> = ({ card, balance, aiPrice, rawPrice, rero
                     })}
                 </div>
                 <button className="cube-btn-sm" disabled={busy} onClick={doReroll}>
-                    {busyLabel === 'reroll' ? 'Списываем…' : `🎲 Ещё 2 варианта (${rerollPrice} 💧)`}
+                    {busyLabel === 'reroll'
+                        ? 'Списываем…'
+                        : rerollCredits > 0
+                            ? `🎲 Ещё 2 варианта (бесплатно, осталось ${rerollCredits})`
+                            : `🎲 Ещё 2 варианта (${rerollPrice} 💧)`}
                 </button>
+                {rerollCredits > 0 && (
+                    <div className="cardflow-note">
+                        Попытку подарил наставник — капли не спишутся, цена следующей платной смены не вырастет.
+                    </div>
+                )}
             </>
         );
     } else if (status === 'processing') {
