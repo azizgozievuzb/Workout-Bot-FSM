@@ -37,6 +37,18 @@ const STAR_ITEM_EFFECT: Record<string, string> = {
 };
 const STAR_ITEM_EFFECT_DEFAULT = '✅ Получено';
 
+/* Смоук 8d.1: «Мои покупки» показывали ВСЮ историю пары без лимита. Наверху
+   держим только то, где от игрока ещё ждут шага; всё остальное — чек, ему
+   место в свёрнутой истории. Признак «ждут шага» ровно один: у карточки есть
+   главная кнопка (галочка или отчёт). Stars-предметы её не имеют никогда —
+   их эффект применяется в момент покупки, а остаток заморозок и так виден
+   отдельной цифрой на карточке «Заморозка стрика». */
+function isActionablePurchase(item: ShelfItem): boolean {
+    if (item.type !== 'promise') return false;
+    if (item.status === 'purchased') return true;                  // ждёт галочки
+    return item.status === 'fulfilled' && !item.has_report;        // ждёт отчёта
+}
+
 type VideoTarget = {
     itemId: string; kind: 'promise' | 'report'; title: string;
     /** Невыкупленное обещание — только просмотр (решение смоука 8d.1). */
@@ -121,6 +133,7 @@ const PlayerShop: React.FC = () => {
     const [reportError, setReportError] = useState('');
     const [reportProgress, setReportProgress] = useState<number | null>(null);
     const [playing, setPlaying] = useState<VideoTarget | null>(null);
+    const [showHistory, setShowHistory] = useState(false);
 
     const showToast = useCallback((msg: string) => {
         setToast(msg);
@@ -296,6 +309,75 @@ const PlayerShop: React.FC = () => {
         ? Math.max(0, shop.shelf_slots_total - shop.shelf.length)
         : 0;
 
+    /* Одна карточка «Моих покупок» — рисуется и в активных, и в истории. */
+    const renderPurchase = (item: ShelfItem) => {
+        const mine = acting?.id === item.id ? acting.action : null;
+        const isBusy = acting !== null;
+        const pending = item.status === 'purchased';
+        const isPromise = item.type === 'promise';
+        const needsReport = isPromise && !pending && !item.has_report && item.status === 'fulfilled';
+        const closed = isPromise && !pending && !needsReport;
+
+        const statusLine = !isPromise
+            ? (STAR_ITEM_EFFECT[item.star_catalog_key ?? ''] ?? STAR_ITEM_EFFECT_DEFAULT)
+            : pending ? '⏳ ждёт исполнения' : '✅ выполнено';
+
+        return (
+            <div key={item.id} className="shelf-purchase-card">
+                <div className="shelf-lot-title">
+                    {isPromise ? '🎬 ' : '⭐ '}{item.title}
+                </div>
+                <div className="shelf-lot-meta">{item.price_drops} 💧 · {statusLine}</div>
+
+                {/* Главная кнопка текущего шага — во всю ширину */}
+                {pending && (
+                    <button className="purchase-main-btn" disabled={isBusy}
+                        onClick={(e) => { e.stopPropagation(); markDone(item); }}>
+                        {mine === 'done' ? 'Отмечаем…' : '✓ Отметить выполненным'}
+                    </button>
+                )}
+                {needsReport && (
+                    <button className="purchase-main-btn" disabled={isBusy}
+                        onClick={(e) => {
+                            e.stopPropagation(); hapticImpact('light');
+                            setReportFor(item);
+                        }}>
+                        {mine === 'report' ? 'Загружаем…' : '🎥 Приложить отчёт'}
+                    </button>
+                )}
+
+                {/* Вторичные — мелкие в ряд */}
+                <div className="purchase-mini-row">
+                    {pending && item.has_video && (
+                        <button className="cube-btn-sm" disabled={isBusy}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setPlaying({ itemId: item.id, kind: 'promise', title: `Обещание «${item.title}»` });
+                            }}>▶︎ Смотреть</button>
+                    )}
+                    {closed && item.has_video && (
+                        <button className="cube-btn-sm" disabled={isBusy}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setPlaying({ itemId: item.id, kind: 'promise', title: `Обещание «${item.title}»` });
+                            }}>▶︎ Обещание</button>
+                    )}
+                    {closed && item.has_report && (
+                        <button className="cube-btn-sm" disabled={isBusy}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setPlaying({ itemId: item.id, kind: 'report', title: `Мой отчёт «${item.title}»` });
+                            }}>▶︎ Мой отчёт</button>
+                    )}
+                    {/* «⬇ Скачать» здесь БЫЛА и убрана (смоук 8d.1): она
+                        двусмысленна — рядом два ролика, а кнопка одна, и
+                        качала только обещание. Скачивание живёт внутри
+                        плеера, где видно, что именно качаешь. */}
+                </div>
+            </div>
+        );
+    };
+
     return (
         <>
             {/* Шапка: баланс капель — постоянно видим (UX-долг №5) */}
@@ -445,73 +527,29 @@ const PlayerShop: React.FC = () => {
             {shop.my_purchases.length > 0 && (
                 <>
                     <div className="cube-section-title" style={{ marginTop: 12 }}>🧾 Мои покупки</div>
-                    {shop.my_purchases.map(item => {
-                        const mine = acting?.id === item.id ? acting.action : null;
-                        const isBusy = acting !== null;
-                        const pending = item.status === 'purchased';
-                        const isPromise = item.type === 'promise';
-                        const needsReport = isPromise && !pending && !item.has_report && item.status === 'fulfilled';
-                        const closed = isPromise && !pending && !needsReport;
-
-                        const statusLine = !isPromise
-                            ? (STAR_ITEM_EFFECT[item.star_catalog_key ?? ''] ?? STAR_ITEM_EFFECT_DEFAULT)
-                            : pending ? '⏳ ждёт исполнения' : '✅ выполнено';
-
+                    {(() => {
+                        /* Смоук 8d.1: бэк отдаёт сюда ВСЮ историю пары без лимита, и
+                           через несколько месяцев экран превращался в простыню.
+                           Наверху остаётся то, где от игрока ещё ждут действия;
+                           карточка без единой кнопки — это чек, ему место в истории. */
+                        const actionable = shop.my_purchases.filter(isActionablePurchase);
+                        const history = shop.my_purchases.filter((i) => !isActionablePurchase(i));
                         return (
-                            <div key={item.id} className="shelf-purchase-card">
-                                <div className="shelf-lot-title">
-                                    {isPromise ? '🎬 ' : '⭐ '}{item.title}
-                                </div>
-                                <div className="shelf-lot-meta">{item.price_drops} 💧 · {statusLine}</div>
-
-                                {/* Главная кнопка текущего шага — во всю ширину */}
-                                {pending && (
-                                    <button className="purchase-main-btn" disabled={isBusy}
-                                        onClick={(e) => { e.stopPropagation(); markDone(item); }}>
-                                        {mine === 'done' ? 'Отмечаем…' : '✓ Отметить выполненным'}
+                            <>
+                                {actionable.length === 0 && history.length > 0 && (
+                                    <div className="cube-hint">Ничего не ждёт твоего шага.</div>
+                                )}
+                                {actionable.map(renderPurchase)}
+                                {history.length > 0 && (
+                                    <button className="mentor-more-link"
+                                        onClick={(e) => { e.stopPropagation(); setShowHistory((v) => !v); }}>
+                                        {showHistory ? 'Скрыть историю' : `Показать историю (${history.length}) →`}
                                     </button>
                                 )}
-                                {needsReport && (
-                                    <button className="purchase-main-btn" disabled={isBusy}
-                                        onClick={(e) => {
-                                            e.stopPropagation(); hapticImpact('light');
-                                            setReportFor(item);
-                                        }}>
-                                        {mine === 'report' ? 'Загружаем…' : '🎥 Приложить отчёт'}
-                                    </button>
-                                )}
-
-                                {/* Вторичные — мелкие в ряд */}
-                                <div className="purchase-mini-row">
-                                    {pending && item.has_video && (
-                                        <button className="cube-btn-sm" disabled={isBusy}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                setPlaying({ itemId: item.id, kind: 'promise', title: `Обещание «${item.title}»` });
-                                            }}>▶︎ Смотреть</button>
-                                    )}
-                                    {closed && item.has_video && (
-                                        <button className="cube-btn-sm" disabled={isBusy}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                setPlaying({ itemId: item.id, kind: 'promise', title: `Обещание «${item.title}»` });
-                                            }}>▶︎ Обещание</button>
-                                    )}
-                                    {closed && item.has_report && (
-                                        <button className="cube-btn-sm" disabled={isBusy}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                setPlaying({ itemId: item.id, kind: 'report', title: `Мой отчёт «${item.title}»` });
-                                            }}>▶︎ Мой отчёт</button>
-                                    )}
-                                    {/* «⬇ Скачать» здесь БЫЛА и убрана (смоук 8d.1): она
-                                        двусмысленна — рядом два ролика, а кнопка одна, и
-                                        качала только обещание. Скачивание живёт внутри
-                                        плеера, где видно, что именно качаешь. */}
-                                </div>
-                            </div>
+                                {showHistory && history.map(renderPurchase)}
+                            </>
                         );
-                    })}
+                    })()}
                 </>
             )}
 
