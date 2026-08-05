@@ -66,21 +66,32 @@
 
 /* ---------- Досье игрока (П.3a) ---------- */
 
+/* 8d.1b: колонка из 4 чипов стала выше квадратной аватарки, и низ фото «висел»
+   посреди досье. Тянем фото на всю высоту правой колонки — низ аватарки и низ
+   последнего чипа теперь на одной линии при любом числе чипов. */
 .mentor-dossier {
     display: flex;
     gap: 12px;
-    align-items: flex-start;
+    align-items: stretch;
     margin-bottom: 14px;
 }
 
 .mentor-dossier-photo {
     width: 33%;
     max-width: 140px;
-    aspect-ratio: 1 / 1;
+    min-height: 118px;      /* чтобы при коротком досье фото не выродилось в полоску */
+    align-self: stretch;
     border-radius: 16px;
     object-fit: cover;
     flex-shrink: 0;
     background: rgba(127, 127, 127, 0.14);
+}
+
+/* Мультяшка-заглушка — рисунок целиком: cover срезал бы ей голову, потому что
+   она рисовалась под квадрат, а рамка теперь вертикальная. */
+.mentor-dossier-photo--cartoon {
+    object-fit: contain;
+    padding: 8px;
 }
 
 .mentor-dossier-side {
@@ -140,6 +151,18 @@
     border-radius: 14px;
     background: rgba(127, 127, 127, 0.12);
     text-align: center;
+}
+
+/* 8d.1b: плитка-заглушка. Подписей нет, поэтому единственное содержимое надо
+   центрировать по высоте — иначе «—» прилипает к верху плитки, вытянутой
+   соседями. Приглушаем, чтобы прочерк читался как «пока пусто», а не как
+   значение. */
+.mentor-tile--muted {
+    justify-content: center;
+}
+
+.mentor-tile--muted .mentor-tile-value {
+    opacity: 0.4;
 }
 
 .mentor-tile-value {

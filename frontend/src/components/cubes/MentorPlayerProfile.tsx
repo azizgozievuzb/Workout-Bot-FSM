@@ -23,10 +23,14 @@ interface Props {
 /* П.3b: наставники — взрослые не-геймеры, каждый термин объясняем прямо на плитке.
    8d.1a (Д3): третья плитка — «последняя тренировка» вместо «рекорда». Исторический
    лучший стрик наставнику не помогает: он не говорит, что делать сегодня. */
-const TILES: { key: 'xp' | 'streak' | 'last'; term: string; hint: string }[] = [
+const TILES: { key: 'xp' | 'streak' | 'last'; term: string; hint: string; muted?: boolean }[] = [
     { key: 'xp', term: 'XP', hint: 'очки опыта' },
     { key: 'streak', term: 'стрик', hint: 'дней подряд' },
-    { key: 'last', term: 'тренировка', hint: 'когда была последняя' },
+    /* 8d.1b: содержимое третьей плитки временно снято — что в ней будет, решается
+       отдельно (BACKLOG, 2026-08-05). Плитку ОСТАВЛЯЕМ в сетке, чтобы ряд не
+       перестраивался, когда решение примут; поле last_workout_days_ago бэк
+       по-прежнему отдаёт, включить обратно — снять muted. */
+    { key: 'last', term: 'тренировка', hint: 'когда была последняя', muted: true },
 ];
 
 /** Дни считает бэк в поясе игрока — здесь только подпись. */
@@ -48,6 +52,9 @@ const MentorPlayerProfile: React.FC<Props> = ({
 
     const playerId = page.player_id;
     const slotsFull = page.slots_used >= page.slots_total;
+    /* Заглушка по полу приезжает с бэка как /avatars/cartoon_*.svg (_cartoon).
+       Её нельзя кропать под вертикальную рамку — вписываем целиком. */
+    const isCartoon = page.card_photo_url.includes('/cartoon_');
 
     const doGift = useCallback(async () => {
         if (busy) return;
@@ -89,8 +96,9 @@ const MentorPlayerProfile: React.FC<Props> = ({
             {/* Досье (П.3a): фото квадратом слева, справа имя и чипы столбиком.
                 Столбик не ломается о длинные слова вроде «выносливость». */}
             <div className="mentor-dossier">
-                <img className="mentor-dossier-photo" src={page.card_photo_url}
-                    alt={page.first_name ?? 'Игрок'} />
+                <img
+                    className={`mentor-dossier-photo${isCartoon ? ' mentor-dossier-photo--cartoon' : ''}`}
+                    src={page.card_photo_url} alt={page.first_name ?? 'Игрок'} />
                 <div className="mentor-dossier-side">
                     <div className="mentor-dossier-name">{page.first_name || 'Игрок'}</div>
                     {page.profile_chips.map((c) => (
@@ -108,12 +116,16 @@ const MentorPlayerProfile: React.FC<Props> = ({
                 системы уровней в игре нет, шкала «до кратного 1000» была выдуманной. */}
             <div className="mentor-tiles">
                 {TILES.map((t) => (
-                    <div key={t.key} className="mentor-tile">
+                    <div key={t.key} className={`mentor-tile${t.muted ? ' mentor-tile--muted' : ''}`}>
                         <div className="mentor-tile-value">
-                            {t.key === 'streak' ? '🔥 ' : ''}{tileValue(t.key)}
+                            {t.muted ? '—' : `${t.key === 'streak' ? '🔥 ' : ''}${tileValue(t.key)}`}
                         </div>
-                        <div className="mentor-tile-term">{t.term}</div>
-                        <div className="mentor-tile-hint">{t.hint}</div>
+                        {!t.muted && (
+                            <>
+                                <div className="mentor-tile-term">{t.term}</div>
+                                <div className="mentor-tile-hint">{t.hint}</div>
+                            </>
+                        )}
                     </div>
                 ))}
             </div>
