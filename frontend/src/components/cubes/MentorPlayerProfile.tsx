@@ -20,17 +20,21 @@ interface Props {
     show: (message: string) => void;
 }
 
-/* П.3b: наставники — взрослые не-геймеры, каждый термин объясняем прямо на плитке. */
-const TILES: { key: 'xp' | 'streak' | 'best'; term: string; hint: string }[] = [
+/* П.3b: наставники — взрослые не-геймеры, каждый термин объясняем прямо на плитке.
+   8d.1a (Д3): третья плитка — «последняя тренировка» вместо «рекорда». Исторический
+   лучший стрик наставнику не помогает: он не говорит, что делать сегодня. */
+const TILES: { key: 'xp' | 'streak' | 'last'; term: string; hint: string }[] = [
     { key: 'xp', term: 'XP', hint: 'очки опыта' },
     { key: 'streak', term: 'стрик', hint: 'дней подряд' },
-    { key: 'best', term: 'рекорд', hint: 'лучший стрик' },
+    { key: 'last', term: 'тренировка', hint: 'когда была последняя' },
 ];
 
-function fmtDate(iso: string | null): string {
-    if (!iso) return '—';
-    const d = new Date(iso);
-    return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('ru-RU');
+/** Дни считает бэк в поясе игрока — здесь только подпись. */
+function fmtLastWorkout(daysAgo: number | null): string {
+    if (daysAgo === null) return '—';
+    if (daysAgo === 0) return 'сегодня';
+    if (daysAgo === 1) return 'вчера';
+    return `${daysAgo} дн`;
 }
 
 const MentorPlayerProfile: React.FC<Props> = ({
@@ -67,8 +71,10 @@ const MentorPlayerProfile: React.FC<Props> = ({
         } finally { setBusy(false); }
     }, [busy, giftAmount, page.gift_balance, playerId, setPage, show]);
 
-    const tileValue = (key: 'xp' | 'streak' | 'best') => (
-        key === 'xp' ? page.xp : key === 'streak' ? page.current_streak : page.best_streak
+    const tileValue = (key: 'xp' | 'streak' | 'last'): string => (
+        key === 'xp' ? String(page.xp)
+            : key === 'streak' ? String(page.current_streak)
+                : fmtLastWorkout(page.last_workout_days_ago)
     );
 
     return (
@@ -88,7 +94,8 @@ const MentorPlayerProfile: React.FC<Props> = ({
                 <div className="mentor-dossier-side">
                     <div className="mentor-dossier-name">{page.first_name || 'Игрок'}</div>
                     {page.profile_chips.map((c) => (
-                        <div key={c.label} className="mentor-chip">
+                        <div key={c.label}
+                            className={`mentor-chip${c.tone === 'warn' ? ' mentor-chip--warn' : ''}`}>
                             <span className="mentor-chip-icon">{c.icon}</span>
                             <span className="mentor-chip-label">{c.label}:</span>
                             <span className="mentor-chip-value">{c.value}</span>
@@ -109,9 +116,6 @@ const MentorPlayerProfile: React.FC<Props> = ({
                         <div className="mentor-tile-hint">{t.hint}</div>
                     </div>
                 ))}
-            </div>
-            <div className="mentor-lastworkout">
-                Последняя тренировка: {fmtDate(page.last_workout_date)}
             </div>
 
             {/* Дарение. Остаток пула виден прямо здесь + шорткат «Пополнить» (Д2):

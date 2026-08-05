@@ -13,13 +13,14 @@
 Баланс капель игрока Ответственному НЕ отдаётся (§8.7).
 """
 import logging
+import math
 from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
-from ...core.access import compute_access
+from ...core.access import compute_access, parse_dt
 from ...core.deps import get_bot, get_current_user
 from ...db.client import get_supabase
 from ...services import shelf as shelf_svc
@@ -83,6 +84,9 @@ class ProfileChip(BaseModel):
     icon: str
     label: str
     value: str
+    # 8d.1a: 'warn' — чип подсвечен тревожным (подписка на исходе). Решает БЭК:
+    # порог живёт рядом с расчётом, фронт не должен знать про «3 дня».
+    tone: str | None = None
 
 
 class PlayerPageResp(BaseModel):
@@ -97,6 +101,13 @@ class PlayerPageResp(BaseModel):
     current_streak: int
     best_streak: int
     last_workout_date: str | None = None
+    # 8d.1a: третья плитка досье — «последняя тренировка» вместо «рекорда» (Д3).
+    # Дни считает БЭК в поясе ИГРОКА: наставник может сидеть в другом часовом
+    # поясе, и «сегодня» игрока стало бы «вчера» на его экране.
+    last_workout_days_ago: int | None = None
+    # 8d.1a: график игрока строкой «пн·ср·пт» + остаток подписки НАСТАВНИКА.
+    main_days: list[int] | None = None
+    subscription_days_left: int | None = None
     slots_used: int
     slots_total: int
     shelf: list[ShelfItemOut]
@@ -163,7 +174,21 @@ async def _mentor(db, current_user: dict) -> dict:
     if not access.get("active") or access.get("branch") != "responsible":
         raise HTTPException(status_code=403, detail={"code": "SUBSCRIPTION_INACTIVE"})
     me["_tier"] = access.get("tier") or me.get("responsible_access_tier")
+    # 8d.1a: чип «⏳ Подписка: N дн» в досье. Источник — тот же compute_access,
+    # что решает доступ; из partnerships.expires_at срок больше не берём.
+    me["_sub_expires_at"] = access.get("expires_at")
     return me
+
+
+def _days_left(iso: str | None) -> int | None:
+    """Остаток оплаченного периода в днях (та же математика, что в auth.py)."""
+    dt = parse_dt(iso)
+    if dt is None:
+        return None
+    now = datetime.now(UTC)
+    if dt <= now:
+        return 0
+    return max(1, math.ceil((dt - now).total_seconds() / 86400))
 
 
 async def _pair(db, responsible_id: str, player_id: str) -> str:
@@ -268,7 +293,8 @@ async def player_page(
 
     u_res = await (
         db.table("users")
-        .select("id, first_name, gender, goal, fitness_level, card_photo_url")
+        .select("id, first_name, gender, goal, fitness_level, card_photo_url, "
+                "main_days, timezone")
         .eq("id", str(player_id)).maybe_single().execute()
     )
     if not u_res or not u_res.data:
@@ -305,6 +331,7 @@ async def player_page(
 
     lo, hi = await shelf_svc.price_limits(db)
     rep_count, rep_drops = await shelf_svc.reputation(db, partnership_id)
+    sub_days_left = _days_left(me.get("_sub_expires_at"))
     # NB: drops_balance игрока Ответственному не отдаём (§8.7).
     return PlayerPageResp(
         player_id=str(player_id),
@@ -312,12 +339,19 @@ async def player_page(
         first_name=player.get("first_name"),
         card_photo_url=player.get("card_photo_url") or _cartoon(player.get("gender")),
         profile_line=shelf_svc.profile_line(player),
-        profile_chips=[ProfileChip(**c) for c in shelf_svc.profile_chips(player)],
+        profile_chips=[
+            ProfileChip(**c) for c in shelf_svc.profile_chips(player, sub_days_left)
+        ],
         gender=player.get("gender"),
         xp=int(stats.get("global_score") or 0),
         current_streak=int(stats.get("current_streak") or 0),
         best_streak=int(stats.get("best_streak") or 0),
         last_workout_date=stats.get("last_workout_date"),
+        last_workout_days_ago=shelf_svc.days_since(
+            stats.get("last_workout_date"), player.get("timezone")
+        ),
+        main_days=player.get("main_days"),
+        subscription_days_left=sub_days_left,
         slots_used=len(shelf_rows),
         slots_total=shelf_svc.slots_for_tier(me.get("_tier")),
         shelf=[_item_out(r) for r in shelf_rows],

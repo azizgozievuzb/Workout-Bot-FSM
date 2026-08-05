@@ -677,6 +677,15 @@ const ResponsibleShop: React.FC = () => {
                                 <div className="shelf-lot-title">{p.first_name || 'Игрок'}</div>
                                 <div className="shelf-lot-meta">открыть полку и подарки</div>
                             </div>
+                            {/* 8d.1a: строка Market отражает СОСТОЯНИЕ ПОЛКИ — занятость
+                                слотов видна до захода, красная при полноте. */}
+                            {p.shelf_slots_total > 0 && (
+                                <span className={`shelf-slots-badge${
+                                    p.shelf_slots_used >= p.shelf_slots_total ? ' shelf-slots-badge--full' : ''
+                                }`}>
+                                    🎁 {p.shelf_slots_used}/{p.shelf_slots_total}
+                                </span>
+                            )}
                             {p.pending_promises > 0 && (
                                 <span className="shelf-pending-badge">⏳ {p.pending_promises}</span>
                             )}

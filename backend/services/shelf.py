@@ -7,7 +7,10 @@
 """
 import logging
 import uuid
+from datetime import date, datetime
 from typing import Any
+
+from . import schedule as sched_svc
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +43,21 @@ FITNESS_WORDS = {
     "advanced": "продвинутый",
 }
 
+# 0=понедельник … 6=воскресенье — соглашение services/schedule.py и main_days.
+WEEKDAY_SHORT = ("пн", "вт", "ср", "чт", "пт", "сб", "вс")
+
+# Ниже этого остатка чип подписки краснеет: после grace игрок теряет доступ,
+# и наставник должен увидеть это ЗАРАНЕЕ, а не по факту (8d.1a).
+SUBSCRIPTION_WARN_DAYS = 3
+
+
+def format_main_days(main_days: list[int] | None) -> str:
+    """[0,2,4] → «пн·ср·пт». Порядок нормализуем — в БД он не гарантирован."""
+    if not main_days:
+        return ""
+    days = sorted({int(d) for d in main_days if 0 <= int(d) <= 6})
+    return "·".join(WEEKDAY_SHORT[d] for d in days)
+
 
 def profile_line(user_row: dict) -> str:
     """«девушка · похудеть · начинающий» — данные онбординг-опроса 7.5.1.
@@ -52,19 +70,49 @@ def profile_line(user_row: dict) -> str:
     return " · ".join(p for p in parts if p)
 
 
-def profile_chips(user_row: dict) -> list[dict]:
+def profile_chips(user_row: dict, sub_days_left: int | None = None) -> list[dict]:
     """8d.1 (П.3a): те же атрибуты, но структурно — чипы столбиком у фото.
     Плоская строка «Игрок: парень · выносливость · средний уровень» ломалась о
-    длинные слова и читалась как подпись, а не как досье."""
-    raw = (
-        ("👤", "Пол", GENDER_WORDS.get(user_row.get("gender") or "")),
-        ("🎯", "Цель", GOAL_WORDS.get(user_row.get("goal") or "")),
-        ("📈", "Подготовка", FITNESS_WORDS.get(user_row.get("fitness_level") or "")),
-    )
-    return [
-        {"icon": icon, "label": label, "value": value}
-        for icon, label, value in raw if value
+    длинные слова и читалась как подпись, а не как досье.
+
+    8d.1a (Д1): чип «пол» убран без замены — наставник и так знает своего
+    игрока, строка занимала место и ничего не сообщала. Взамен два чипа,
+    которые наставнику реально нужны в работе: график тренировок игрока и
+    остаток ОПЛАЧЕННОГО ПЕРИОДА ПОДПИСКИ (одинаков на страницах всех игроков —
+    подписка одна на наставника, это осознанно).
+    """
+    raw: list[tuple[str, str, str, str | None]] = [
+        ("🎯", "Цель", GOAL_WORDS.get(user_row.get("goal") or ""), None),
+        ("💪", "Подготовка", FITNESS_WORDS.get(user_row.get("fitness_level") or ""), None),
+        ("📅", "График", format_main_days(user_row.get("main_days")), None),
     ]
+    if sub_days_left is not None:
+        # Формулировка ОБЯЗАНА говорить про подписку: «осталось N дн» на
+        # странице игрока читается как срок жизни игрока (решение юзера).
+        raw.append((
+            "⏳", "Подписка", f"{sub_days_left} дн",
+            "warn" if sub_days_left <= SUBSCRIPTION_WARN_DAYS else None,
+        ))
+    return [
+        {"icon": icon, "label": label, "value": value, "tone": tone}
+        for icon, label, value, tone in raw if value
+    ]
+
+
+def days_since(day_iso: str | None, tz_str: str | None) -> int | None:
+    """Сколько дней прошло с даты последней тренировки В ЧАСОВОМ ПОЯСЕ ИГРОКА.
+
+    Считать по серверной дате нельзя: наставник и игрок могут быть в разных
+    поясах, и «сегодня» игрока превратилось бы во «вчера» на экране наставника.
+    """
+    if not day_iso:
+        return None
+    try:
+        last = date.fromisoformat(str(day_iso)[:10])
+    except ValueError:
+        return None
+    today = datetime.now(sched_svc.get_tz(tz_str)).date()
+    return max(0, (today - last).days)
 
 
 def slots_for_tier(tier: str | None) -> int:
@@ -118,6 +166,27 @@ async def reputation(db, partnership_id: str) -> tuple[int, int]:
     )
     rows = res.data or []
     return len(rows), sum(int(r.get("price_drops") or 0) for r in rows)
+
+
+async def occupied_counts(db, partnership_ids: list[str]) -> dict[str, int]:
+    """partnership_id → сколько слотов полки занято (счётчик «🎁 X/N» в строке Market).
+
+    8d.1a: строка каждого куба отражает роль куба — Market показывает СОСТОЯНИЕ
+    ПОЛКИ, поэтому счётчик занятости нужен уже в списке, до захода на полку."""
+    if not partnership_ids:
+        return {}
+    res = await (
+        db.table("shelf_items")
+        .select("partnership_id")
+        .in_("partnership_id", partnership_ids)
+        .in_("status", list(OCCUPYING_STATUSES))
+        .execute()
+    )
+    out: dict[str, int] = {}
+    for r in (res.data or []):
+        pid = str(r["partnership_id"])
+        out[pid] = out.get(pid, 0) + 1
+    return out
 
 
 async def pending_counts(db, partnership_ids: list[str]) -> dict[str, int]:

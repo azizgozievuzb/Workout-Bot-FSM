@@ -14,6 +14,9 @@ export interface MyPlayer {
     is_deactivated: boolean;
     // 8d: бейдж «⏳ N» — выкупленные, но не исполненные обещания
     pending_promises: number;
+    // 8d.1a: «🎁 X/N» в строке Market — занятость полки видна до захода на неё
+    shelf_slots_used: number;
+    shelf_slots_total: number;
 }
 
 export interface DeletePartnershipResponse {

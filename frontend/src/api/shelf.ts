@@ -34,11 +34,13 @@ export interface PriceLimits {
     max: number;
 }
 
-/** 8d.1 (П.3a): атрибут досье — чип «👤 Пол: парень» у фото игрока. */
+/** 8d.1 (П.3a): атрибут досье — чип «🎯 Цель: похудеть» у фото игрока. */
 export interface ProfileChip {
     icon: string;
     label: string;
     value: string;
+    /** 8d.1a: 'warn' — тревожная подсветка (подписка на исходе). Порог решает бэк. */
+    tone?: string | null;
 }
 
 export interface PlayerPage {
@@ -53,6 +55,10 @@ export interface PlayerPage {
     current_streak: number;
     best_streak: number;
     last_workout_date: string | null;
+    /* 8d.1a: дни считает бэк в поясе ИГРОКА, фронт только подписывает. */
+    last_workout_days_ago: number | null;
+    main_days: number[] | null;
+    subscription_days_left: number | null;
     slots_used: number;
     slots_total: number;
     shelf: ShelfItem[];

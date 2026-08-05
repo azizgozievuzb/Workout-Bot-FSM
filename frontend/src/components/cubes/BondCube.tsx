@@ -15,6 +15,7 @@ import type { Invite } from '../../api/invites';
 import { playerAvatarUrl } from '../../utils/playerAvatar';
 import { hapticImpact, hapticNotification } from '../../utils/haptic';
 import '../../styles/cubes.css';
+import '../../styles/shelf.css';
 
 type ActiveView = 'player' | 'responsible';
 
@@ -247,16 +248,26 @@ const InvitesPanel: React.FC<{ refreshKey?: number }> = ({ refreshKey = 0 }) => 
             ) : players.length === 0 ? (
                 <div style={{ opacity: 0.6, fontSize: 13, padding: '4px 0 8px' }}>Пока нет игроков.</div>
             ) : (
+                /* 8d.1a: строка каждого куба отражает роль куба. Bond — про СВЯЗЬ,
+                   работы с игроком здесь нет, поэтому и баннер как в Action не
+                   нужен: компактная строка-список. Кликабельность не добавляем. */
                 players.map((p) => {
                     const avatar = playerAvatarUrl(p);
                     return (
-                        <div key={p.id} className="cube-feed-card">
-                            <div className="cube-avatar">
+                        <div key={p.id} className="bond-player-row">
+                            <div className="bond-player-avatar">
                                 {avatar
                                     ? <img src={avatar} alt={p.first_name ?? 'Игрок'} />
                                     : (p.first_name ?? 'И').charAt(0)}
                             </div>
-                            <div><div className="cube-feed-text">{p.first_name ?? 'Игрок'}</div></div>
+                            <span className="bond-player-name">{p.first_name ?? 'Игрок'}</span>
+                            {p.is_deactivated ? (
+                                <span className="bond-player-status">на паузе</span>
+                            ) : p.is_expired ? (
+                                <span className="bond-player-status bond-player-status--warn">
+                                    доступ истёк
+                                </span>
+                            ) : null}
                         </div>
                     );
                 })

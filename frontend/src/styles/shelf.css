@@ -110,11 +110,20 @@
     background: rgba(127, 127, 127, 0.14);
 }
 
+/* 8d.1a: подписка на исходе — чип краснеет. После grace игрок потеряет доступ,
+   и наставник должен увидеть это заранее, а не по факту. */
+.mentor-chip--warn {
+    background: rgba(255, 69, 58, 0.18);
+    color: #ff6b60;
+}
+
+.mentor-chip--warn .mentor-chip-label { opacity: 0.8; }
+
 .mentor-chip-icon { flex-shrink: 0; }
 .mentor-chip-label { opacity: 0.6; }
 .mentor-chip-value { font-weight: 600; }
 
-/* ---------- Плитки XP / стрик / рекорд (П.3b) ---------- */
+/* ---------- Плитки XP / стрик / последняя тренировка (П.3b, Д3) ---------- */
 
 .mentor-tiles {
     display: grid;
@@ -151,11 +160,61 @@
     opacity: 0.55;
 }
 
-.mentor-lastworkout {
+/* ---------- Bond: компактная строка игрока (8d.1a) ----------
+   В Action строка игрока — рабочий баннер (тап открывает досье), в Market —
+   состояние полки. Bond отвечает только за СВЯЗЬ, действий над игроком там
+   нет, поэтому и вес строки другой: список, а не карточка. */
+
+.bond-player-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 4px;
+    border-bottom: 1px solid rgba(127, 127, 127, 0.14);
+}
+
+.bond-player-row:last-of-type {
+    border-bottom: none;
+}
+
+.bond-player-avatar {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    overflow: hidden;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    background: rgba(127, 127, 127, 0.18);
+}
+
+.bond-player-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.bond-player-name {
+    flex: 1;
+    min-width: 0;
+    font-size: 14px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.bond-player-status {
+    flex-shrink: 0;
     font-size: 11px;
     opacity: 0.55;
-    text-align: center;
-    margin: 8px 0 4px;
+}
+
+.bond-player-status--warn {
+    color: #ff9c8f;
+    opacity: 0.9;
 }
 
 /* ---------- Общие блоки страниц ---------- */
@@ -501,6 +560,25 @@
     border-radius: 10px;
     background: rgba(255, 176, 32, 0.22);
     color: #ffcf7a;
+}
+
+/* 8d.1a: занятость полки в строке Market. Нейтральный, пока есть свободный
+   слот; красный — сигнал «новый лот не положишь» ещё до захода на полку. */
+.shelf-slots-badge {
+    flex-shrink: 0;
+    margin-left: 6px;
+    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: rgba(127, 127, 127, 0.18);
+    color: inherit;
+    opacity: 0.85;
+}
+
+.shelf-slots-badge--full {
+    background: rgba(231, 76, 60, 0.2);
+    color: #ff9c8f;
+    opacity: 1;
 }
 
 .shelf-empty {

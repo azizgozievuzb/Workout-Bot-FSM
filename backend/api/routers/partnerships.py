@@ -41,6 +41,11 @@ class MyPlayerOut(BaseModel):
     is_deactivated: bool
     # 8d: бейдж «⏳ N» — выкупленные, но не исполненные обещания этой пары.
     pending_promises: int = 0
+    # 8d.1a: «🎁 X/N» в строке Market — занятость полки видна ДО захода на неё.
+    # Всего слотов у всех игроков одинаково (тариф наставника один), но отдаём
+    # per-row: строке не нужно знать про тариф, чтобы себя нарисовать.
+    shelf_slots_used: int = 0
+    shelf_slots_total: int = 0
 
 
 class DeletePartnershipResp(BaseModel):
@@ -118,12 +123,15 @@ async def my_players(current_user: dict = Depends(get_current_user)) -> list[MyP
 
     me_res = await (
         db.table("users")
-        .select("id")
+        .select("id, responsible_access_tier")
         .eq("telegram_id", current_user["telegram_id"])
         .single()
         .execute()
     )
     responsible_id = me_res.data["id"]
+    # 8d.1a: слотов на игрока — по ЖИВОМУ тиру наставника, как и везде в 8d
+    # (в строку лота тир не снапшотится, принцип BACKLOG S48 №1).
+    slots_total = shelf_svc.slots_for_tier(me_res.data.get("responsible_access_tier"))
 
     pair_res = await (
         db.table("partnerships")
@@ -145,7 +153,9 @@ async def my_players(current_user: dict = Depends(get_current_user)) -> list[MyP
     )
     users_by_id = {u["id"]: u for u in (users_res.data or [])}
 
-    pending_by_pair = await shelf_svc.pending_counts(db, [str(p["id"]) for p in pair_rows])
+    pair_ids = [str(p["id"]) for p in pair_rows]
+    pending_by_pair = await shelf_svc.pending_counts(db, pair_ids)
+    occupied_by_pair = await shelf_svc.occupied_counts(db, pair_ids)
 
     now = datetime.now(timezone.utc)
     out: list[MyPlayerOut] = []
@@ -189,6 +199,8 @@ async def my_players(current_user: dict = Depends(get_current_user)) -> list[MyP
             days_since_expired=days_since_expired,
             is_deactivated=bool(u.get("deactivated_at")),
             pending_promises=pending_by_pair.get(str(p["id"]), 0),
+            shelf_slots_used=occupied_by_pair.get(str(p["id"]), 0),
+            shelf_slots_total=slots_total,
         ))
 
     def sort_key(row: MyPlayerOut):
