@@ -11,10 +11,8 @@ import { getPlayerShop, restoreStreak } from '../../api/shop';
 import type { PlayerShopState } from '../../api/shop';
 import { playerAvatarUrl } from '../../utils/playerAvatar';
 import { hapticImpact, hapticNotification } from '../../utils/haptic';
-import { getShelfCatalog } from '../../api/shelf';
 import RoleTransition from '../shared/RoleTransition';
 import MentorPlayerScreens from './MentorPlayerScreens';
-import DropPackModal from './DropPackModal';
 import WorkoutScreen from '../workout/WorkoutScreen';
 import { getSchedule, type ScheduleState } from '../../api/schedule';
 import type { SessionType } from '../../api/workout';
@@ -283,8 +281,6 @@ const TIER_PLAYER_LIMITS: Record<string, number> = { standard: 1, premium: 2, el
 
 const ResponsibleView: React.FC = () => {
     const ownAccessTier = useAuthStore((s) => s.ownAccessTier);
-    const shopFreezeBalance = useAuthStore((s) => s.shopFreezeBalance);
-    const giftFreezeBalance = useAuthStore((s) => s.giftFreezeBalance);
     const subscription = useAuthStore((s) => s.subscription);
     const subActive = subscription?.active ?? false;
     const [players, setPlayers] = useState<MyPlayer[]>([]);
@@ -293,15 +289,9 @@ const ResponsibleView: React.FC = () => {
     // Управление полкой ушло в Market — здесь только досье, дарение и дверь
     // на полку. Бейдж «⏳ N» тоже переехал в Market (Д1): одна роль на куб.
     const [openPlayer, setOpenPlayer] = useState<MyPlayer | null>(null);
-    const [giftBalance, setGiftBalance] = useState(0);
-    const [packs, setPacks] = useState(false);
 
     const fetchPlayers = useCallback(() => {
         getMyPlayers().then(setPlayers).catch(() => {});
-    }, []);
-
-    const fetchPool = useCallback(() => {
-        getShelfCatalog().then((c) => setGiftBalance(c.gift_balance)).catch(() => {});
     }, []);
 
     useEffect(() => {
@@ -310,16 +300,12 @@ const ResponsibleView: React.FC = () => {
     }, [fetchPlayers]);
 
     useEffect(() => {
-        if (subActive) fetchPool();
-    }, [subActive, fetchPool]);
-
-    useEffect(() => {
         const onVisible = () => {
-            if (document.visibilityState === 'visible') { fetchPlayers(); fetchPool(); }
+            if (document.visibilityState === 'visible') fetchPlayers();
         };
         document.addEventListener('visibilitychange', onVisible);
         return () => document.removeEventListener('visibilitychange', onVisible);
-    }, [fetchPlayers, fetchPool]);
+    }, [fetchPlayers]);
 
     const slotLimit = TIER_PLAYER_LIMITS[ownAccessTier ?? 'standard'] ?? 1;
     const slotsUsed = players.length;
@@ -327,22 +313,9 @@ const ResponsibleView: React.FC = () => {
 
     return (
         <>
-            {/* Пул капель наставника + заморозки. Личный drops_balance в режиме
-                Responsible не показываем (§8.6). */}
-            <div className="mentor-pool-row">
-                <div>
-                    <div className="mentor-pool-value">💧 {giftBalance}</div>
-                    <div className="mentor-pool-label">капли для подарков</div>
-                </div>
-                <div className="wallet-chip">
-                    <span className="wallet-chip-label">❄️ {shopFreezeBalance + giftFreezeBalance}</span>
-                </div>
-                <button className="cube-btn-sm" disabled={!subActive}
-                    onClick={(e) => { e.stopPropagation(); hapticImpact('light'); setPacks(true); }}>
-                    Пополнить
-                </button>
-            </div>
-
+            {/* 8d.1 (П.1a): пул капель и «Пополнить» здесь БЫЛИ и убраны —
+                их дом Market, одна роль на куб. Остатки 💧 и ❄️ наставник видит
+                там, где они нужны: в окне дарения на странице игрока. */}
             <div className="cube-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span>Мои Игроки</span>
                 <span className={`player-slots-badge ${slotsLeft <= 0 ? 'player-slots-badge--full' : ''}`}>
@@ -399,10 +372,9 @@ const ResponsibleView: React.FC = () => {
                 <MentorPlayerScreens
                     playerId={openPlayer.id}
                     initial="profile"
-                    onClose={() => { setOpenPlayer(null); fetchPlayers(); fetchPool(); }}
+                    onClose={() => { setOpenPlayer(null); fetchPlayers(); }}
                 />
             )}
-            {packs && <DropPackModal onClose={() => setPacks(false)} onCredited={fetchPool} />}
         </>
     );
 };
