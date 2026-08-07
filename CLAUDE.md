@@ -22,7 +22,7 @@
 
 1. **Zero-Yapping Policy:** NEVER explain your code unless explicitly asked. NEVER summarize what you just did. 
 2. **Terminal & Git Silence:** When running terminal commands (`git push`, `npm run dev`, `bash`), do NOT output the terminal logs or explain the `git diff`. Reply with a single word: "Done" or "Error: [brief description]".
-3. **Lazy File Reading:** Do NOT read all files in a directory. Read ONLY the specific file you are working on. Do not read `ROADMAP.md` or FSM blueprints unless the current task strictly requires it.
+3. **Lazy File Reading:** Do NOT read all files in a directory. Read ONLY the specific file you are working on. Do not read FSM blueprints or journal history unless the current task strictly requires it.
 4. **No Code Repetition:** When editing a file, output ONLY the modified functions/blocks with clear comments on where to insert them. Do NOT output the entire file.
 5. **Context Flush:** If a specific task is completed, advise the user to start a "New Chat" to clear the context cache.
 6. **Timestamp:** Каждое сообщение пользователю начинай с метки `🕐 YYYY-MM-DD HH:MM (Ташкент)` — реальное текущее время (через `date`), не выдуманное.
@@ -30,9 +30,27 @@
 ---
 
 ## 🚀 Project Context: Workout Bot (4G)
-- **What:** Telegram Mini App for 35-min workouts. Camera records → Gemini Vision evaluates technique → Stars awarded → Shop.
-- **Roles:** Player (trains), Responsible (motivates/boosts), Admin (manages).
-- **Stack:** Python 3.11 + Aiogram 3 (Backend) | Vite + React + TS (Frontend) | Supabase PostgreSQL (DB) | XState FSM (Logic) | Gemini Vision API (AI).
+- **What:** Telegram Mini App for 35-min workouts. Camera records → Gemini Vision evaluates technique → Drops (капли 💧) awarded → Shop. ⚠️ Две валюты НЕ путать: игрок зарабатывает КАПЛИ трудом; Telegram Stars — реальные деньги, их тратит ТОЛЬКО наставник (fix S61: раньше тут стояло «Stars awarded»).
+- **Roles:** Player (trains), Responsible (motivates/gifts/funds), Admin (manages). (Бусты X2 выпилены в 8d — в проекте их НЕТ.)
+- **Stack:** Python 3.11 + FastAPI + Aiogram 3 (Backend) | Vite + React + TS (Frontend) | Supabase PostgreSQL (DB) | XState FSM (Logic) | Gemini Vision API (AI).
+
+---
+
+## 🛡 ИНВАРИАНТЫ ПРОДУКТА (интервью S61, 2026-08-07). Постановка/код задевает пункт → СТОП, спроси юзера
+
+1. **Приватность балансов, в обе стороны (§8.7 + Э.6):** наставник никогда не видит баланс капель игрока (и свой личный баланс капель в режиме наставника); игроку никогда не показываем Stars/траты наставника. Причина: баланс — личное; наставник мотивирует, а не ревизует; игроку не нужна чужая бухгалтерия.
+2. **Деньги — только от наставника (Э.9):** игрок (в т.ч. несовершеннолетний) никогда не тратит реальные деньги и не может купить капли. Анти-pay-to-win: ценность капель = труд.
+3. **Антифарм:** начисления (капли И XP) — максимум за 1 main + 1 light в день; повторные сессии — без цифр. Причина: защита ценности заработанного.
+4. **Соло-режим — заслуженный, не входной:** новый игрок не начинает соло; соло открывается XP-порогом при выбытии наставника; у соло-игрока нет денежных путей (механика — BACKLOG S61).
+5. **Приватность контента пары:** видео-обещания и видеоотчёты видят только двое, бот в чаты их не шлёт; комнату игрока наставник не видит — только список подаренного им.
+
+НЕ инвариант (осознанное решение юзера S61): «без казино-механик» — остаётся рамкой v1 эконом-сессии (Э.8), дверь на будущее открыта.
+
+---
+
+## 🗣 Язык с юзером (введено S61)
+
+Юзер — не разработчик. Новый термин/жаргон при первом употреблении — сразу перевод на человеческий в скобках или на примере. Сомневаешься, поймёт ли, — поясни. Вопрос юзера «я не понял» = правило нарушено. Базовое (файл, коммит, БД, кнопка) не разжёвывать. Причина: циклы «я не понял» жгут токены и время (инциденты S61: «колаут», «казино-механика»); правило поднято из DESIGN_8D1 «Как вести интервью», где действовало только на дизайн-интервью.
 
 ---
 
@@ -52,26 +70,27 @@
 | File / Dir | Purpose |
 |------------|---------|
 | `SESSION_STATUS.md` | Current task & last stop point. Update this before ending session. |
-| `PLAN.md` / `ROADMAP.md` | High-level checklist and detailed API/DB schema. |
-| `BACKLOG.md` | Парк идей/фич «на потом». Читается ПОСЛЕ плана. См. Workflow Protocol. |
+| `PLAYBOOK.md` | Процесс и уроки проекта (цикл постановок, смоуки, инварианты-принцип, «чего не делать»). Читать при подготовке постановок и смоуков. |
+| `BACKLOG.md` | Парк идей/фич «на потом». Читается перед постановкой новой фазы. См. Workflow Protocol. |
+| **Схема БД** | НЕ в файлах-планах. Источник правды: живая БД через `my-supabase` (`list_tables`) + код (`backend/db`, `backend/models`, роутеры). `PLAN.md` удалён, `ROADMAP.md` → `_archive/` (апрель-2026, там ложь про boosts/shop_items/star_balance — S61). |
 | `ORIENTATION.html` | «Панель возвращения» юзера (человеческая сводка проекта в браузере). Команда юзера **«обнови ORIENTATION.html»** = переписать файл под текущее состояние: где мы, что сделано, что дальше (7.x), карта файлов, риски. Также обновлять при закрытии крупной задачи вместе с SESSION_STATUS.md. |
 | `fsm_blueprints/` | Core logic (8 XState machines). *Do not read all at once!* |
 
 **FSM Index (Reference only, read specific file on demand):**
-`000_rootMachine` (Router), `100_paymentMachine` (Stars/Promo), `101_onboardingMachine` (Reg/Pairing), `102_adminMachine` (Panel), `103_workoutGateMachine` (Lobby/Boosts), `104_responsibleMachine` (Mentor panel), `105_playerShopMachine` (Shop), `200_workoutSessionMachine` (Camera/AI/Timer).
+`000_rootMachine` (Router), `100_paymentMachine` (Stars/Coupons), `101_onboardingMachine` (Reg/Pairing), `102_adminMachine` (Panel), `103_workoutGateMachine` (Lobby), `104_responsibleMachine` (Mentor panel), `105_playerShopMachine` (Shop), `200_workoutSessionMachine` (Camera/AI/Timer).
 
 ---
 
 ## 🤖 Workflow Protocol
 1. Read `SESSION_STATUS.md`.
 2. **ЕСЛИ в SESSION_STATUS.md есть блок "ОТКРЫТЫЙ ВОПРОС" — ОБЯЗАТЕЛЬНО спроси пользователя про него в начале сессии.**
-3. Если задача требует — прочитай `PLAN.md` / `ROADMAP.md`.
-4. **После плана — прочитай `BACKLOG.md`.** Для каждой фичи в бэклоге проверь:
+3. Если задача — постановка/смоук/дизайн: прочитай `PLAYBOOK.md` (процесс, уроки, «чего не делать»). Схему БД смотри в живой БД (`my-supabase` → `list_tables`) или в коде — НЕ в старых планах.
+4. **Перед постановкой новой фазы — прочитай `BACKLOG.md`.** Для каждой фичи в бэклоге проверь:
    - Если в текущем плане есть подходящее место (зона проработана) → встрой фичу в план, удали из BACKLOG.
    - Если места нет (зона не готова) → оставь в BACKLOG, не трогай.
 5. Execute the task concisely.
-6. If writing code, verify against FSM logic.
-7. Update `SESSION_STATUS.md` upon task completion.
+6. If writing code, verify against FSM logic. Если код/постановка задевает ИНВАРИАНТ (секция выше) — СТОП, вопрос юзеру.
+7. Update `SESSION_STATUS.md` upon task completion. При закрытии смоука/сессии — добавь урок в `PLAYBOOK.md` («симптом → фикс», только реально ломавшееся); при закрытии фазы — ревизия PLAYBOOK.md.
 8. Если по ходу сессии родилась новая идея «на потом» — добавь в `BACKLOG.md` (3-5 строк: контекст + что делать + когда).
 9. Stop generating text immediately after the technical objective is met.
 
