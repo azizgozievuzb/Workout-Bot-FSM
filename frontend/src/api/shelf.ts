@@ -27,7 +27,13 @@ export interface CatalogItem {
     key: string;
     title: string;
     price_stars: number;
+    /** Эконом-патч №1: цена выкупа для игрока — из каталога, руками не вводится. */
+    price_drops: number;
 }
+
+/** Лот со свободным текстом наставника (звание) — при покупке нужен ввод. */
+export const TITLE_LOT_KEY = 'title';
+export const MAX_TITLE_LEN = 24;
 
 export interface PriceLimits {
     min: number;
@@ -68,16 +74,23 @@ export interface PlayerPage {
     reputation_drops: number;   // на сколько капель — расшифровка
     pending_count: number;
     gift_balance: number;
-    gift_freeze_balance: number;
     price_limits: PriceLimits;
     catalog: CatalogItem[];
+    /** Звание игрока (лот `title`), если выкуплено. */
+    player_title: string | null;
+    /** Дарение заморозки: цена = витринной, cap_reached — запас игрока полон. */
+    freeze_gift_price: number;
+    freeze_gift_cap_reached: boolean;
 }
 
 export interface ShelfCatalogState {
     catalog: CatalogItem[];
     price_limits: PriceLimits;
     gift_balance: number;
-    gift_freeze_balance: number;
+    /** Э.3.2: индикатор подписки в шапке Market R. Порог красноты решает бэк. */
+    tier: string | null;
+    subscription_days_left: number | null;
+    subscription_warn: boolean;
 }
 
 /* ---------- Responsible ---------- */
@@ -124,10 +137,11 @@ export async function createPromise(params: {
 }
 
 export async function createStarItemInvoice(
-    playerId: string, catalogKey: string, priceDrops: number,
+    playerId: string, catalogKey: string, titleText?: string,
 ): Promise<{ payment_id: string; invoice_link: string }> {
     const { data } = await api.post('/shelf/star-item', {
-        player_id: playerId, catalog_key: catalogKey, price_drops: priceDrops,
+        player_id: playerId, catalog_key: catalogKey,
+        ...(titleText ? { title_text: titleText } : {}),
     });
     return data;
 }
@@ -147,6 +161,15 @@ export async function giftDrops(playerId: string, amount: number): Promise<{
     gifted: number; gift_balance: number;
 }> {
     const { data } = await api.post('/shelf/gift-drops', { player_id: playerId, amount });
+    return data;
+}
+
+/** Хвост 4: заморозка дарится за капли из пула (цена = витринной), +1 в запас
+    игрока при капе 3. Легаси-кошелёк `gift_freeze_balance` упразднён в 039. */
+export async function giftFreeze(playerId: string): Promise<{
+    price: number; gift_balance: number;
+}> {
+    const { data } = await api.post('/shelf/gift-freeze', { player_id: playerId });
     return data;
 }
 

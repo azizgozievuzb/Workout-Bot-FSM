@@ -20,7 +20,6 @@ from .api.routers.partnerships import router as partnerships_router
 from .api.routers.invites import router as invites_router
 from .api.routers.users import router as users_router
 from .api.routers.stats import router as stats_router
-from .api.routers.shop import router as shop_router
 from .api.routers.workout import router as workout_router
 from .api.routers.player import router as player_router
 from .api.routers.schedule import router as schedule_router
@@ -115,7 +114,6 @@ app.include_router(admin_router)
 app.include_router(admin_general_router)
 app.include_router(admin_settings_router)
 app.include_router(stats_router)
-app.include_router(shop_router)
 app.include_router(workout_router)
 app.include_router(player_router)
 app.include_router(schedule_router)

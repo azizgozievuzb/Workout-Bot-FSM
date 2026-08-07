@@ -16,6 +16,7 @@ import MentorPlayerScreens from './MentorPlayerScreens';
 import WorkoutScreen from '../workout/WorkoutScreen';
 import { getSchedule, type ScheduleState } from '../../api/schedule';
 import type { SessionType } from '../../api/workout';
+import ConfirmSpendModal from '../shared/ConfirmSpendModal';
 import '../../styles/cubes.css';
 import '../../styles/shelf.css';
 
@@ -186,31 +187,32 @@ const PlayerView: React.FC = () => {
                 </div>
             </div>
 
-            {/* 8c: restore-плашка — 72ч после слома стрика */}
+            {/* 8c: restore-плашка — 72ч после слома стрика.
+                П.7: подтверждение переехало в общее окно траты — свой
+                inline-диалог здесь больше не нужен, форма у всех трат одна. */}
             {shop?.restore && (
                 <div className="restore-plate">
                     💔 Стрик {shop.restore.lost_streak_len} дн. сгорел.
-                    {!restoreConfirm ? (
-                        <button
-                            className="cube-btn-sm"
-                            style={{ display: 'block' }}
-                            onClick={(e) => { e.stopPropagation(); hapticImpact('light'); setRestoreConfirm(true); }}
-                        >
-                            Восстановить за {shop.restore.price} 💧
-                        </button>
-                    ) : (
-                        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                            <button className="cube-btn-sm" disabled={restoreBusy}
-                                onClick={(e) => { e.stopPropagation(); doRestore(); }}>
-                                {restoreBusy ? '…' : `Да, вернуть (−${shop.restore.price} 💧)`}
-                            </button>
-                            <button className="cube-btn-sm" disabled={restoreBusy}
-                                onClick={(e) => { e.stopPropagation(); setRestoreConfirm(false); }}>
-                                Отмена
-                            </button>
-                        </div>
-                    )}
+                    <button
+                        className="cube-btn-sm"
+                        style={{ display: 'block' }}
+                        onClick={(e) => { e.stopPropagation(); hapticImpact('light'); setRestoreConfirm(true); }}
+                    >
+                        Восстановить за {shop.restore.price} 💧
+                    </button>
                 </div>
+            )}
+            {restoreConfirm && shop?.restore && (
+                <ConfirmSpendModal
+                    title="🔥 Восстановить стрик"
+                    price={shop.restore.price}
+                    balance={shop.drops_balance}
+                    note={`Вернём ${shop.restore.lost_streak_len} дн. Окно восстановления одноразовое.`}
+                    confirmLabel="Восстановить"
+                    busy={restoreBusy}
+                    onConfirm={() => { void doRestore(); }}
+                    onCancel={() => setRestoreConfirm(false)}
+                />
             )}
             {restoreToast && <div className="admin-toast">{restoreToast}</div>}
 

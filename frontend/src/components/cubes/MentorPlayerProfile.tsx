@@ -52,6 +52,8 @@ const MentorPlayerProfile: React.FC<Props> = ({
 
     const playerId = page.player_id;
     const slotsFull = page.slots_used >= page.slots_total;
+    const freezeGiftBlocked = page.freeze_gift_cap_reached
+        || page.gift_balance < page.freeze_gift_price;
     /* Заглушка по полу приезжает с бэка как /avatars/cartoon_*.svg (_cartoon).
        Её нельзя кропать под вертикальную рамку — вписываем целиком. */
     const isCartoon = page.card_photo_url.includes('/cartoon_');
@@ -101,6 +103,11 @@ const MentorPlayerProfile: React.FC<Props> = ({
                     src={page.card_photo_url} alt={page.first_name ?? 'Игрок'} />
                 <div className="mentor-dossier-side">
                     <div className="mentor-dossier-name">{page.first_name || 'Игрок'}</div>
+                    {/* Звание из лота `title` — ровно под именем, как у игрока
+                        на его главном экране (эконом-патч №1). */}
+                    {page.player_title && (
+                        <div className="player-title-line">🏅 {page.player_title}</div>
+                    )}
                     {page.profile_chips.map((c) => (
                         <div key={c.label}
                             className={`mentor-chip${c.tone === 'warn' ? ' mentor-chip--warn' : ''}`}>
@@ -167,13 +174,24 @@ const MentorPlayerProfile: React.FC<Props> = ({
                             }}>
                             💧 Подарить капли
                         </button>
-                        <button className="cube-btn-sm" disabled={busy}
+                        {/* Хвост 4: заморозка дарится за капли из того же пула.
+                            Кнопка при отказе серая, но живая — тап объясняет
+                            причину (паттерн П.9), молчащая кнопка читается как
+                            мёртвая (урок №3 PLAYBOOK). */}
+                        <button
+                            className={`cube-btn-sm${freezeGiftBlocked ? ' cube-btn-sm--muted' : ''}`}
+                            disabled={busy}
                             onClick={(e) => {
                                 e.stopPropagation();
-                                if (page.gift_freeze_balance < 1) { show('Заморозок в запасе нет'); return; }
+                                if (page.freeze_gift_cap_reached) {
+                                    show('У игрока запас заморозок полон (3/3)'); return;
+                                }
+                                if (page.gift_balance < page.freeze_gift_price) {
+                                    show(`Нужно ${page.freeze_gift_price} 💧 — пополни пул`); return;
+                                }
                                 hapticImpact('light'); setFreezeGift(true);
                             }}>
-                            ❄️ Заморозка ({page.gift_freeze_balance})
+                            ❄️ Заморозка ({page.freeze_gift_price} 💧)
                         </button>
                     </div>
                 )}
@@ -194,8 +212,15 @@ const MentorPlayerProfile: React.FC<Props> = ({
                 <GiftFreezeModal
                     targetUserId={playerId}
                     playerName={page.first_name}
+                    price={page.freeze_gift_price}
+                    giftBalance={page.gift_balance}
                     onClose={() => setFreezeGift(false)}
-                    onSuccess={(m) => { setFreezeGift(false); show(m); reload(); }}
+                    onSuccess={(m, bal) => {
+                        setFreezeGift(false);
+                        show(m);
+                        setPage((p) => (p ? { ...p, gift_balance: bal } : p));
+                        reload();
+                    }}
                 />
             )}
         </div>

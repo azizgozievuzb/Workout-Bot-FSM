@@ -188,16 +188,19 @@ async def _fulfill_shelf_star_item(db, message: Message, payment: dict) -> None:
     try:
         if not partnership_id or not catalog_key or price_drops < 1:
             raise ValueError(f"bad shelf_star_item data: pair={partnership_id} meta={meta}")
-        ins = await (
-            db.table("shelf_items").insert({
-                "partnership_id": partnership_id,
-                "type": "star_item",
-                "title": title,
-                "price_drops": price_drops,
-                "status": "active",
-                "star_catalog_key": catalog_key,
-            }).execute()
-        )
+        row: dict = {
+            "partnership_id": partnership_id,
+            "type": "star_item",
+            "title": title,
+            "price_drops": price_drops,
+            "status": "active",
+            "star_catalog_key": catalog_key,
+        }
+        # Свободный текст звания едет из счёта в лот: RPC выкупа читает его
+        # оттуда и ставит игроку (эконом-патч №1, лот `title`).
+        if meta.get("title_text"):
+            row["meta"] = {"title_text": meta["title_text"]}
+        ins = await db.table("shelf_items").insert(row).execute()
         if not ins.data:
             raise ValueError("shelf_items insert returned no row")
         await _mark_fulfilled(db, payment_id)

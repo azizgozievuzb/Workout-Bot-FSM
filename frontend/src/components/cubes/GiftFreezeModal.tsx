@@ -1,21 +1,27 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { giftFreeze } from '../../api/shop';
-import { useAuthStore } from '../../stores/authStore';
+import { giftFreeze } from '../../api/shelf';
 import { hapticImpact, hapticNotification } from '../../utils/haptic';
+
+/* Эконом-патч №1 (хвост 4): заморозка дарится ЗА КАПЛИ ИЗ ПУЛА наставника —
+   ровно как соседняя кнопка дарения капель. Отдельного «запаса заморозок»
+   (`gift_freeze_balance`) больше нет: пополнять его было нечем, и подарки
+   уходили в мёртвую колонку. Количество не выбирается: за раз дарится одна,
+   кап запаса игрока — 3 (гейт на бэке). */
 
 interface Props {
     targetUserId: string;
     playerName: string | null;
+    /** Цена дарения = цене заморозки в витрине игрока (анти-арбитраж Э.1). */
+    price: number;
+    /** Остаток пула наставника — чтобы показать, что останется после списания. */
+    giftBalance: number;
     onClose: () => void;
-    onSuccess: (message: string) => void;
+    onSuccess: (message: string, newGiftBalance: number) => void;
 }
 
-const GiftFreezeModal: React.FC<Props> = ({ targetUserId, playerName, onClose, onSuccess }) => {
-    const giftBalance = useAuthStore((s) => s.giftFreezeBalance);
-    const setGiftBalance = useAuthStore((s) => s.setGiftFreezeBalance);
-
-    const max = Math.max(0, giftBalance);
-    const [amount, setAmount] = useState<number>(max > 0 ? 1 : 0);
+const GiftFreezeModal: React.FC<Props> = ({
+    targetUserId, playerName, price, giftBalance, onClose, onSuccess,
+}) => {
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState('');
     const touchStartY = useRef(0);
@@ -30,26 +36,28 @@ const GiftFreezeModal: React.FC<Props> = ({ targetUserId, playerName, onClose, o
         if (delta > 80) onClose();
     }, [onClose]);
 
-    const canSubmit = max > 0 && amount >= 1 && amount <= max && !submitting;
+    const enough = giftBalance >= price;
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!canSubmit) return;
+        if (!enough || submitting) return;
         setSubmitting(true);
         setError('');
         hapticImpact('medium');
         try {
-            const res = await giftFreeze({ player_id: targetUserId, freeze_count: amount });
-            setGiftBalance(res.new_gift_freeze_balance);
+            const res = await giftFreeze(targetUserId);
             hapticNotification('success');
-            onSuccess('Отправлено');
+            onSuccess('❄️ Заморозка подарена', res.gift_balance);
         } catch (err: any) {
             const detail = err?.response?.data?.detail;
-            const errCode = typeof detail === 'object' ? detail?.code : detail;
-            const msg = errCode === 'INSUFFICIENT_BALANCE'
-                ? 'Недостаточно подарочных заморозок'
-                : 'Не удалось отправить.';
-            setError(msg);
+            const code = typeof detail === 'object' ? detail?.code : detail;
+            setError(
+                code === 'INSUFFICIENT_GIFT_BALANCE'
+                    ? `В пуле только ${detail?.gift_balance ?? 0} 💧 — пополните`
+                    : code === 'FREEZE_CAP'
+                        ? 'У игрока запас заморозок полон'
+                        : 'Не удалось подарить',
+            );
             hapticNotification('error');
             setSubmitting(false);
         }
@@ -67,33 +75,22 @@ const GiftFreezeModal: React.FC<Props> = ({ targetUserId, playerName, onClose, o
                 onClick={(e) => e.stopPropagation()}
             >
                 <div className="cube-modal-handle" />
-                <div className="cube-modal-title">Подарить заморозку</div>
+                <div className="cube-modal-title">❄️ Подарить заморозку</div>
                 {playerName && (
                     <div className="cube-modal-subtitle">Игрок: {playerName}</div>
                 )}
                 <form onSubmit={handleSubmit} className="cube-modal-form">
-                    {max === 0 ? (
-                        <div className="cube-modal-empty">Нет доступных подарков</div>
-                    ) : (
-                        <>
-                            <label className="cube-modal-label">
-                                Количество заморозок (макс. {max})
-                            </label>
-                            <input
-                                className="cube-modal-input"
-                                type="number"
-                                min={1}
-                                max={max}
-                                value={amount}
-                                onChange={(e) => {
-                                    const v = parseInt(e.target.value, 10);
-                                    if (Number.isNaN(v)) { setAmount(0); return; }
-                                    setAmount(Math.max(1, Math.min(max, v)));
-                                }}
-                                autoFocus
-                            />
-                        </>
-                    )}
+                    <div className="confirm-spend-line">
+                        Спишется <b>{price} 💧</b> из пула
+                        <span className="confirm-spend-rest">
+                            {enough
+                                ? `Останется ${giftBalance - price} 💧`
+                                : `В пуле только ${giftBalance} 💧`}
+                        </span>
+                    </div>
+                    <div className="cube-modal-body">
+                        Заморозка спасёт стрик игрока в пропущенный плановый день.
+                    </div>
                     {error && <div className="cube-modal-error">{error}</div>}
                     <div className="cube-modal-actions">
                         <button
@@ -107,9 +104,9 @@ const GiftFreezeModal: React.FC<Props> = ({ targetUserId, playerName, onClose, o
                         <button
                             type="submit"
                             className="cube-modal-btn cube-modal-btn--primary"
-                            disabled={!canSubmit}
+                            disabled={!enough || submitting}
                         >
-                            {submitting ? 'Отправка...' : 'Подарить'}
+                            {submitting ? 'Дарим…' : 'Подарить'}
                         </button>
                     </div>
                 </form>

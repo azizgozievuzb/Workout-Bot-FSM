@@ -43,6 +43,11 @@ export async function getPayment(id: string): Promise<PaymentStatusResponse> {
     return data;
 }
 
+/** Э.3.2: «Продлить» из шапки Market R — бот кладёт счёт продления в чат. */
+export async function sendRenewalInvoice(): Promise<void> {
+    await api.post('/payments/renewal-invoice');
+}
+
 export async function getTierPrices(): Promise<TierPrice[]> {
     const { data } = await api.get('/payments/tier-prices');
     return data;

@@ -2,30 +2,9 @@ import api from './client';
 import type { ShelfItem } from './shelf';
 
 /* ============================================================
-   Остаток легаси-магазина после 8d: только дарение ЗАМОРОЗОК
-   из пула наставника (gift_freeze_balance). Лоты shop_items и
-   покупки выпилены — их заменила полка (api/shelf.ts).
-   ============================================================ */
-
-export interface GiftFreezeRequest {
-    player_id: string;
-    freeze_count: number;
-    message?: string;
-}
-
-export interface GiftFreezeResponse {
-    gifted: number;
-    new_gift_freeze_balance: number;
-    new_player_streak_freeze_balance: number;
-}
-
-export async function giftFreeze(req: GiftFreezeRequest): Promise<GiftFreezeResponse> {
-    const { data } = await api.post('/shop/gift-freeze', req);
-    return data;
-}
-
-/* ============================================================
-   8c: витрина игрока (app_shop_items) — /players/me/shop
+   8c: витрина игрока (app_shop_items) — /players/me/shop.
+   Дарение заморозок переехало в api/shelf.ts (эконом-патч №1):
+   роутер /shop выпилен вместе с легаси-кошельком.
    ============================================================ */
 
 /** 8d.1 (П.10): чем обработан вариант — слабая или глубокая обработка. */
@@ -69,6 +48,8 @@ export interface PlayerShopState {
     // рисуются заглушками, их количество = слотам тарифа наставника.
     has_mentor: boolean;
     shelf_slots_total: number;
+    /** Активен ли 30-дневный кулдаун смены графика — гейт лота `schedule_cooldown_reset`. */
+    schedule_cooldown_active: boolean;
 }
 
 export async function getPlayerShop(): Promise<PlayerShopState> {

@@ -27,7 +27,7 @@ UTC = timezone.utc
 _USER_COLS = (
     "id, telegram_id, timezone, main_days, pending_main_days, pending_schedule_from, "
     "morning_reminder_time, last_morning_reminder_date, last_evening_reminder_date, "
-    "light_unlocked, light_active_from, light_locked_at"
+    f"{sched.LIGHT_COLS}"
 )
 _STATS_COLS = (
     "player_id, current_streak, free_freezes_left, paid_freezes, streak_freeze_balance, "

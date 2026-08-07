@@ -39,8 +39,13 @@ REPORTS_LIMIT = 10
 _MENTOR_COLS = (
     "id, telegram_id, first_name, is_admin, has_player_access, has_responsible_access, "
     "pricing_mode, subscription_expires_at, responsible_access_tier, "
-    "gift_balance, gift_freeze_balance"
+    "gift_balance"
 )
+
+# Ключ каталога, у которого свободный текст наставника обязателен (звание).
+TITLE_LOT_KEY = "title"
+# Лимит по вёрстке досье/главного экрана игрока: длиннее — рвёт строку.
+MAX_TITLE_LEN = 24
 
 
 # ---------------------------------------------------------------------------
@@ -51,6 +56,9 @@ class CatalogItem(BaseModel):
     key: str
     title: str
     price_stars: int
+    # Эконом-патч №1: цена лота в каплях — из каталога, а не из головы наставника
+    # (цены Э.2a финальные, источник правды один).
+    price_drops: int
 
 
 class PriceLimits(BaseModel):
@@ -62,7 +70,11 @@ class ShelfCatalogResp(BaseModel):
     catalog: list[CatalogItem]
     price_limits: PriceLimits
     gift_balance: int
-    gift_freeze_balance: int
+    # Э.3.2: индикатор подписки в шапке Market режима R. Порог красноты решает
+    # бэк (SUBSCRIPTION_WARN_DAYS) — фронт про «3 дня» не знает.
+    tier: str | None = None
+    subscription_days_left: int | None = None
+    subscription_warn: bool = False
 
 
 class ShelfItemOut(BaseModel):
@@ -120,9 +132,14 @@ class PlayerPageResp(BaseModel):
     reputation_drops: int          # на сколько капель — расшифровка под ней
     pending_count: int
     gift_balance: int
-    gift_freeze_balance: int
     price_limits: PriceLimits
     catalog: list[CatalogItem]
+    # Эконом-патч №1: звание, выкупленное игроком (лот `title`) — видно в досье.
+    player_title: str | None = None
+    # Дарение заморозки за капли из пула (хвост 4). Цена = витринной (анти-арбитраж),
+    # cap_reached закрывает кнопку, НЕ раскрывая наставнику чужих цифр (§8.7).
+    freeze_gift_price: int
+    freeze_gift_cap_reached: bool = False
 
 
 class PatchItemReq(BaseModel):
@@ -133,7 +150,17 @@ class PatchItemReq(BaseModel):
 class StarItemReq(BaseModel):
     player_id: UUID
     catalog_key: str
-    price_drops: int = Field(ge=1)
+    # Свободный текст звания для лота `title` (лимит по вёрстке).
+    title_text: str | None = None
+
+
+class GiftFreezeReq(BaseModel):
+    player_id: UUID
+
+
+class GiftFreezeResp(BaseModel):
+    price: int
+    gift_balance: int
 
 
 class GiftDropsReq(BaseModel):
@@ -239,10 +266,61 @@ def _item_out(row: dict) -> ShelfItemOut:
 
 async def _catalog(db) -> list[CatalogItem]:
     res = await (
-        db.table("shelf_catalog").select("key, title, price_stars")
+        db.table("shelf_catalog").select("key, title, price_stars, price_drops")
         .eq("is_active", True).order("price_stars").execute()
     )
     return [CatalogItem(**r) for r in (res.data or [])]
+
+
+async def _catalog_row(db, key: str) -> dict:
+    res = await (
+        db.table("shelf_catalog").select("key, title, price_stars, price_drops, is_active")
+        .eq("key", key).eq("is_active", True).maybe_single().execute()
+    )
+    if not res or not res.data:
+        raise HTTPException(status_code=400, detail={"code": "CATALOG_ITEM_UNAVAILABLE"})
+    return res.data
+
+
+async def _blocked_keys(db, player_id: str, partnership_id: str) -> set[str]:
+    """Ключи каталога, недоступные ИМЕННО ЭТОМУ игроку прямо сейчас.
+
+    Пока это только `light_trial`: он одноразовый (используется навсегда при
+    выкупе) и бессмыслен, если light уже открыт насовсем. Второй раз выставить
+    его нельзя и пока первый лот висит на полке невыкупленным.
+    """
+    blocked: set[str] = set()
+    u = await (
+        db.table("users").select("light_unlocked, light_trial_used")
+        .eq("id", str(player_id)).maybe_single().execute()
+    )
+    row = (u.data if (u and u.data) else {}) or {}
+    if row.get("light_unlocked") or row.get("light_trial_used"):
+        blocked.add("light_trial")
+    else:
+        dup = await (
+            db.table("shelf_items").select("id")
+            .eq("partnership_id", partnership_id)
+            .eq("star_catalog_key", "light_trial")
+            .in_("status", ["active", "hidden", "purchased"])
+            .limit(1).execute()
+        )
+        if dup.data:
+            blocked.add("light_trial")
+    return blocked
+
+
+async def _freeze_gift_price(db) -> int:
+    """Цена дарения заморозки = цене заморозки в витрине игрока (Э.1: арбитража нет).
+    Одно число в БД, не две константы в разных файлах."""
+    res = await (
+        db.table("app_shop_items").select("price_drops, is_active")
+        .eq("key", "freeze").maybe_single().execute()
+    )
+    row = (res.data if (res and res.data) else {}) or {}
+    if not row or not row.get("is_active"):
+        raise HTTPException(status_code=500, detail={"code": "PRICE_NOT_CONFIGURED", "key": "freeze"})
+    return int(row["price_drops"])
 
 
 async def _notify_player(db, player_id: str, *, type: str, title: str, message: str,
@@ -271,11 +349,16 @@ async def get_catalog(current_user: dict = Depends(get_current_user)) -> ShelfCa
     db = await get_supabase()
     me = await _mentor(db, current_user)
     lo, hi = await shelf_svc.price_limits(db)
+    days_left = _days_left(me.get("_sub_expires_at"))
     return ShelfCatalogResp(
         catalog=await _catalog(db),
         price_limits=PriceLimits(min=lo, max=hi),
         gift_balance=int(me.get("gift_balance") or 0),
-        gift_freeze_balance=int(me.get("gift_freeze_balance") or 0),
+        tier=me.get("_tier"),
+        subscription_days_left=days_left,
+        subscription_warn=(
+            days_left is not None and days_left <= shelf_svc.SUBSCRIPTION_WARN_DAYS
+        ),
     )
 
 
@@ -294,7 +377,7 @@ async def player_page(
     u_res = await (
         db.table("users")
         .select("id, first_name, gender, goal, fitness_level, card_photo_url, "
-                "main_days, timezone")
+                "main_days, timezone, player_title")
         .eq("id", str(player_id)).maybe_single().execute()
     )
     if not u_res or not u_res.data:
@@ -303,7 +386,7 @@ async def player_page(
 
     st_res = await (
         db.table("player_stats")
-        .select("global_score, current_streak, best_streak, last_workout_date")
+        .select("global_score, current_streak, best_streak, last_workout_date, paid_freezes")
         .eq("player_id", str(player_id)).maybe_single().execute()
     )
     stats = (st_res.data if (st_res and st_res.data) else {}) or {}
@@ -332,6 +415,8 @@ async def player_page(
     lo, hi = await shelf_svc.price_limits(db)
     rep_count, rep_drops = await shelf_svc.reputation(db, partnership_id)
     sub_days_left = _days_left(me.get("_sub_expires_at"))
+    blocked = await _blocked_keys(db, str(player_id), partnership_id)
+    catalog = [c for c in await _catalog(db) if c.key not in blocked]
     # NB: drops_balance игрока Ответственному не отдаём (§8.7).
     return PlayerPageResp(
         player_id=str(player_id),
@@ -361,9 +446,13 @@ async def player_page(
         reputation_drops=rep_drops,
         pending_count=len(pending_rows),
         gift_balance=int(me.get("gift_balance") or 0),
-        gift_freeze_balance=int(me.get("gift_freeze_balance") or 0),
         price_limits=PriceLimits(min=lo, max=hi),
-        catalog=await _catalog(db),
+        catalog=catalog,
+        player_title=player.get("player_title"),
+        freeze_gift_price=await _freeze_gift_price(db),
+        freeze_gift_cap_reached=(
+            int(stats.get("paid_freezes") or 0) >= shelf_svc.PAID_FREEZE_CAP
+        ),
     )
 
 
@@ -446,43 +535,55 @@ async def create_promise(
 async def buy_star_item(
     body: StarItemReq, current_user: dict = Depends(get_current_user)
 ) -> InvoiceResponse:
-    """R покупает предмет каталога за Stars и сразу выставляет его на полку игрока
-    с собственной ценой в каплях. Инвентаря нет — лот создаётся в fulfill."""
+    """R покупает предмет каталога за Stars и сразу выставляет его на полку игрока.
+    Инвентаря нет — лот создаётся в fulfill. Цена в каплях приходит ИЗ КАТАЛОГА
+    (эконом-патч №1): цены Э.2a финальные, руками их больше не вводят."""
     db = await get_supabase()
     me = await _mentor(db, current_user)
     partnership_id = await _pair(db, me["id"], str(body.player_id))
-
-    lo, hi = await shelf_svc.price_limits(db)
-    if not (lo <= body.price_drops <= hi):
-        raise HTTPException(status_code=400, detail={"code": "PRICE_OUT_OF_LIMITS", "min": lo, "max": hi})
 
     total = shelf_svc.slots_for_tier(me.get("_tier"))
     used = await shelf_svc.used_slots(db, partnership_id)
     if used >= total:
         raise HTTPException(status_code=409, detail={"code": "NO_FREE_SLOT", "used": used, "total": total})
 
-    cat_res = await (
-        db.table("shelf_catalog").select("key, title, price_stars, is_active")
-        .eq("key", body.catalog_key).eq("is_active", True).maybe_single().execute()
-    )
-    if not cat_res or not cat_res.data:
-        raise HTTPException(status_code=400, detail={"code": "CATALOG_ITEM_UNAVAILABLE"})
-    cat = cat_res.data
+    cat = await _catalog_row(db, body.catalog_key)
+    blocked = await _blocked_keys(db, str(body.player_id), partnership_id)
+    if cat["key"] in blocked:
+        raise HTTPException(status_code=409, detail={"code": "LOT_UNAVAILABLE_FOR_PLAYER"})
+
+    price_drops = int(cat["price_drops"])
+    title = cat["title"]
+    meta: dict = {
+        "catalog_key": cat["key"],
+        "title": title,
+        "price_drops": price_drops,
+        "player_id": str(body.player_id),
+    }
+    if cat["key"] == TITLE_LOT_KEY:
+        # Звание — свободный текст наставника; без него лот пустой (RPC откажет
+        # игроку в выкупе), поэтому валидируем до счёта.
+        text = (body.title_text or "").strip()
+        if not text:
+            raise HTTPException(status_code=400, detail={"code": "TITLE_TEXT_REQUIRED"})
+        if len(text) > MAX_TITLE_LEN:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "TITLE_TEXT_TOO_LONG", "max": MAX_TITLE_LEN},
+            )
+        meta["title_text"] = text
+        title = f"🏅 Звание «{text}»"
+        meta["title"] = title
 
     payment_id, invoice_link = await create_stars_invoice(
         db,
         buyer_id=me["id"],
         product_type="shelf_star_item",
-        title=cat["title"],
-        description=f"Предмет на полку игрока. Игрок выкупит его за {body.price_drops} 💧.",
+        title=title,
+        description=f"Предмет на полку игрока. Игрок выкупит его за {price_drops} 💧.",
         price_stars=int(cat["price_stars"]),
         partnership_id=partnership_id,
-        meta={
-            "catalog_key": cat["key"],
-            "title": cat["title"],
-            "price_drops": body.price_drops,
-            "player_id": str(body.player_id),
-        },
+        meta=meta,
     )
     return InvoiceResponse(payment_id=payment_id, invoice_link=invoice_link)
 
@@ -505,6 +606,10 @@ async def patch_item(
 
     update: dict = {}
     if body.price_drops is not None:
+        # Цена предмета каталога зафиксирована строкой каталога (эконом-патч №1):
+        # правка после выставления вернула бы арбитраж с витриной игрока.
+        if item.get("type") != "promise":
+            raise HTTPException(status_code=409, detail={"code": "PRICE_FIXED_BY_CATALOG"})
         lo, hi = await shelf_svc.price_limits(db)
         if not (lo <= body.price_drops <= hi):
             raise HTTPException(status_code=400, detail={"code": "PRICE_OUT_OF_LIMITS", "min": lo, "max": hi})
@@ -585,6 +690,51 @@ async def gift_drops(
         bot_text=f"💧 Наставник подарил тебе {body.amount} капель!",
     )
     return GiftDropsResp(gifted=body.amount, gift_balance=int(data.get("gift_balance") or 0))
+
+
+# ---------------------------------------------------------------------------
+# POST /shelf/gift-freeze — дарение заморозки за капли из пула (хвост 4)
+# ---------------------------------------------------------------------------
+
+@router.post("/gift-freeze", response_model=GiftFreezeResp)
+async def gift_freeze(
+    body: GiftFreezeReq, current_user: dict = Depends(get_current_user)
+) -> GiftFreezeResp:
+    """Списывает витринную цену заморозки из `gift_balance` наставника → игроку
+    +1 в запас (кап 3). Легаси-кошелёк `gift_freeze_balance` упразднён в 039:
+    пополнять его было нечем, и подарки уходили в мёртвую колонку."""
+    db = await get_supabase()
+    me = await _mentor(db, current_user)
+    await _pair(db, me["id"], str(body.player_id))
+    price = await _freeze_gift_price(db)
+
+    res = await db.rpc("gift_freeze", {
+        "p_responsible_id": me["id"],
+        "p_player_id": str(body.player_id),
+        "p_price": price,
+    }).execute()
+    data = res.data if isinstance(res.data, dict) else {}
+    if not data.get("ok"):
+        code = data.get("code") or "GIFT_FAILED"
+        if code == "INSUFFICIENT_GIFT_BALANCE":
+            raise HTTPException(status_code=400, detail={
+                "code": code, "gift_balance": int(data.get("gift_balance") or 0), "price": price,
+            })
+        if code == "FREEZE_CAP":
+            raise HTTPException(status_code=400, detail={
+                "code": code, "cap": shelf_svc.PAID_FREEZE_CAP,
+            })
+        raise HTTPException(status_code=409, detail={"code": code})
+
+    await _notify_player(
+        db, str(body.player_id),
+        type="freeze_gift",
+        title="🎁 Подарок от наставника",
+        message="+1 заморозка в запас",
+        payload={"freeze_count": 1, "from_user_id": me["id"]},
+        bot_text="🎁 Наставник подарил тебе заморозку стрика ❄️",
+    )
+    return GiftFreezeResp(price=price, gift_balance=int(data.get("gift_balance") or 0))
 
 
 # ---------------------------------------------------------------------------

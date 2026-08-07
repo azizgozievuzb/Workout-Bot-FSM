@@ -2191,8 +2191,121 @@
     border: 1px solid rgba(210, 150, 100, 0.1);
 }
 
+/* Э.4 — слотовая витрина: ячейки по 4 в ряд, рядов сколько нужно. Слотовость
+   здесь ВИЗУАЛЬНЫЙ ЯЗЫК (одинаковые полки у игрока и наставника), механики
+   ротации за ней нет — ассортимент и цены прежние.
+   На узких экранах 4 колонки нечитаемы, поэтому сетка растёт лестницей:
+   2 → 3 → 4 ячейки в ряд. Форма ячейки (рамка, равный размер) одинакова всюду. */
+.shop-item-grid--slots {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+}
+
+@media (min-width: 420px) {
+    .shop-item-grid--slots { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (min-width: 560px) {
+    .shop-item-grid--slots { grid-template-columns: repeat(4, 1fr); }
+}
+
+.shop-item-grid--slots .shop-item-card,
+.shop-item-grid--slots .shelf-player-card {
+    padding: 10px 8px;
+    gap: 6px;
+    border-radius: 14px;
+    /* Ячейки ряда одной высоты — иначе «слоты» читаются как случайные карточки. */
+    height: 100%;
+    justify-content: space-between;
+}
+
+.shop-item-grid--slots .shop-item-name,
+.shop-item-grid--slots .shelf-player-card-title {
+    font-size: 12px;
+    line-height: 1.25;
+}
+
+.shop-item-grid--slots .shop-item-desc,
+.shop-item-grid--slots .shelf-player-card-meta {
+    font-size: 10.5px;
+    line-height: 1.3;
+}
+
+.shop-item-grid--slots .shop-item-price {
+    font-size: 13px;
+}
+
 .shop-item-card--freeze {
     border-color: rgba(0, 122, 255, 0.4) !important;
+}
+
+/* Звание игрока (лот `title`) — строка под именем: на его главном экране и в
+   досье у наставника выглядит одинаково. */
+.player-identity {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 4px;
+}
+
+.player-identity-name {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--tg-theme-text-color, inherit);
+}
+
+.player-title-line {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    color: #d8a537;
+}
+
+/* Э.3.2 — индикатор подписки в шапке Market режима R. Виден ТОЛЬКО наставнику:
+   игроку про деньги и сроки наставника не показываем ничего (инвариант §1). */
+.mentor-sub-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    border-radius: 12px;
+    background: rgba(127, 127, 127, 0.08);
+    border: 1px solid rgba(127, 127, 127, 0.16);
+}
+
+.mentor-sub-row--warn {
+    background: rgba(255, 59, 48, 0.12);
+    border-color: rgba(255, 59, 48, 0.4);
+}
+
+.mentor-sub-text {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--tg-theme-text-color, inherit);
+}
+
+.mentor-sub-row--warn .mentor-sub-text {
+    color: #ff453a;
+}
+
+/* П.7 — строка цены и остатка в окне подтверждения траты. Красится только
+   tg-переменными: окно рисуется поверх дерева приложения (урок №2). */
+.confirm-spend-line {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    font-size: 15px;
+    color: var(--tg-theme-text-color, inherit);
+    background: var(--tg-theme-secondary-bg-color, rgba(127, 127, 127, 0.1));
+}
+
+.confirm-spend-rest {
+    font-size: 13px;
+    color: var(--tg-theme-hint-color, rgba(128, 128, 128, 0.8));
 }
 
 .shop-item-card--dimmed {

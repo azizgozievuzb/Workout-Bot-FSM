@@ -6,6 +6,17 @@ import {
 } from '../../api/shop';
 import type { CardPhotoState, CardVariantMode } from '../../api/shop';
 import { hapticNotification } from '../../utils/haptic';
+import ConfirmSpendModal from '../shared/ConfirmSpendModal';
+
+/** П.7: одно окно на все необратимые траты флоу (покупка и реролл). */
+type SpendConfirm = {
+    title: string;
+    price: number | null;
+    freeLabel?: string;
+    note?: string;
+    confirmLabel?: string;
+    run: () => Promise<void>;
+};
 
 /* 8d.1 (П.10, находка №27): подписи режимов обработки. Раньше выдавались два
    случайных прогона одного промпта — сходство скакало и это читалось как баг.
@@ -45,6 +56,7 @@ const CardPhotoFlow: React.FC<Props> = ({
     const [busyLabel, setBusyLabel] = useState('');
     const [msg, setMsg] = useState('');
     const [chosenUrl, setChosenUrl] = useState<string | null>(null);
+    const [confirm, setConfirm] = useState<SpendConfirm | null>(null);
     const [camOpen, setCamOpen] = useState(false);
     // Кадры реально пошли (есть videoWidth): без этого снимок был бы чёрным.
     const [camReady, setCamReady] = useState(false);
@@ -124,8 +136,22 @@ const CardPhotoFlow: React.FC<Props> = ({
             apply(await cardPhotoPurchase(m));
             hapticNotification('success');
         } catch (e: any) { fail(e, 'Не удалось купить'); }
-        finally { setBusy(false); setBusyLabel(''); }
+        finally { setBusy(false); setBusyLabel(''); setConfirm(null); }
     }, [busy, apply, fail]);
+
+    /* П.7: окно подтверждения перед КАЖДЫМ списанием капель в этом флоу.
+       Цена приезжает уже посчитанной по прогрессии (бэк), поэтому в окне
+       игрок видит именно свою следующую цену, а не базовую из прайса. */
+    const askPurchase = useCallback((m: 'ai' | 'raw') => {
+        setConfirm({
+            title: m === 'ai' ? '✨ Фото-карточка с AI' : '📷 Фото-карточка как есть',
+            price: m === 'ai' ? aiPrice : rawPrice,
+            note: m === 'ai'
+                ? 'Пришлём два варианта на выбор. Следующая смена будет дороже.'
+                : 'Твоё фото встанет на карточку без обработки.',
+            run: () => doPurchase(m),
+        });
+    }, [aiPrice, rawPrice, doPurchase]);
 
     const uploadB64 = useCallback(async (b64: string) => {
         setBusy(true); setBusyLabel('upload'); setMsg('');
@@ -211,8 +237,21 @@ const CardPhotoFlow: React.FC<Props> = ({
             apply(await cardPhotoReroll());
             hapticNotification('success');
         } catch (e: any) { fail(e, 'Не удалось сгенерировать'); }
-        finally { setBusy(false); setBusyLabel(''); }
+        finally { setBusy(false); setBusyLabel(''); setConfirm(null); }
     }, [busy, apply, fail]);
+
+    /* Подаренная попытка тоже расходуется безвозвратно — окно показываем и
+       для неё, просто без списания капель. */
+    const askReroll = useCallback(() => {
+        setConfirm({
+            title: '🎲 Ещё 2 варианта',
+            price: rerollCredits > 0 ? null : rerollPrice,
+            freeLabel: `Потратится подарок наставника (осталось ${rerollCredits})`,
+            note: 'Прежние варианты пропадут — вернуться к ним будет нельзя.',
+            confirmLabel: 'Сгенерировать',
+            run: doReroll,
+        });
+    }, [rerollCredits, rerollPrice, doReroll]);
 
     // ---- этап флоу из состояния ----
     const status = state.status;
@@ -278,7 +317,7 @@ const CardPhotoFlow: React.FC<Props> = ({
                         );
                     })}
                 </div>
-                <button className="cube-btn-sm" disabled={busy} onClick={doReroll}>
+                <button className="cube-btn-sm" disabled={busy} onClick={askReroll}>
                     {busyLabel === 'reroll'
                         ? 'Списываем…'
                         : rerollCredits > 0
@@ -341,11 +380,11 @@ const CardPhotoFlow: React.FC<Props> = ({
                         : 'Пока наставник видит мультяшный образ. AI-обработка (слабая и глубокая на выбор) или «как есть» без AI.'}
                 </div>
                 <button className="cube-btn-primary" disabled={busy || balance < aiPrice}
-                    onClick={() => doPurchase('ai')}>
+                    onClick={() => askPurchase('ai')}>
                     {busyLabel === 'purchase:ai' ? 'Списываем…' : `✨ Обработать AI — ${aiPrice} 💧`}
                 </button>
                 <button className="cube-btn-sm" disabled={busy || balance < rawPrice}
-                    onClick={() => doPurchase('raw')}>
+                    onClick={() => askPurchase('raw')}>
                     {busyLabel === 'purchase:raw' ? 'Списываем…' : `📷 Как есть (без AI) — ${rawPrice} 💧`}
                 </button>
                 {balance < Math.min(aiPrice, rawPrice) && (
@@ -360,6 +399,19 @@ const CardPhotoFlow: React.FC<Props> = ({
             <div className="cardflow-card" onClick={(e) => e.stopPropagation()}>
                 {body}
                 {msg && <div className="cardflow-msg">{msg}</div>}
+                {confirm && (
+                    <ConfirmSpendModal
+                        title={confirm.title}
+                        price={confirm.price}
+                        balance={balance}
+                        freeLabel={confirm.freeLabel}
+                        note={confirm.note}
+                        confirmLabel={confirm.confirmLabel}
+                        busy={busy}
+                        onConfirm={() => { void confirm.run(); }}
+                        onCancel={() => setConfirm(null)}
+                    />
+                )}
                 <button className="cardflow-close" onClick={() => { stopCamera(); onClose(); }}>Закрыть</button>
                 <input
                     ref={fileRef}

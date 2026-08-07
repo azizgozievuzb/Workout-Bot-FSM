@@ -22,6 +22,10 @@ export interface ScheduleState {
     light_lock_price: number | null;
     // 8c: смена графика вне grace — платная
     schedule_change_price: number | null;
+    // Эконом-патч №1: неделя light-трайала (лот полки). Понедельники в поясе игрока.
+    light_trial_from: string | null;
+    light_trial_until: string | null;
+    light_trial_active: boolean;
 }
 
 export async function getSchedule(): Promise<ScheduleState> {

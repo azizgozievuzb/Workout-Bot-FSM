@@ -94,7 +94,6 @@ export function useAuth() {
             own_access_tier: data.own_access_tier ?? null,
             player_view_tier: data.player_view_tier ?? null,
             shop_freeze_balance: data.shop_freeze_balance ?? 0,
-            gift_freeze_balance: data.gift_freeze_balance ?? 0,
             streak_freeze_balance: data.streak_freeze_balance ?? 0,
             rest_days_remaining: data.rest_days_remaining ?? 0,
             free_freezes_left: data.free_freezes_left ?? 0,

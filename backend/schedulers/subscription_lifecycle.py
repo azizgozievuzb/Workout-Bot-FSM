@@ -28,8 +28,10 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, LabeledPri
 
 from ..core.config import settings
 from ..db.client import get_supabase
+from ..services import schedule as sched
 from ..services.notifications import emit_notification
 from ..services.bot_notify import send_bot_message
+from ..services.shelf import SUBSCRIPTION_WARN_DAYS
 from ..services.tier_pricing import (
     SUBSCRIPTION_GRACE_DAYS,
     base_price,
@@ -40,6 +42,13 @@ from ..services.tier_pricing import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Э.3.2: напоминание за столько дней до истечения. Порог тот же, что красит чип
+# и шапку Market R, — одно число на весь продукт.
+RENEWAL_REMINDER_DAYS = SUBSCRIPTION_WARN_DAYS
+# Тихое окно в поясе наставника: [22:00, 09:00) — счета ночью не шлём.
+QUIET_START_HOUR = 22
+QUIET_END_HOUR = 9
 
 
 def _get_bot_safe():
@@ -316,22 +325,35 @@ async def _responsibles() -> list[dict]:
     res = await (
         db.table("users")
         .select("id, telegram_id, responsible_access_tier, subscription_expires_at, "
-                "last_renewal_reminder_at, pricing_mode")
+                "last_renewal_reminder_at, pricing_mode, timezone")
         .eq("has_responsible_access", True)
         .execute()
     )
     return res.data or []
 
 
-async def send_renewal_reminders() -> None:
-    """Job A (daily 09:00 UTC) — Ответственным за ≤3 дня до истечения шлём счёт-напоминание.
+def _in_quiet_hours(tz_str: str | None, now: datetime) -> bool:
+    """Тихое окно 22:00–09:00 в поясе НАСТАВНИКА (Э.3.2).
 
-    Только pricing_mode IS NULL; не чаще одного раза в день (last_renewal_reminder_at).
+    Джоб крутится ежечасно, поэтому окно решает не расписание, а эта проверка:
+    у наставника в UTC-8 «09:00 UTC» — час ночи, счёт среди ночи так себе
+    напоминание.
+    """
+    local_hour = sched.local_now(tz_str, base=now).hour
+    return local_hour < QUIET_END_HOUR or local_hour >= QUIET_START_HOUR
+
+
+async def send_renewal_reminders() -> None:
+    """Job A (ежечасно) — Ответственным за ≤3 дня до истечения шлём счёт-напоминание.
+
+    Только pricing_mode IS NULL; не чаще раза в день по ЛОКАЛЬНОЙ дате наставника
+    и только вне тихого окна. Фильтр — по живой подписке наставника
+    (`users.subscription_expires_at`), НЕ по `partnerships.expires_at`:
+    у боевых пар оно NULL, и джоб не видел бы никого (класс бага S54).
     """
     db = await get_supabase()
     now = datetime.now(timezone.utc)
-    horizon = now + timedelta(days=3)
-    today = now.date().isoformat()
+    horizon = now + timedelta(days=RENEWAL_REMINDER_DAYS)
 
     rows = await _responsibles()
     if not rows:
@@ -346,8 +368,12 @@ async def send_renewal_reminders() -> None:
         exp = _parse_dt(u.get("subscription_expires_at"))
         if exp is None or not (now < exp <= horizon):
             continue
+        tz_str = u.get("timezone")
+        if _in_quiet_hours(tz_str, now):
+            continue
+        local_today = sched.local_today(tz_str, base=now).isoformat()
         last = u.get("last_renewal_reminder_at")
-        if last and str(last)[:10] == today:
+        if last and sched.local_today(tz_str, base=_parse_dt(last) or now).isoformat() == local_today:
             continue
         if await _send_renewal_invoice(db, bot, u, expired=False):
             await (
@@ -428,9 +454,11 @@ def register_subscription_jobs(scheduler) -> None:
         id="cleanup_dead_partnerships", replace_existing=True,
     )
     # 7.5 subscription renewal
+    # Ежечасно: само окно «не ночью» считается в поясе наставника внутри джоба
+    # (Э.3.2), одна фиксированная UTC-минута этого не умеет.
     scheduler.add_job(
         send_renewal_reminders,
-        trigger="cron", hour=9, minute=0,
+        trigger="cron", minute=0,
         id="send_renewal_reminders", replace_existing=True,
     )
     scheduler.add_job(

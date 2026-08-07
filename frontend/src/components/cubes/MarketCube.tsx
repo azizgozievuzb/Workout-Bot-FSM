@@ -18,24 +18,38 @@ import VideoPlayerModal from './VideoPlayerModal';
 import { getShelfCatalog } from '../../api/shelf';
 import { hapticImpact, hapticNotification } from '../../utils/haptic';
 import RoleTransition from '../shared/RoleTransition';
+import ConfirmSpendModal from '../shared/ConfirmSpendModal';
+import { sendRenewalInvoice } from '../../api/payments';
 import '../../styles/cubes.css';
 import '../../styles/shelf.css';
 
 type ActiveView = 'player' | 'responsible';
 
-/* 8d.1 (П.7, находка №23): текст пустой ячейки полки. Черновик — финальную
-   формулировку даст эконом-сессия (единая подача каналов), поэтому он вынесен
-   отдельной константой, а не зашит в разметку. */
-const EMPTY_SHELF_SLOT_TEXT = 'Здесь появятся подарки наставника';
+/* Э.6 — подача каналов: «одна фраза на канал, в месте канала». Тексты игрока
+   НИКОГДА не упоминают Stars/деньги/траты наставника (инвариант §1). */
+const SHELF_SECTION_CAPTION =
+    'Наставник выкладывает сюда особенное — то, чего в твоём магазине не бывает. Выкупай за 💧.';
+const EMPTY_SHELF_SLOT_TEXT = 'Здесь появится подарок от наставника';
 
 /* 8d.1 (П.8b, находка №26): у Stars-предмета свой текст — «выполнено» это
    статус ОБЕЩАНИЯ, к предмету он приклеился по ошибке. Строка отвечает игроку
-   на вопрос «что мне это дало». Дефолт страхует расширение каталога. */
+   на вопрос «что мне это дало». Дефолт страхует расширение каталога.
+   freeze/photo_reroll ушли из каталога полки в эконом-патче №1 (Э.1). */
 const STAR_ITEM_EFFECT: Record<string, string> = {
-    freeze: '✅ +1 заморозка в запасе',
-    photo_reroll: '✅ +1 попытка смены фото',
+    light_trial: '✅ Неделя light-режима',
+    schedule_cooldown_reset: '✅ Кулдаун смены графика снят',
+    title: '✅ Звание получено',
 };
 const STAR_ITEM_EFFECT_DEFAULT = '✅ Получено';
+
+/* Лоты, у которых выкуп имеет смысл не всегда: гейт живёт на бэке (RPC), но
+   игроку он обязан быть ВИДЕН до тапа — серой кнопкой и тостом (П.9, урок №3). */
+function lotBlockReason(item: ShelfItem, shop: PlayerShopState): string | null {
+    if (item.star_catalog_key === 'schedule_cooldown_reset' && !shop.schedule_cooldown_active) {
+        return 'Кулдаун смены графика сейчас не идёт — сбрасывать нечего';
+    }
+    return null;
+}
 
 /* Смоук 8d.1: «Мои покупки» показывали ВСЮ историю пары без лимита. Наверху
    держим только то, где от игрока ещё ждут шага; всё остальное — чек, ему
@@ -53,6 +67,15 @@ type VideoTarget = {
     itemId: string; kind: 'promise' | 'report'; title: string;
     /** Невыкупленное обещание — только просмотр (решение смоука 8d.1). */
     allowDownload?: boolean;
+};
+
+/** П.7: одно окно на все необратимые траты витрины/полки. */
+type SpendConfirm = {
+    title: string;
+    price: number;
+    note?: string;
+    confirmLabel?: string;
+    run: () => Promise<void>;
 };
 
 /* ============================================================
@@ -134,6 +157,9 @@ const PlayerShop: React.FC = () => {
     const [reportProgress, setReportProgress] = useState<number | null>(null);
     const [playing, setPlaying] = useState<VideoTarget | null>(null);
     const [showHistory, setShowHistory] = useState(false);
+    /* П.7: подтверждение необратимой траты капель. Показывается ВСЕГДА —
+       «не спрашивать» не существует ни в каком виде (решение S62). */
+    const [confirm, setConfirm] = useState<SpendConfirm | null>(null);
 
     const showToast = useCallback((msg: string) => {
         setToast(msg);
@@ -207,7 +233,7 @@ const PlayerShop: React.FC = () => {
             showToast('❄️ Заморозка куплена');
             setShop(prev => prev ? { ...prev, drops_balance: res.drops_balance, paid_freezes: res.paid_freezes } : prev);
         } catch (e: any) { failToast(e, 'Не удалось купить заморозку'); }
-        finally { setBusy(false); }
+        finally { setBusy(false); setConfirm(null); }
     }, [busy, showToast, failToast]);
 
     /* ---------- 8d: полка наставника ---------- */
@@ -223,8 +249,21 @@ const PlayerShop: React.FC = () => {
                 : '🎁 Куплено!');
             refreshShop();
         } catch (e: any) { failToast(e, 'Не удалось купить'); }
-        finally { setActing(null); }
+        finally { setActing(null); setConfirm(null); }
     }, [acting, showToast, failToast, refreshShop]);
+
+    /* П.7: между тапом и списанием всегда стоит окно с ценой и остатком. */
+    const askBuyLot = useCallback((item: ShelfItem) => {
+        hapticImpact('light');
+        setConfirm({
+            title: item.type === 'promise' ? `🎬 ${item.title}` : `⭐ ${item.title}`,
+            price: item.price_drops,
+            note: item.type === 'promise'
+                ? 'Наставник получит «к исполнению» — обещание нужно будет выполнить.'
+                : undefined,
+            run: () => buyLot(item),
+        });
+    }, [buyLot]);
 
     const hideLot = useCallback(async (item: ShelfItem) => {
         if (acting) return;
@@ -388,7 +427,10 @@ const PlayerShop: React.FC = () => {
 
             {toast && <div className="admin-toast">{toast}</div>}
 
-            <div className="shop-item-grid">
+            {/* Э.4: витрина — сетка ячеек-слотов в стиле полки наставника.
+                Слотовость здесь ВИЗУАЛЬНЫЙ ЯЗЫК: ассортимент, цены и доступность
+                не меняются, ротации и таймеров нет (отклонены осознанно). */}
+            <div className="shop-item-grid shop-item-grid--slots">
                 {/* 1-2. Unlock / Lock light */}
                 {!lightUnlocked ? (
                     <div className="shop-item-card">
@@ -426,7 +468,16 @@ const PlayerShop: React.FC = () => {
                         <span className="shop-item-price">{freezePrice} 💧</span>
                     </div>
                     <button className="cube-btn-sm" disabled={busy || freezeCapReached}
-                        onClick={(e) => { e.stopPropagation(); doBuyFreeze(); }}>
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            hapticImpact('light');
+                            setConfirm({
+                                title: '❄️ Заморозка',
+                                price: freezePrice,
+                                note: 'Спасёт стрик в пропущенный плановый день.',
+                                run: doBuyFreeze,
+                            });
+                        }}>
                         {freezeCapReached ? 'Запас полон' : busy ? '…' : 'Купить'}
                     </button>
                 </div>
@@ -469,14 +520,17 @@ const PlayerShop: React.FC = () => {
 
             {/* 8d.1 (П.7): секция полки видна ВСЕГДА при живом партнёрстве —
                 пустые слоты рисуются пунктирными заглушками, иначе механика
-                оставалась невидимкой (находка №23). */}
+                оставалась невидимкой (находка №23). Э.6: постоянная подпись
+                объясняет, чем полка отличается от витрины. */}
             {shop.has_mentor && (
                 <>
                     <div className="cube-section-title" style={{ marginTop: 12 }}>🎁 Полка наставника</div>
-                    <div className="shop-item-grid">
+                    <div className="cube-hint">{SHELF_SECTION_CAPTION}</div>
+                    <div className="shop-item-grid shop-item-grid--slots">
                         {shop.shelf.map(item => {
                             const mine = acting?.id === item.id ? acting.action : null;
                             const isBusy = acting !== null;
+                            const blocked = lotBlockReason(item, shop);
                             return (
                                 <div key={item.id} className="shelf-player-card">
                                     <div className="shelf-player-card-title">
@@ -500,8 +554,14 @@ const PlayerShop: React.FC = () => {
                                                 ▶︎ Смотреть
                                             </button>
                                         )}
-                                        <button className="cube-btn-sm" disabled={isBusy}
-                                            onClick={(e) => { e.stopPropagation(); buyLot(item); }}>
+                                        <button
+                                            className={`cube-btn-sm${blocked ? ' cube-btn-sm--muted' : ''}`}
+                                            disabled={isBusy}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (blocked) { hapticNotification('warning'); showToast(blocked); return; }
+                                                askBuyLot(item);
+                                            }}>
                                             {mine === 'buy' ? 'Покупаем…' : 'Купить'}
                                         </button>
                                         <button className="cube-btn-sm" disabled={isBusy}
@@ -595,6 +655,19 @@ const PlayerShop: React.FC = () => {
                 />
             )}
 
+            {confirm && (
+                <ConfirmSpendModal
+                    title={confirm.title}
+                    price={confirm.price}
+                    balance={shop.drops_balance}
+                    note={confirm.note}
+                    confirmLabel={confirm.confirmLabel}
+                    busy={busy || acting !== null}
+                    onConfirm={() => { void confirm.run(); }}
+                    onCancel={() => setConfirm(null)}
+                />
+            )}
+
             {photoFlow && (
                 <CardPhotoFlow
                     card={shop.card_photo}
@@ -617,14 +690,42 @@ const PlayerShop: React.FC = () => {
 /* Тап по игроку ведёт СРАЗУ на его полку: Market = «где я управляю подарками».
    Бейдж «⏳ N» переехал сюда из Action (Д1) — долги по обещаниям это метрика
    полки, а не наблюдения. */
+/* Э.3.2: над пулом капель — индикатор подписки «Тариф · осталось N дн ·
+   [Продлить]». Виден ТОЛЬКО здесь, в режиме R: игроку про деньги и сроки
+   наставника не показываем ничего (инвариант §1). */
+const TIER_LABELS: Record<string, string> = {
+    standard: 'Standard', premium: 'Premium', elite: 'Elite',
+};
+
 const ResponsibleShop: React.FC = () => {
     const subscription = useAuthStore((s) => s.subscription);
     const subActive = subscription?.active ?? false;
     const [players, setPlayers] = useState<MyPlayer[]>([]);
     const [loadingPlayers, setLoadingPlayers] = useState(true);
     const [giftBalance, setGiftBalance] = useState(0);
+    const [sub, setSub] = useState<{ tier: string | null; days: number | null; warn: boolean } | null>(null);
+    const [renewBusy, setRenewBusy] = useState(false);
+    const [toast, setToast] = useState('');
     const [packs, setPacks] = useState(false);
     const [openPlayer, setOpenPlayer] = useState<MyPlayer | null>(null);
+
+    const show = useCallback((m: string) => {
+        setToast(m);
+        setTimeout(() => setToast(''), 3000);
+    }, []);
+
+    const renew = useCallback(async () => {
+        if (renewBusy) return;
+        setRenewBusy(true);
+        try {
+            await sendRenewalInvoice();
+            hapticNotification('success');
+            show('💳 Счёт продления отправлен в чат с ботом');
+        } catch {
+            hapticNotification('error');
+            show('Не удалось отправить счёт');
+        } finally { setRenewBusy(false); }
+    }, [renewBusy, show]);
 
     const fetchPlayers = useCallback(() => {
         // Активность игроков определяет подписка наставника, не per-player expiry;
@@ -638,7 +739,16 @@ const ResponsibleShop: React.FC = () => {
 
     const fetchPool = useCallback(() => {
         if (!subActive) return;
-        getShelfCatalog().then(c => setGiftBalance(c.gift_balance)).catch(() => {});
+        getShelfCatalog()
+            .then(c => {
+                setGiftBalance(c.gift_balance);
+                setSub({
+                    tier: c.tier,
+                    days: c.subscription_days_left,
+                    warn: c.subscription_warn,
+                });
+            })
+            .catch(() => {});
     }, [subActive]);
 
     useEffect(() => { fetchPlayers(); fetchPool(); }, [fetchPlayers, fetchPool]);
@@ -649,6 +759,22 @@ const ResponsibleShop: React.FC = () => {
 
     return (
         <>
+            {toast && <div className="admin-toast">{toast}</div>}
+
+            {/* Э.3.2: остаток подписки — в месте траты (слоты полки зависят от
+                тарифа). Красноту решает бэк, фронт про «3 дня» не знает. */}
+            {sub && sub.days !== null && (
+                <div className={`mentor-sub-row${sub.warn ? ' mentor-sub-row--warn' : ''}`}>
+                    <span className="mentor-sub-text">
+                        Тариф {TIER_LABELS[sub.tier ?? ''] ?? sub.tier ?? '—'} · осталось {sub.days} дн
+                    </span>
+                    <button className="cube-btn-sm" disabled={renewBusy}
+                        onClick={(e) => { e.stopPropagation(); hapticImpact('light'); renew(); }}>
+                        {renewBusy ? '…' : 'Продлить'}
+                    </button>
+                </div>
+            )}
+
             {/* Пул капель для подарков. Личный баланс игрока в режиме
                 Responsible не показываем (§8.6). */}
             <div className="mentor-pool-row">

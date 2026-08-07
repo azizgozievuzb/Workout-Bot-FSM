@@ -13,6 +13,9 @@ export interface PlayerStats {
     free_freezes_left?: number;
     paid_freezes?: number;
     last_closed_day?: string | null;
+    /** Эконом-патч №1: имя + звание для шапки главного экрана игрока. */
+    first_name?: string | null;
+    player_title?: string | null;
 }
 
 export interface PartnerStats {

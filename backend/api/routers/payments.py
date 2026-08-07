@@ -72,6 +72,10 @@ class DropPackInvoiceRequest(BaseModel):
     pack_key: str
 
 
+class OkResponse(BaseModel):
+    ok: bool = True
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -205,6 +209,53 @@ async def create_drop_pack_invoice(
         meta={"pack_key": pack["key"], "drops": drops},
     )
     return InvoiceResponse(payment_id=payment_id, invoice_link=invoice_link)
+
+
+# ---------------------------------------------------------------------------
+# POST /payments/renewal-invoice — «Продлить» из шапки Market R (Э.3.2)
+# ---------------------------------------------------------------------------
+
+@router.post("/renewal-invoice", response_model=OkResponse)
+async def send_renewal_invoice_to_chat(user: dict = Depends(get_current_user)):
+    """Бот присылает счёт продления ТЕКУЩЕГО тарифа в чат наставника.
+
+    Это дом старого долга «чат-счёт продления»: платёжка та же, что у
+    ежедневного напоминания (7.5), поэтому переиспользуем её функцию, а не
+    пишем вторую. Счёт уходит в чат, не в мини-апп — оплата Stars живёт там.
+    """
+    if user.get("role") not in ("responsible", "admin"):
+        raise HTTPException(status_code=403, detail={"code": "RESPONSIBLE_ONLY"})
+
+    db = await get_supabase()
+    res = await (
+        db.table("users")
+        .select("id, telegram_id, responsible_access_tier, subscription_expires_at, pricing_mode")
+        .eq("telegram_id", user["telegram_id"])
+        .maybe_single()
+        .execute()
+    )
+    if not res or not res.data:
+        raise HTTPException(status_code=404, detail={"code": "USER_NOT_FOUND"})
+    row = res.data
+    if row.get("pricing_mode") == "free":
+        raise HTTPException(status_code=400, detail={"code": "FREE_NO_INVOICE"})
+
+    # Импорт локальный: джоб тянет core.deps.get_bot внутри себя, а роутеру
+    # незачем зависеть от планировщика на уровне модуля.
+    from ...schedulers.subscription_lifecycle import _send_renewal_invoice
+
+    expired = False
+    exp = row.get("subscription_expires_at")
+    if exp:
+        dt = datetime.fromisoformat(str(exp).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        expired = dt <= datetime.now(timezone.utc)
+
+    sent = await _send_renewal_invoice(db, get_bot(), row, expired=expired)
+    if not sent:
+        raise HTTPException(status_code=502, detail={"code": "INVOICE_FAILED"})
+    return OkResponse()
 
 
 @router.get("/tier-prices", response_model=list[TierPriceInfo])

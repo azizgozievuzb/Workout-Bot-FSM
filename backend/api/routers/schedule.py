@@ -45,12 +45,17 @@ class ScheduleResp(BaseModel):
     light_lock_price: int | None = None
     # 8c: смена графика вне grace — платная
     schedule_change_price: int | None = None
+    # Эконом-патч №1: неделя light-трайала (лот полки). Даты — понедельники в
+    # поясе игрока: старт и возврат в main-only.
+    light_trial_from: str | None = None
+    light_trial_until: str | None = None
+    light_trial_active: bool = False
 
 
 _COLS = (
     "id, timezone, main_days, pending_main_days, pending_schedule_from, "
     "schedule_changed_at, schedule_grace_until, "
-    "light_unlocked, light_active_from, light_locked_at"
+    f"{sched.LIGHT_COLS}"
 )
 
 
@@ -86,6 +91,8 @@ def _build_resp(row: dict, now: datetime, prices: dict | None = None) -> Schedul
     # Показываем дату активации, только если unlocked, но она ещё не наступила.
     af_str = af.isoformat() if (row.get("light_unlocked") and af and l_today < af) else None
     prices = prices or {}
+    trial_from = sched._to_date(row.get("light_trial_from"))
+    trial_until = sched._to_date(row.get("light_trial_until"))
 
     return ScheduleResp(
         main_days=row.get("main_days"),
@@ -102,6 +109,9 @@ def _build_resp(row: dict, now: datetime, prices: dict | None = None) -> Schedul
         light_unlock_price=prices.get("light_unlock"),
         light_lock_price=prices.get("light_lock"),
         schedule_change_price=prices.get("schedule_change"),
+        light_trial_from=(trial_from.isoformat() if trial_from else None),
+        light_trial_until=(trial_until.isoformat() if trial_until else None),
+        light_trial_active=sched.trial_covers(row, l_today),
     )
 
 

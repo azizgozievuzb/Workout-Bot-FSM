@@ -21,6 +21,16 @@ import { setup, assign } from 'xstate';
  * точку входа, чтобы «← Назад» вернул туда, откуда пришли (в коде это стек
  * страниц в MentorPlayerScreens.tsx).
  *
+ * Эконом-патч №1 (S62):
+ *   • Э.3.2 — в шапке Market (режим R, рядом с пулом 💧) индикатор подписки
+ *     «Тариф · осталось N дн · [Продлить]». Порог красноты решает БЭК
+ *     (SUBSCRIPTION_WARN_DAYS), «Продлить» просит бота положить счёт продления
+ *     в чат. Игроку этот блок не показывается НИКОГДА (инвариант §1).
+ *   • Хвост 4 — «Подарить заморозку» списывает капли из пула, а не из
+ *     упразднённого `gift_freeze_balance`.
+ *   • Э.1/Э.2a — каталог полки: чистый эксклюзив, три лота ядра v1,
+ *     цена выкупа фиксирована каталогом.
+ *
  * Реализация: frontend/src/components/cubes/{ActionCube,MarketCube}.tsx →
  * MentorPlayerScreens → {MentorPlayerProfile, MentorShelfPage};
  * бэкенд backend/api/routers/shelf.py.
@@ -162,7 +172,12 @@ export const responsibleMachine = setup({
       meta: { '@statelyai.color': 'purple' },
       invoke: {
         // @ts-ignore
-        src: 'giftFreeze',                // POST /shop/gift-freeze
+        src: 'giftFreeze',                // POST /shelf/gift-freeze → RPC gift_freeze
+        // Эконом-патч №1 (хвост 4): списывает ВИТРИННУЮ цену заморозки из
+        // gift_balance → игроку +1 в запас (кап 3). Отдельного «запаса
+        // заморозок» (gift_freeze_balance) больше нет — колонка снесена в 039,
+        // пополнять её было нечем. Кап игрока и пустой пул закрывают кнопку
+        // серым + тост (П.9), отказ приходит ДО списания.
         onDone: 'playerProfile',
         onError: 'playerProfile'
       },
@@ -225,6 +240,14 @@ export const responsibleMachine = setup({
     },
 
     // Покупка Stars-предмета = сразу выставление на полку, инвентаря нет.
+    // Эконом-патч №1: каталог = чистый эксклюзив (freeze/photo_reroll убраны,
+    // Э.1) и цена выкупа в каплях приходит ИЗ КАТАЛОГА — наставник её больше
+    // не вводит и не правит после выставления (иначе цена жила бы в двух
+    // местах и вернулся бы арбитраж с витриной). Ядро v1: light_trial /
+    // schedule_cooldown_reset / title. У `title` наставник вводит свободный
+    // текст звания (лимит по вёрстке) — он едет в meta лота и при выкупе
+    // встаёт игроку. `light_trial` одноразовый: недоступен, если light уже
+    // открыт, трайал использован или лот уже висит на полке.
     starItemInvoice: {
       meta: { '@statelyai.color': 'orange' },
       invoke: {
@@ -242,7 +265,7 @@ export const responsibleMachine = setup({
       meta: { '@statelyai.color': 'yellow' },
       invoke: {
         // @ts-ignore
-        src: 'patchShelfItem',            // PATCH /shelf/items/{id}
+        src: 'patchShelfItem',            // PATCH /shelf/items/{id} — только цена ОБЕЩАНИЙ
         onDone: 'playerShelf',
         onError: 'playerShelf'
       }

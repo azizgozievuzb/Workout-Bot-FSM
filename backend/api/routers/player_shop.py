@@ -95,7 +95,7 @@ class PlayerShopState(BaseModel):
     prices: dict[str, int]               # key → price_drops (только активные позиции)
     free_freezes_left: int
     paid_freezes: int
-    paid_freezes_cap: int = 3
+    paid_freezes_cap: int = shelf_svc.PAID_FREEZE_CAP
     restore: RestoreOffer | None = None
     card_photo: CardPhotoState
     # 8c.1: актуальные для юзера цены фото-карточки (прогрессия по счётчикам).
@@ -110,6 +110,10 @@ class PlayerShopState(BaseModel):
     # пустые слоты рисуются заглушками, поэтому фронту нужно их число.
     has_mentor: bool = False
     shelf_slots_total: int = 0
+    # Эконом-патч №1: активен ли кулдаун смены графика. Нужен фронту, чтобы
+    # погасить кнопку выкупа лота `schedule_cooldown_reset` — без активного
+    # кулдауна выкуп бессмыслен, а капли сгорели бы (П.9).
+    schedule_cooldown_active: bool = False
 
 
 class ShelfBuyResp(BaseModel):
@@ -153,7 +157,8 @@ async def _me(db, telegram_id: int) -> dict:
         db.table("users")
         .select("id, telegram_id, gender, has_player_access, "
                 "card_photo_url, card_photo_source, card_photo_candidates, "
-                "card_ai_changes, card_rerolls")
+                "card_ai_changes, card_rerolls, "
+                "main_days, schedule_changed_at, schedule_grace_until")
         .eq("telegram_id", telegram_id)
         .maybe_single()
         .execute()
@@ -355,6 +360,23 @@ async def _notify_mentor(db, partnership_id: str, *, type: str, title: str,
         logger.info("[shelf] mentor notify skipped pair=%s: %s", partnership_id, e)
 
 
+def _schedule_cooldown_active(user_row: dict, now: datetime) -> bool:
+    """Активен ли 30-дневный кулдаун смены графика (та же математика, что в
+    routers/schedule.py: grace важнее кулдауна, отсчёт от schedule_changed_at).
+    Дублировать константу нельзя — берём её оттуда."""
+    from .schedule import COOLDOWN_DAYS
+
+    if not user_row.get("main_days"):
+        return False
+    grace = _parse_dt(user_row.get("schedule_grace_until"))
+    if grace is not None and now < grace:
+        return False
+    changed = _parse_dt(user_row.get("schedule_changed_at"))
+    if changed is None:
+        return False
+    return changed + timedelta(days=COOLDOWN_DAYS) > now
+
+
 def _restore_offer(stats: dict, prices: dict[str, dict]) -> RestoreOffer | None:
     lost_len = int(stats.get("lost_streak_len") or 0)
     lost_at = _parse_dt(stats.get("lost_streak_at"))
@@ -436,6 +458,7 @@ async def get_shop_state(current_user: dict = Depends(get_current_user)) -> Play
         my_purchases=[_shelf_out(r) for r in purchase_rows],
         has_mentor=partnership_id is not None,
         shelf_slots_total=slots_total,
+        schedule_cooldown_active=_schedule_cooldown_active(me, datetime.now(UTC)),
     )
 
 
@@ -541,6 +564,9 @@ async def buy_shelf_item(
             })
         if code == "ITEM_NOT_FOUND":
             raise HTTPException(status_code=404, detail={"code": code})
+        # Гейты лотов ядра v1 (039b): отказ ДО списания — капли целы.
+        if code in ("NO_ACTIVE_COOLDOWN", "LIGHT_TRIAL_UNAVAILABLE", "TITLE_TEXT_MISSING"):
+            raise HTTPException(status_code=409, detail={"code": code})
         raise HTTPException(status_code=409, detail={"code": code, "status": data.get("status")})
 
     # Свежие счётчики (эффект star_item уже применён внутри RPC).

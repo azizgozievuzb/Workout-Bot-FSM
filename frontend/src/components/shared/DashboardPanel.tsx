@@ -28,9 +28,10 @@ const DashboardPanel: React.FC<DashboardPanelProps> = ({ onOpen }) => {
 
     const [data, setData] = useState<DashboardData>({});
     const [loading, setLoading] = useState(true);
-    const [sched, setSched] = useState<{ lastClosed: string | null; free: number; paid: number }>(
-        { lastClosed: null, free: 0, paid: 0 }
-    );
+    const [sched, setSched] = useState<{
+        lastClosed: string | null; free: number; paid: number;
+        firstName: string | null; playerTitle: string | null; drops: number;
+    }>({ lastClosed: null, free: 0, paid: 0, firstName: null, playerTitle: null, drops: 0 });
 
     useEffect(() => {
         let cancelled = false;
@@ -52,6 +53,9 @@ const DashboardPanel: React.FC<DashboardPanelProps> = ({ onOpen }) => {
                             lastClosed: s.last_closed_day ?? null,
                             free: s.free_freezes_left ?? 0,
                             paid: s.paid_freezes ?? 0,
+                            firstName: s.first_name ?? null,
+                            playerTitle: s.player_title ?? null,
+                            drops: s.drops_balance ?? 0,
                         });
                     })
                     .catch(() => {})
@@ -97,6 +101,9 @@ const DashboardPanel: React.FC<DashboardPanelProps> = ({ onOpen }) => {
                         lastClosedDay={sched.lastClosed}
                         freeFreezes={sched.free}
                         paidFreezes={sched.paid}
+                        firstName={sched.firstName}
+                        playerTitle={sched.playerTitle}
+                        dropsBalance={sched.drops}
                     />
                     <div className="dashboard-divider" />
                 </>

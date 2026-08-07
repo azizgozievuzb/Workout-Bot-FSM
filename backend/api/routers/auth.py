@@ -17,7 +17,7 @@ USER_SELECT_COLS = (
     "primary_role, has_player_access, has_responsible_access, is_admin, "
     "ban_until, ban_reason, ban_missed_workouts, "
     "responsible_access_tier, player_access_tier, "
-    "shop_freeze_balance, gift_freeze_balance, gender, "
+    "shop_freeze_balance, gender, "
     "timezone, main_days, morning_reminder_time, "
     "goal, goal_update_required, "
     "subscription_expires_at, pricing_mode, custom_price_stars"
@@ -86,7 +86,6 @@ class TokenResponse(BaseModel):
     own_access_tier: str | None = None
     player_view_tier: str | None = None
     shop_freeze_balance: int = 0
-    gift_freeze_balance: int = 0
     streak_freeze_balance: int = 0
     rest_days_remaining: int = 0
     # 8a: расписание + новые заморозки
@@ -234,7 +233,6 @@ async def _build_full_token_response(db, telegram_id: int, user_data: dict) -> T
 
     # Freeze wallets (Responsible) — from user_data
     shop_freeze_balance = int(user_data.get("shop_freeze_balance") or 0)
-    gift_freeze_balance = int(user_data.get("gift_freeze_balance") or 0)
 
     # Player stats — заморозки (8a: free/paid; legacy streak_freeze/rest_days для совместимости)
     streak_freeze_balance = 0
@@ -298,7 +296,6 @@ async def _build_full_token_response(db, telegram_id: int, user_data: dict) -> T
         own_access_tier=own_access_tier,
         player_view_tier=player_view_tier,
         shop_freeze_balance=shop_freeze_balance,
-        gift_freeze_balance=gift_freeze_balance,
         streak_freeze_balance=streak_freeze_balance,
         rest_days_remaining=rest_days_remaining,
         free_freezes_left=free_freezes_left,

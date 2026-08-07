@@ -63,7 +63,6 @@ interface AuthState {
   playerViewTier: AccessTier | null;
   // --- Wallet / balance fields (3.1) ---
   shopFreezeBalance: number;
-  giftFreezeBalance: number;
   streakFreezeBalance: number;
   restDaysRemaining: number;
   // --- 8a: расписание + новые заморозки ---
@@ -88,7 +87,6 @@ interface AuthState {
   setOwnAccessTier: (tier: AccessTier | null) => void;
   setPlayerViewTier: (tier: AccessTier | null) => void;
   setShopFreezeBalance: (v: number) => void;
-  setGiftFreezeBalance: (v: number) => void;
   setStreakFreezeBalance: (v: number) => void;
   setRestDaysRemaining: (v: number) => void;
   setMainDays: (v: number[] | null) => void;
@@ -113,7 +111,6 @@ interface AuthState {
     own_access_tier?: AccessTier | null;
     player_view_tier?: AccessTier | null;
     shop_freeze_balance?: number;
-    gift_freeze_balance?: number;
     streak_freeze_balance?: number;
     rest_days_remaining?: number;
     free_freezes_left?: number;
@@ -161,7 +158,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   ownAccessTier: _parseTier(localStorage.getItem(CACHE_KEYS.ownTier)),
   playerViewTier: _parseTier(localStorage.getItem(CACHE_KEYS.playerTier)),
   shopFreezeBalance: 0,
-  giftFreezeBalance: 0,
   streakFreezeBalance: Number(localStorage.getItem(CACHE_KEYS.streakFreeze) ?? 0),
   restDaysRemaining: 0,
   freeFreezesLeft: 0,
@@ -197,7 +193,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ playerViewTier: tier });
   },
   setShopFreezeBalance: (v) => set({ shopFreezeBalance: v }),
-  setGiftFreezeBalance: (v) => set({ giftFreezeBalance: v }),
   setStreakFreezeBalance: (v) => {
     localStorage.setItem(CACHE_KEYS.streakFreeze, String(v));
     set({ streakFreezeBalance: v });
@@ -263,7 +258,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       ownAccessTier: ownTier,
       playerViewTier: playerTier,
       shopFreezeBalance: data.shop_freeze_balance ?? 0,
-      giftFreezeBalance: data.gift_freeze_balance ?? 0,
       streakFreezeBalance: streakFreeze,
       restDaysRemaining: data.rest_days_remaining ?? 0,
       freeFreezesLeft: data.free_freezes_left ?? 0,
@@ -321,7 +315,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       ownAccessTier: null,
       playerViewTier: null,
       shopFreezeBalance: 0,
-      giftFreezeBalance: 0,
       streakFreezeBalance: 0,
       restDaysRemaining: 0,
       freeFreezesLeft: 0,

@@ -26,6 +26,10 @@ class PlayerStatsResponse(BaseModel):
     free_freezes_left: int = 0
     paid_freezes: int = 0
     last_closed_day: str | None = None
+    # Эконом-патч №1: имя + звание для шапки главного экрана игрока. Звание
+    # приезжает с лотом `title` полки наставника; None — звания нет.
+    first_name: str | None = None
+    player_title: str | None = None
 
 
 class PartnerStatsResponse(BaseModel):
@@ -50,7 +54,7 @@ async def get_my_stats(user: dict = Depends(get_current_user)):
 
         user_res = (
             await db.table("users")
-            .select("id")
+            .select("id, first_name, player_title")
             .eq("telegram_id", user["telegram_id"])
             .maybe_single()
             .execute()
@@ -103,6 +107,8 @@ async def get_my_stats(user: dict = Depends(get_current_user)):
             free_freezes_left=d.get("free_freezes_left", 0),
             paid_freezes=d.get("paid_freezes", 0),
             last_closed_day=d.get("last_closed_day"),
+            first_name=user_res.data.get("first_name"),
+            player_title=user_res.data.get("player_title"),
         )
         logger.info("[/stats/me] SUCCESS")
         return response

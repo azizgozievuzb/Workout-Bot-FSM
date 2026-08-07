@@ -13,6 +13,14 @@ logger = logging.getLogger(__name__)
 
 UTC = timezone.utc
 
+# Колонки light-состояния для SELECT-ов. Держим ОДНОЙ строкой: light_is_active
+# читает пять полей, и стоит забыть одно в чьём-нибудь select — режим молча
+# «выключается» именно там (класс бага S54/S56: фильтр по неполной модели).
+LIGHT_COLS = (
+    "light_unlocked, light_active_from, light_locked_at, "
+    "light_trial_from, light_trial_until"
+)
+
 
 def get_tz(tz_str: str | None) -> ZoneInfo | timezone:
     """IANA-строка → tzinfo. NULL/битая зона → UTC-фолбэк."""
@@ -98,14 +106,30 @@ def next_monday(d: date) -> date:
 # Light mode (Phase 8b)
 # ---------------------------------------------------------------------------
 
+def trial_covers(user_row: dict, today: date) -> bool:
+    """Идёт ли неделя light-трайала (эконом-патч №1, лот `light_trial`).
+
+    Окно [light_trial_from, light_trial_until) — ровно одна календарная неделя:
+    старт «со следующего пн после выкупа», возврат в main-only — следующим пн.
+    Оба конца считает та же ``next_monday``, что у unlock/lock: второго
+    календаря в проекте нет.
+    """
+    tf = _to_date(user_row.get("light_trial_from"))
+    tu = _to_date(user_row.get("light_trial_until"))
+    return tf is not None and tu is not None and tf <= today < tu
+
+
 def light_is_active(user_row: dict, today: date, *, base: datetime | None = None) -> bool:
     """Активен ли light-режим на дату ``today`` (лок. TZ).
 
+    * идёт трайал     → активен (полный график недели, стрик-правила light).
     * unlocked=true  → активен, если today >= light_active_from.
     * unlocked=false → «доиграть неделю честно» после lock: активен, пока
       today < next_monday(локальная дата light_locked_at). Потом main-only.
     """
     tz = user_row.get("timezone")
+    if trial_covers(user_row, today):
+        return True
     if user_row.get("light_unlocked"):
         af = _to_date(user_row.get("light_active_from"))
         return af is not None and today >= af

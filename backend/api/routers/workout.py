@@ -153,7 +153,7 @@ async def start_session(body: StartSessionReq, user: dict = Depends(get_current_
         # нельзя: Lock сбрасывает флаг, но light-дни ещё плановые до пн.
         u = await (
             db.table("users")
-            .select("timezone, light_unlocked, light_active_from, light_locked_at")
+            .select(f"timezone, {schedule.LIGHT_COLS}")
             .eq("id", player_id).maybe_single().execute()
         )
         urow = u.data if (u and u.data) else {}
@@ -301,7 +301,7 @@ async def finish_session(session_id: str = Form(...), user: dict = Depends(get_c
     cfg_res = await (
         db.table("users")
         .select("timezone, main_days, pending_main_days, pending_schedule_from, "
-                "light_unlocked, light_active_from, light_locked_at")
+                f"{schedule.LIGHT_COLS}")
         .eq("id", player_id)
         .maybe_single()
         .execute()

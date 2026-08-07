@@ -2,7 +2,8 @@ import React, { useCallback, useState } from 'react';
 import {
     createPromise, createStarItemInvoice, deleteShelfItem, patchShelfItem,
 } from '../../api/shelf';
-import type { PlayerPage, ShelfItem } from '../../api/shelf';
+import type { CatalogItem, PlayerPage, ShelfItem } from '../../api/shelf';
+import { MAX_TITLE_LEN, TITLE_LOT_KEY } from '../../api/shelf';
 import { openStarInvoice, pollPayment } from '../../utils/starPayment';
 import { hapticImpact, hapticNotification } from '../../utils/haptic';
 import PromiseRecorder from './PromiseRecorder';
@@ -60,8 +61,11 @@ const MentorShelfPage: React.FC<Props> = ({ page, reload, onBack, onOpenProfile,
     const [pTitle, setPTitle] = useState('');
     const [pPrice, setPPrice] = useState('');
 
-    const [starForm, setStarForm] = useState<{ key: string; title: string; stars: number } | null>(null);
-    const [starPrice, setStarPrice] = useState('');
+    /* Цена лота в каплях больше не вводится руками: она приезжает из каталога
+       (эконом-патч №1, цены Э.2a финальные). Руками вводится только свободный
+       текст звания — у лота `title`. */
+    const [starForm, setStarForm] = useState<CatalogItem | null>(null);
+    const [titleText, setTitleText] = useState('');
 
     const playerId = page.player_id;
     const slotsFull = page.slots_used >= page.slots_total;
@@ -119,14 +123,16 @@ const MentorShelfPage: React.FC<Props> = ({ page, reload, onBack, onOpenProfile,
     /* ---------- Stars-предмет ---------- */
     const buyStarItem = useCallback(async () => {
         if (!starForm || busy) return;
-        const price = parseInt(starPrice, 10);
-        if (!Number.isFinite(price) || price < page.price_limits.min || price > page.price_limits.max) {
-            show(`Цена должна быть от ${page.price_limits.min} до ${page.price_limits.max} 💧`);
+        const text = titleText.trim();
+        if (starForm.key === TITLE_LOT_KEY && !text) {
+            show('Напиши звание — без текста лот пустой');
             return;
         }
         setBusy(true);
         try {
-            const { payment_id, invoice_link } = await createStarItemInvoice(playerId, starForm.key, price);
+            const { payment_id, invoice_link } = await createStarItemInvoice(
+                playerId, starForm.key, starForm.key === TITLE_LOT_KEY ? text : undefined,
+            );
             const opened = openStarInvoice(invoice_link, async (status) => {
                 if (status === 'paid') {
                     show('Оплата получена, выставляем на полку…');
@@ -136,11 +142,11 @@ const MentorShelfPage: React.FC<Props> = ({ page, reload, onBack, onOpenProfile,
                 } else {
                     show(status === 'cancelled' ? 'Покупка отменена' : 'Оплата не прошла');
                 }
-                setBusy(false); setStarForm(null); setStarPrice('');
+                setBusy(false); setStarForm(null); setTitleText('');
             });
             if (!opened) { show('Оплата недоступна в этом клиенте'); setBusy(false); }
         } catch (e) { fail(e, 'Не удалось создать счёт'); setBusy(false); }
-    }, [starForm, starPrice, page.price_limits, busy, playerId, show, fail, reload]);
+    }, [starForm, titleText, busy, playerId, show, fail, reload]);
 
     /* ---------- Лоты ---------- */
     const savePrice = useCallback(async () => {
@@ -197,9 +203,9 @@ const MentorShelfPage: React.FC<Props> = ({ page, reload, onBack, onOpenProfile,
         hapticImpact('light');
         const first = page.catalog[0];
         if (!first) { show('Каталог пуст'); return; }
-        setStarForm({ key: first.key, title: first.title, stars: first.price_stars });
-        setStarPrice(String(page.price_limits.min));
-    }, [slotsFull, page.catalog, page.price_limits.min, show, bounce]);
+        setStarForm(first);
+        setTitleText('');
+    }, [slotsFull, page.catalog, show, bounce]);
 
     return (
         <div className="mentor-page-inner">
@@ -323,10 +329,15 @@ const MentorShelfPage: React.FC<Props> = ({ page, reload, onBack, onOpenProfile,
                         )}
                     </div>
                     <div className="shelf-lot-actions">
-                        <button className="cube-btn-sm" disabled={busy} title="Сменить цену"
-                            onClick={(e) => { e.stopPropagation(); setEditing({ id: it.id, price: String(it.price_drops) }); }}>
-                            💧
-                        </button>
+                        {/* Цену меняем только у обещаний: у предметов каталога она
+                            фиксирована (эконом-патч №1) — иначе цена жила бы в двух
+                            местах и появился бы арбитраж с витриной. */}
+                        {it.type === 'promise' && (
+                            <button className="cube-btn-sm" disabled={busy} title="Сменить цену"
+                                onClick={(e) => { e.stopPropagation(); setEditing({ id: it.id, price: String(it.price_drops) }); }}>
+                                💧
+                            </button>
+                        )}
                         {it.status === 'hidden' && (
                             <button className="cube-btn-sm" disabled={busy} title="Перевыставить"
                                 onClick={(e) => { e.stopPropagation(); republish(it); }}>↻</button>
@@ -396,20 +407,37 @@ const MentorShelfPage: React.FC<Props> = ({ page, reload, onBack, onOpenProfile,
                         {page.catalog.map((c) => (
                             <button key={c.key}
                                 className={`market-player-chip${starForm.key === c.key ? ' active' : ''}`}
-                                onClick={(e) => { e.stopPropagation(); setStarForm({ key: c.key, title: c.title, stars: c.price_stars }); }}>
+                                onClick={(e) => {
+                                    e.stopPropagation(); setStarForm(c); setTitleText('');
+                                }}>
                                 {c.title} — {c.price_stars} ⭐
                             </button>
                         ))}
                     </div>
-                    <div className="cube-modal-label">
-                        Цена для игрока в каплях ({page.price_limits.min}–{page.price_limits.max})
+                    {/* Цена выкупа фиксирована каталогом — поля ввода больше нет
+                        (эконом-патч №1): один источник правды на цену. */}
+                    <div className="shelf-limit-hint">
+                        Игрок выкупит за {starForm.price_drops} 💧
                     </div>
-                    <input className="cube-modal-input" type="number" inputMode="numeric"
-                        value={starPrice} onChange={(e) => setStarPrice(e.target.value)} />
+                    {starForm.key === TITLE_LOT_KEY && (
+                        <>
+                            <div className="cube-modal-label">
+                                Звание для игрока (до {MAX_TITLE_LEN} символов)
+                            </div>
+                            <input className="cube-modal-input" maxLength={MAX_TITLE_LEN}
+                                placeholder="Например: Железная воля"
+                                value={titleText}
+                                onChange={(e) => setTitleText(e.target.value.slice(0, MAX_TITLE_LEN))} />
+                            <div className="shelf-limit-hint">
+                                {titleText.trim().length}/{MAX_TITLE_LEN} · заменит текущее звание игрока
+                            </div>
+                        </>
+                    )}
                     <div className="mentor-btn-row">
-                        <button className="cube-btn-sm" disabled={busy}
+                        <button className="cube-btn-sm"
+                            disabled={busy || (starForm.key === TITLE_LOT_KEY && !titleText.trim())}
                             onClick={(e) => { e.stopPropagation(); buyStarItem(); }}>
-                            {busy ? '…' : `Купить за ${starForm.stars} ⭐`}
+                            {busy ? '…' : `Купить за ${starForm.price_stars} ⭐`}
                         </button>
                         <button className="cube-btn-sm" disabled={busy}
                             onClick={(e) => { e.stopPropagation(); setStarForm(null); }}>Отмена</button>

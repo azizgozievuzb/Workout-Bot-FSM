@@ -26,7 +26,20 @@ import { setup, assign } from 'xstate';
  *   • П.6a — видео смотрится во встроенном плеере, а не во внешней вкладке.
  *   • П.10 — экран выбора фото: оригинал + слабая и глубокая обработка.
  *
- * Реализация: frontend/src/components/cubes/{MarketCube,CardPhotoFlow}.tsx;
+ * Эконом-патч №1 (S62):
+ *   • П.7 — состояние `confirmingSpend` перед КАЖДОЙ необратимой тратой капель
+ *     (лот полки, витрина, реролл/смена фото, смена графика, restore стрика).
+ *     Обхода нет: «не спрашивать» не существует ни в каком виде. Исключение —
+ *     unlock/lock light: там уже стоит дисклеймер-тест (8.10).
+ *   • Э.1 — на полке больше НЕТ витринных позиций (freeze/photo_reroll):
+ *     каталог полки — чистый эксклюзив, дублей с витриной не бывает.
+ *   • Э.4 — витрина рисуется сеткой ячеек-слотов; это визуальный язык,
+ *     механики ротации за ним нет.
+ *   • Лот `schedule_cooldown_reset` без активного кулдауна не выкупается:
+ *     гейт в RPC ДО списания, в UI — серая кнопка + тост (П.9).
+ *
+ * Реализация: frontend/src/components/cubes/{MarketCube,CardPhotoFlow}.tsx,
+ * frontend/src/components/shared/ConfirmSpendModal.tsx;
  * бэкенд backend/api/routers/player_shop.py.
  */
 
@@ -41,6 +54,8 @@ export const playerShopMachine = setup({
       shelfSlotsTotal: number;
       selectedItemId: string | null;
       selectedItemPrice: number | null;
+      /** Что подтверждаем в окне траты (П.7): лот полки или витринная покупка. */
+      spendKind: 'lot' | 'freeze' | null;
       /** Подаренные наставником рероллы — тратятся вне прогрессии цен (8d). */
       rerollCredits: number;
     },
@@ -62,6 +77,7 @@ export const playerShopMachine = setup({
       | { type: 'VARIANTS_READY' }
       | { type: 'CHOOSE_VARIANT'; index: number }     // -1 = «оставить как есть» (Д7)
       | { type: 'REROLL' }
+      | { type: 'CONFIRM_SPEND' }                     // «Купить» в окне подтверждения (П.7)
       | { type: 'CANCEL' }
       | { type: 'DONE' }
       | { type: 'BACK_TO_GATE' }
@@ -75,15 +91,19 @@ export const playerShopMachine = setup({
     }),
     selectItem: assign({
       selectedItemId: ({ event }) => (event as any).itemId ?? null,
-      selectedItemPrice: ({ event }) => (event as any).price ?? null
+      selectedItemPrice: ({ event }) => (event as any).price ?? null,
+      spendKind: ({ event }) => (event.type === 'BUY_FREEZE' ? 'freeze' : 'lot')
     }),
-    clearSelection: assign({ selectedItemId: null, selectedItemPrice: null })
+    clearSelection: assign({
+      selectedItemId: null, selectedItemPrice: null, spendKind: null
+    })
   },
   guards: {
     // Дублируется на сервере в RPC buy_shelf_item — UI лишь бережёт от лишнего
     // запроса, решает всё равно транзакция (кап заморозок проверяется ДО списания).
     hasEnoughDrops: ({ context }) =>
-      context.selectedItemPrice !== null && context.dropsBalance >= context.selectedItemPrice
+      context.selectedItemPrice !== null && context.dropsBalance >= context.selectedItemPrice,
+    isLotSpend: ({ context }) => context.spendKind === 'lot'
   }
 }).createMachine({
   id: 'playerShopMachine',
@@ -95,6 +115,7 @@ export const playerShopMachine = setup({
     shelfSlotsTotal: 0,
     selectedItemId: null,
     selectedItemPrice: null,
+    spendKind: null,
     rerollCredits: 0
   },
   states: {
@@ -113,19 +134,33 @@ export const playerShopMachine = setup({
     browsingShop: {
       meta: { '@statelyai.color': 'blue' },
       on: {
-        BUY_LOT: [
-          { target: 'buyingLot', guard: 'hasEnoughDrops', actions: 'selectItem' },
-          { target: 'insufficientFunds', actions: 'selectItem' }
-        ],
+        // П.7: тап по «Купить» НИКОГДА не списывает сразу — сначала окно с
+        // ценой и остатком. Нехватку капель показываем в том же окне.
+        BUY_LOT: { target: 'confirmingSpend', actions: 'selectItem' },
+        BUY_FREEZE: { target: 'confirmingSpend', actions: 'selectItem' },
         HIDE_LOT: 'hidingLot',
         MARK_DONE: 'fulfilling',
         ATTACH_REPORT: 'recordingReport',
         PLAY_VIDEO: 'videoPlayer',
         DOWNLOAD_VIDEO: 'browsingShop',   // Д5: сохранение файла внешним механизмом
-        BUY_FREEZE: 'buyingFreeze',
-        TOGGLE_LIGHT: 'disclaimerTest',
+        TOGGLE_LIGHT: 'disclaimerTest',   // у light свой гейт — дисклеймер-тест (8.10)
         OPEN_CARD_FLOW: 'cardPhoto',
         BACK_TO_GATE: 'exitShop'
+      }
+    },
+
+    // Единое окно подтверждения необратимой траты (П.7): название, цена,
+    // остаток после списания, «Отменить» / «Купить». Кнопка подтверждения
+    // неактивна, если капель не хватает, — отдельного экрана отказа больше нет.
+    confirmingSpend: {
+      meta: { '@statelyai.color': 'orange' },
+      on: {
+        CONFIRM_SPEND: [
+          { target: 'buyingLot', guard: 'isLotSpend' },
+          { target: 'buyingFreeze', guard: 'hasEnoughDrops' },
+          { target: 'insufficientFunds' }
+        ],
+        CANCEL: { target: 'browsingShop', actions: 'clearSelection' }
       }
     },
 
@@ -143,7 +178,11 @@ export const playerShopMachine = setup({
         // @ts-ignore
         src: 'buyShelfItem',              // POST /players/me/shelf/{id}/buy → RPC
         // Обещание → 'purchased' (наставнику «⏳»); Stars-предмет → сразу
-        // 'fulfilled', эффект выдан в той же транзакции.
+        // 'fulfilled', эффект выдан в той же транзакции:
+        //   light_trial             → неделя light со следующего пн (одноразово);
+        //   schedule_cooldown_reset → кулдаун смены графика снят;
+        //   title                   → звание из meta лота встаёт игроку.
+        // Гейты эффекта проверяются ДО списания — капли не сгорают впустую.
         onDone: { target: 'loadingShop', actions: 'clearSelection' },
         onError: { target: 'browsingShop', actions: 'clearSelection' }
       }
@@ -236,7 +275,12 @@ export const playerShopMachine = setup({
       states: {
         // Режим выбирается ДО оплаты: raw — фикс-цена, ai — прогрессия.
         choosingMode: {
-          on: { PURCHASE_MODE: 'purchasing' }
+          // П.7: цена в окне — уже посчитанная прогрессия (бэк отдаёт её
+          // готовой), а не базовая из прайса.
+          on: { PURCHASE_MODE: 'confirmingPurchase' }
+        },
+        confirmingPurchase: {
+          on: { CONFIRM_SPEND: 'purchasing', CANCEL: 'choosingMode' }
         },
         purchasing: {
           invoke: {
@@ -271,8 +315,13 @@ export const playerShopMachine = setup({
           // На экране три карточки: ОРИГИНАЛ + слабая + глубокая обработка.
           on: {
             CHOOSE_VARIANT: 'applyingChoice',   // index -1 = «оставить как есть» (Д7)
-            REROLL: 'rerolling'
+            // П.7: реролл тоже проходит окно подтверждения — в нём стоит
+            // АКТУАЛЬНАЯ прогрессивная цена (или «потратится подарок»).
+            REROLL: 'confirmingReroll'
           }
+        },
+        confirmingReroll: {
+          on: { CONFIRM_SPEND: 'rerolling', CANCEL: 'choosingVariant' }
         },
         rerolling: {
           invoke: {
