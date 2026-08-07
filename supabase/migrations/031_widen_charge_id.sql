@@ -1,0 +1,1 @@
+ALTER TABLE payments ALTER COLUMN telegram_payment_charge_id TYPE TEXT;
