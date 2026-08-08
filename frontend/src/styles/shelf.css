@@ -39,7 +39,13 @@
     position: sticky;
     top: 0;
     z-index: 2;
-    background: inherit;
+    /* Непрозрачный фон обязателен: `inherit` тянулся с .mentor-page-inner, у
+       которого фона нет, — контент просвечивал сквозь шапку при прокрутке
+       (смоук S63). Красим только --tg-theme-* (урок №2). */
+    background: var(--tg-theme-bg-color, #ffffff);
+    /* Съедаем боковой padding родителя, иначе полоса фона уже контента. */
+    margin: -10px -14px 0;
+    padding: 16px 14px 12px;
 }
 
 .mentor-back {
