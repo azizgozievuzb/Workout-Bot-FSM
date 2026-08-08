@@ -44,6 +44,30 @@ LIGHT_REVIEW_SEC = 5
 LIGHT_TOTAL_EXERCISES = 4
 LIGHT_MAX_DROPS = 30
 
+# ---- теоретический месячный потолок капель (S62-2) ----
+# Им подписаны ступени цены лота полки: «при идеальном месяце твой игрок
+# заработает до N 💧». main_days хранит РОВНО 3 дня; в light-режиме плановыми
+# становятся все семь — оставшиеся 4 идут light-сессиями.
+MAIN_DAYS_PER_WEEK = 3
+LIGHT_DAYS_PER_WEEK = 4
+WEEKS_PER_MONTH = 52 / 12
+
+
+def month_cap_drops(light: bool) -> int:
+    """Капли за ИДЕАЛЬНЫЙ месяц: каждая сессия по максимуму, ни одного пропуска.
+    650 (main-only) / 1170 (light).
+
+    Это потолок ФОРМУЛ, а не заработок игрока: фактические цифры наставнику не
+    показываются никогда (инвариант §1) и отсюда не вычисляются.
+
+    ⚠️ Зеркало в SQL — app_month_cap_drops() (миграция 040). Правишь здесь —
+    правь там, иначе UI покажет один коридор цены, а RPC отвергнет цену из него.
+    """
+    weekly = MAIN_DAYS_PER_WEEK * MAX_DROPS_PER_SESSION
+    if light:
+        weekly += LIGHT_DAYS_PER_WEEK * LIGHT_MAX_DROPS
+    return round(weekly * WEEKS_PER_MONTH)
+
 
 @dataclass(frozen=True)
 class Exercise:

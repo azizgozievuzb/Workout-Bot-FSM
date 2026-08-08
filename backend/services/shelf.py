@@ -10,6 +10,7 @@ import uuid
 from datetime import date, datetime
 from typing import Any
 
+from ..core import workout_config as wcfg
 from . import schedule as sched_svc
 
 logger = logging.getLogger(__name__)
@@ -53,6 +54,70 @@ SUBSCRIPTION_WARN_DAYS = 3
 # Кап запаса докупленных/подаренных заморозок. Дублируется в БД CHECK-ом
 # player_stats_paid_freezes_cap (034) — держим одно число на весь бэк.
 PAID_FREEZE_CAP = 3
+
+# ---------------------------------------------------------------------------
+# Цена лота полки: 4 ступени + «Своя цена» (S62-2, S62-3.2)
+# ---------------------------------------------------------------------------
+# «Кто размещает — тот и ценит»: витрину наполняет платформа (фикс-цены), полку
+# наполняет наставник — цену выбирает он, но не вслепую, а по рельсам. Ступени
+# считаются в процентах от ТЕОРЕТИЧЕСКОГО месячного потолка ЭТОГО игрока,
+# поэтому подписи тяжести честны в любом режиме (у light-игрока дороже).
+#
+# Коридор свободного ввода: ниже LOT_PRICE_MIN лот дублирует прямое дарение
+# капель, выше потолка цена физически недостижима. ⚠️ Оба конца коридора
+# проверяет RPC set_shelf_item_price (040) — питон здесь только для UI и для
+# отказа до счёта Stars.
+LOT_PRICE_MIN = 10
+
+LOT_PRICE_PRESETS: tuple[tuple[str, str, int], ...] = (
+    ("almost_free", "Почти даром", 5),
+    ("affordable",  "Посильно",    15),
+    ("challenge",   "Вызов",       30),
+    ("feat",        "Подвиг",      50),
+)
+
+
+def _round_to_10(value: float) -> int:
+    """Ступени показываем круглыми: 32.5 → 30, 97.5 → 100 (half-up)."""
+    return int((value + 5) // 10) * 10
+
+
+def lot_price_presets(cap: int) -> list[dict]:
+    """Ступени цены для игрока с потолком `cap`. Наставник выбирает СМЫСЛ
+    («почти даром» / «подвиг»), цифру подставляет система."""
+    return [
+        {
+            "key": key,
+            "label": label,
+            "percent": pct,
+            "price": max(LOT_PRICE_MIN, min(cap, _round_to_10(cap * pct / 100))),
+        }
+        for key, label, pct in LOT_PRICE_PRESETS
+    ]
+
+
+def recommended_preset(presets: list[dict], catalog_price: int | None) -> str | None:
+    """Ступень, ближайшая к цене-ориентиру каталога: цены Э.5 живут не законом,
+    а рекомендацией (титул → «почти даром», трайал → «посильно»)."""
+    if not presets or not catalog_price:
+        return None
+    return min(presets, key=lambda p: abs(int(p["price"]) - int(catalog_price)))["key"]
+
+
+async def player_month_cap(db, player_id: str) -> int:
+    """Теоретический месячный потолок капель игрока — по ЖИВОМУ режиму.
+
+    Режим берём тем же ``light_is_active``, что решает тип планового дня во всём
+    бэке (unlock + неделя трайала + доживающий lock), а не «сырым» флагом
+    light_unlocked: иначе игрок на неделе трайала считался бы main-only.
+    """
+    res = await (
+        db.table("users").select(f"timezone, {sched_svc.LIGHT_COLS}")
+        .eq("id", str(player_id)).maybe_single().execute()
+    )
+    row = (res.data if (res and res.data) else {}) or {}
+    today = sched_svc.local_today(row.get("timezone"))
+    return wcfg.month_cap_drops(sched_svc.light_is_active(row, today))
 
 
 def format_main_days(main_days: list[int] | None) -> str:
@@ -157,14 +222,24 @@ async def used_slots(db, partnership_id: str) -> int:
 
 
 async def reputation(db, partnership_id: str) -> tuple[int, int]:
-    """Репутация наставника: (сколько обещаний исполнено, на сколько капель).
-    Живой агрегат, НЕ денормализуем. 8d.1 (Д3): в шапке полки главной цифрой
-    идёт СЧЁТ обещаний, сумма капель — расшифровкой под ним."""
+    """Единая репутация наставника (S62-3.3): (сколько позиций, на сколько капель).
+
+    Принцип засчёта один — «игрок ПОЛУЧИЛ ценность»:
+      * обещание — по галочке исполнения (не по выкупу: иначе цифру накручивают
+        пустые обещания, которые никто не выполнил);
+      * лот каталога — по факту выкупа (эффект выдаёт система мгновенно, лот
+        сразу уходит в 'fulfilled').
+    Поэтому фильтр по статусу, а не по типу. Невыполненные обещания сюда НЕ
+    входят — давление «⏳ N к исполнению» живёт отдельной цифрой, как жило.
+
+    Живой агрегат, снапшот-колонок не заводим (принцип BACKLOG S48 №1).
+    С S62-3 главная цифра в шапке полки — СУММА КАПЕЛЬ («🏅 Репутация: N 💧»),
+    счёт позиций ушёл в расшифровку под ней.
+    """
     res = await (
         db.table("shelf_items")
         .select("price_drops")
         .eq("partnership_id", partnership_id)
-        .eq("type", "promise")
         .in_("status", ["fulfilled", "archived"])
         .execute()
     )

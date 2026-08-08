@@ -48,8 +48,6 @@ export interface PlayerShopState {
     // рисуются заглушками, их количество = слотам тарифа наставника.
     has_mentor: boolean;
     shelf_slots_total: number;
-    /** Активен ли 30-дневный кулдаун смены графика — гейт лота `schedule_cooldown_reset`. */
-    schedule_cooldown_active: boolean;
 }
 
 export async function getPlayerShop(): Promise<PlayerShopState> {

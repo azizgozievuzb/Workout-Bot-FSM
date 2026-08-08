@@ -35,8 +35,10 @@ import { setup, assign } from 'xstate';
  *     каталог полки — чистый эксклюзив, дублей с витриной не бывает.
  *   • Э.4 — витрина рисуется сеткой ячеек-слотов; это визуальный язык,
  *     механики ротации за ним нет.
- *   • Лот `schedule_cooldown_reset` без активного кулдауна не выкупается:
- *     гейт в RPC ДО списания, в UI — серая кнопка + тост (П.9).
+ *   • S62-2 — цена выкупа читается У ЛОТА (`shelf_items.price_drops`), а не из
+ *     каталога: её назначил наставник при размещении. Окно подтверждения
+ *     показывает ту же цифру. Лот `schedule_cooldown_reset` из каталога
+ *     исключён (S62-3.1) — гейтованных лотов на полке больше нет.
  *
  * Реализация: frontend/src/components/cubes/{MarketCube,CardPhotoFlow}.tsx,
  * frontend/src/components/shared/ConfirmSpendModal.tsx;
@@ -179,10 +181,10 @@ export const playerShopMachine = setup({
         src: 'buyShelfItem',              // POST /players/me/shelf/{id}/buy → RPC
         // Обещание → 'purchased' (наставнику «⏳»); Stars-предмет → сразу
         // 'fulfilled', эффект выдан в той же транзакции:
-        //   light_trial             → неделя light со следующего пн (одноразово);
-        //   schedule_cooldown_reset → кулдаун смены графика снят;
-        //   title                   → звание из meta лота встаёт игроку.
+        //   light_trial → неделя light со следующего пн (одноразово);
+        //   title       → звание из meta лота встаёт игроку.
         // Гейты эффекта проверяются ДО списания — капли не сгорают впустую.
+        // Списывается цена ЛОТА (её назначил наставник), не цена каталога.
         onDone: { target: 'loadingShop', actions: 'clearSelection' },
         onError: { target: 'browsingShop', actions: 'clearSelection' }
       }

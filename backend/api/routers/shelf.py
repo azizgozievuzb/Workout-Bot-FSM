@@ -56,14 +56,37 @@ class CatalogItem(BaseModel):
     key: str
     title: str
     price_stars: int
-    # Эконом-патч №1: цена лота в каплях — из каталога, а не из головы наставника
-    # (цены Э.2a финальные, источник правды один).
+    # S62-2: это РЕКОМЕНДОВАННЫЙ ОРИЕНТИР (цены Э.5), а не цена выкупа. Цену
+    # назначает наставник при размещении; по ориентиру подсвечивается ступень.
     price_drops: int
 
 
 class PriceLimits(BaseModel):
     min: int
     max: int
+
+
+class LotPricePreset(BaseModel):
+    """Ступень цены лота: наставник выбирает смысл, цифру считает система."""
+    key: str
+    label: str
+    percent: int
+    price: int
+
+
+class LotPricing(BaseModel):
+    """S62-2/S62-3.2: рельсы цены лота для КОНКРЕТНОГО игрока.
+
+    `cap` — теоретический месячный потолок капель (подсказка «при идеальном
+    месяце твой игрок заработает до N 💧»). ⚠️ Инвариант §1: это потолок формул;
+    фактический заработок и баланс игрока наставнику не показываются никогда.
+    `recommended` — key каталога → key ступени, ближайшей к ориентиру Э.5.
+    """
+    cap: int
+    min: int
+    max: int
+    presets: list[LotPricePreset]
+    recommended: dict[str, str] = {}
 
 
 class ShelfCatalogResp(BaseModel):
@@ -128,12 +151,16 @@ class PlayerPageResp(BaseModel):
     # его посмотреть (в 8d отчёт жил только в уведомлении). Файлы чистит ретеншн
     # через 30 дней после исполнения, тогда строка отсюда пропадает сама.
     reports: list[ShelfItemOut] = []
-    reputation_count: int          # сколько обещаний исполнено (Д3 — главная цифра)
-    reputation_drops: int          # на сколько капель — расшифровка под ней
+    # S62-3.3: единая репутация — главная цифра теперь СУММА КАПЕЛЬ
+    # (исполненные обещания + выкупленные лоты), счёт позиций — расшифровка.
+    reputation_count: int
+    reputation_drops: int
     pending_count: int
     gift_balance: int
-    price_limits: PriceLimits
+    price_limits: PriceLimits      # админ-лимиты цены ВИДЕО-ОБЕЩАНИЯ (не лота)
     catalog: list[CatalogItem]
+    # S62-2: ступени и коридор цены лота для этого игрока.
+    lot_pricing: LotPricing
     # Эконом-патч №1: звание, выкупленное игроком (лот `title`) — видно в досье.
     player_title: str | None = None
     # Дарение заморозки за капли из пула (хвост 4). Цена = витринной (анти-арбитраж),
@@ -150,6 +177,10 @@ class PatchItemReq(BaseModel):
 class StarItemReq(BaseModel):
     player_id: UUID
     catalog_key: str
+    # S62-2: цену лота назначает наставник — ступенью или своей цифрой. Коридор
+    # проверяется здесь (до счёта Stars), чтобы не брать деньги за лот, который
+    # потом окажется невыставляемым.
+    price_drops: int = Field(ge=1)
     # Свободный текст звания для лота `title` (лимит по вёрстке).
     title_text: str | None = None
 
@@ -310,6 +341,55 @@ async def _blocked_keys(db, player_id: str, partnership_id: str) -> set[str]:
     return blocked
 
 
+async def _lot_pricing(db, player_id: str, catalog: list[CatalogItem]) -> LotPricing:
+    """Рельсы цены лота для этого игрока (S62-2): ступени от его теоретического
+    месячного потолка + коридор свободного ввода + рекомендованная ступень."""
+    cap = await shelf_svc.player_month_cap(db, player_id)
+    presets = shelf_svc.lot_price_presets(cap)
+    recommended: dict[str, str] = {}
+    for c in catalog:
+        key = shelf_svc.recommended_preset(presets, c.price_drops)
+        if key:
+            recommended[c.key] = key
+    return LotPricing(
+        cap=cap,
+        min=shelf_svc.LOT_PRICE_MIN,
+        max=cap,
+        presets=[LotPricePreset(**p) for p in presets],
+        recommended=recommended,
+    )
+
+
+async def _assert_lot_price(db, player_id: str, price: int) -> None:
+    """Коридор цены лота на входе (S62-3.2). Тот же коридор держит RPC при смене
+    цены — здесь отказ приходит ДО счёта Stars, а не после оплаты."""
+    cap = await shelf_svc.player_month_cap(db, player_id)
+    if not (shelf_svc.LOT_PRICE_MIN <= price <= cap):
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "PRICE_OUT_OF_CORRIDOR",
+                    "min": shelf_svc.LOT_PRICE_MIN, "max": cap},
+        )
+
+
+async def _set_lot_price(db, responsible_id: str, item_id: str, price: int) -> None:
+    """Смена цены выставленного лота каталога — только через RPC: коридор и
+    «только вниз» проверяются атомарно, между чтением и записью нет окна."""
+    res = await db.rpc("set_shelf_item_price", {
+        "p_responsible_id": responsible_id,
+        "p_item_id": item_id,
+        "p_price": price,
+    }).execute()
+    out = res.data if isinstance(res.data, dict) else {}
+    if out.get("ok"):
+        return
+    code = out.get("code") or "PRICE_UPDATE_FAILED"
+    status = 409 if code in ("PRICE_ONLY_DOWN", "ITEM_LOCKED", "NOT_A_CATALOG_LOT") else 400
+    if code == "ITEM_NOT_FOUND":
+        status = 404
+    raise HTTPException(status_code=status, detail=out or {"code": code})
+
+
 async def _freeze_gift_price(db) -> int:
     """Цена дарения заморозки = цене заморозки в витрине игрока (Э.1: арбитража нет).
     Одно число в БД, не две константы в разных файлах."""
@@ -448,6 +528,7 @@ async def player_page(
         gift_balance=int(me.get("gift_balance") or 0),
         price_limits=PriceLimits(min=lo, max=hi),
         catalog=catalog,
+        lot_pricing=await _lot_pricing(db, str(player_id), catalog),
         player_title=player.get("player_title"),
         freeze_gift_price=await _freeze_gift_price(db),
         freeze_gift_cap_reached=(
@@ -536,8 +617,9 @@ async def buy_star_item(
     body: StarItemReq, current_user: dict = Depends(get_current_user)
 ) -> InvoiceResponse:
     """R покупает предмет каталога за Stars и сразу выставляет его на полку игрока.
-    Инвентаря нет — лот создаётся в fulfill. Цена в каплях приходит ИЗ КАТАЛОГА
-    (эконом-патч №1): цены Э.2a финальные, руками их больше не вводят."""
+    Инвентаря нет — лот создаётся в fulfill. Цену в каплях назначает НАСТАВНИК
+    (S62-2): ступенью или своей цифрой в коридоре игрока. Коридор фиксируется
+    здесь, в момент размещения: смена режима игрока потом цену не трогает."""
     db = await get_supabase()
     me = await _mentor(db, current_user)
     partnership_id = await _pair(db, me["id"], str(body.player_id))
@@ -552,7 +634,8 @@ async def buy_star_item(
     if cat["key"] in blocked:
         raise HTTPException(status_code=409, detail={"code": "LOT_UNAVAILABLE_FOR_PLAYER"})
 
-    price_drops = int(cat["price_drops"])
+    price_drops = int(body.price_drops)
+    await _assert_lot_price(db, str(body.player_id), price_drops)
     title = cat["title"]
     meta: dict = {
         "catalog_key": cat["key"],
@@ -605,11 +688,14 @@ async def patch_item(
         raise HTTPException(status_code=409, detail={"code": "ITEM_LOCKED", "status": item["status"]})
 
     update: dict = {}
-    if body.price_drops is not None:
-        # Цена предмета каталога зафиксирована строкой каталога (эконом-патч №1):
-        # правка после выставления вернула бы арбитраж с витриной игрока.
-        if item.get("type") != "promise":
-            raise HTTPException(status_code=409, detail={"code": "PRICE_FIXED_BY_CATALOG"})
+    if body.price_drops is not None and item.get("type") != "promise":
+        # Лот каталога (S62-2/S62-3.2): цену ставит наставник, но менять её можно
+        # ТОЛЬКО вниз и только внутри коридора игрока. Оба гейта и гонку
+        # «прочитал/записал» держит RPC, не питон.
+        await _set_lot_price(db, me["id"], str(item_id), body.price_drops)
+    elif body.price_drops is not None:
+        # Видео-обещание: свободный ввод в админ-лимитах, как было (S62-3.2 их
+        # не трогает — личный товар наставника, он сам его ценит).
         lo, hi = await shelf_svc.price_limits(db)
         if not (lo <= body.price_drops <= hi):
             raise HTTPException(status_code=400, detail={"code": "PRICE_OUT_OF_LIMITS", "min": lo, "max": hi})
@@ -622,21 +708,25 @@ async def patch_item(
             pass
         update["status"] = body.status
     if not update:
-        raise HTTPException(status_code=400, detail={"code": "NOTHING_TO_UPDATE"})
+        if body.price_drops is None:
+            raise HTTPException(status_code=400, detail={"code": "NOTHING_TO_UPDATE"})
+        # Цену лота уже записала RPC — перечитываем строку и отдаём её.
+        return _item_out(await _own_item(db, me["id"], str(item_id)))
 
     res = await db.table("shelf_items").update(update).eq("id", str(item_id)).execute()
     if not res.data:
         raise HTTPException(status_code=404, detail={"code": "ITEM_NOT_FOUND"})
+    row = res.data[0]
 
     if update.get("status") == "active" and item["status"] == "hidden":
         await _notify_player(
             db, str(item["_player_id"]),
             type="shelf_new_item",
             title="🎁 Наставник вернул лот на полку",
-            message=f"«{item.get('title')}» — {update.get('price_drops', item['price_drops'])} 💧",
+            message=f"«{item.get('title')}» — {row.get('price_drops', item['price_drops'])} 💧",
             payload={"item_id": str(item_id)},
         )
-    return _item_out(res.data[0])
+    return _item_out(row)
 
 
 @router.delete("/items/{item_id}", response_model=OkResp)

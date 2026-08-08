@@ -34,22 +34,13 @@ const EMPTY_SHELF_SLOT_TEXT = 'Здесь появится подарок от �
 /* 8d.1 (П.8b, находка №26): у Stars-предмета свой текст — «выполнено» это
    статус ОБЕЩАНИЯ, к предмету он приклеился по ошибке. Строка отвечает игроку
    на вопрос «что мне это дало». Дефолт страхует расширение каталога.
-   freeze/photo_reroll ушли из каталога полки в эконом-патче №1 (Э.1). */
+   freeze/photo_reroll ушли из каталога полки в эконом-патче №1 (Э.1),
+   сброс кулдауна графика — в допостановке v2 (S62-3.1). */
 const STAR_ITEM_EFFECT: Record<string, string> = {
     light_trial: '✅ Неделя light-режима',
-    schedule_cooldown_reset: '✅ Кулдаун смены графика снят',
     title: '✅ Звание получено',
 };
 const STAR_ITEM_EFFECT_DEFAULT = '✅ Получено';
-
-/* Лоты, у которых выкуп имеет смысл не всегда: гейт живёт на бэке (RPC), но
-   игроку он обязан быть ВИДЕН до тапа — серой кнопкой и тостом (П.9, урок №3). */
-function lotBlockReason(item: ShelfItem, shop: PlayerShopState): string | null {
-    if (item.star_catalog_key === 'schedule_cooldown_reset' && !shop.schedule_cooldown_active) {
-        return 'Кулдаун смены графика сейчас не идёт — сбрасывать нечего';
-    }
-    return null;
-}
 
 /* Смоук 8d.1: «Мои покупки» показывали ВСЮ историю пары без лимита. Наверху
    держим только то, где от игрока ещё ждут шага; всё остальное — чек, ему
@@ -530,7 +521,6 @@ const PlayerShop: React.FC = () => {
                         {shop.shelf.map(item => {
                             const mine = acting?.id === item.id ? acting.action : null;
                             const isBusy = acting !== null;
-                            const blocked = lotBlockReason(item, shop);
                             return (
                                 <div key={item.id} className="shelf-player-card">
                                     <div className="shelf-player-card-title">
@@ -555,13 +545,9 @@ const PlayerShop: React.FC = () => {
                                             </button>
                                         )}
                                         <button
-                                            className={`cube-btn-sm${blocked ? ' cube-btn-sm--muted' : ''}`}
+                                            className="cube-btn-sm"
                                             disabled={isBusy}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                if (blocked) { hapticNotification('warning'); showToast(blocked); return; }
-                                                askBuyLot(item);
-                                            }}>
+                                            onClick={(e) => { e.stopPropagation(); askBuyLot(item); }}>
                                             {mine === 'buy' ? 'Покупаем…' : 'Купить'}
                                         </button>
                                         <button className="cube-btn-sm" disabled={isBusy}

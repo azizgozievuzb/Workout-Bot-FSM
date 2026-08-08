@@ -670,6 +670,60 @@
     margin-bottom: 8px;
 }
 
+/* ---------- Ступени цены лота (S62-2) ----------
+   Пять кнопок в два ряда: на 360px пять в строку дают ~65px на ячейку —
+   подпись тяжести туда не влезает. Красим ТОЛЬКО --tg-theme-* (урок №2). */
+
+.lot-price-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    margin: 6px 0 8px;
+}
+
+.lot-price-step {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 8px 4px;
+    border: 1px solid var(--tg-theme-hint-color, #708499);
+    border-radius: 10px;
+    background: transparent;
+    color: var(--tg-theme-text-color, #fff);
+    cursor: pointer;
+    text-align: center;
+}
+
+.lot-price-step.active {
+    border-color: var(--tg-theme-button-color, #5288c1);
+    background: var(--tg-theme-button-color, #5288c1);
+    color: var(--tg-theme-button-text-color, #fff);
+}
+
+.lot-price-step:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.lot-price-step-label {
+    font-size: 11px;
+    line-height: 1.15;
+}
+
+.lot-price-step-value {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.lot-price-step-tag {
+    font-size: 9px;
+    opacity: 0.75;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
 /* ---------- Шапка наставника (пул капель) ---------- */
 
 .mentor-pool-row {

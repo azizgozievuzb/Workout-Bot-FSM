@@ -27,7 +27,8 @@ export interface CatalogItem {
     key: string;
     title: string;
     price_stars: number;
-    /** Эконом-патч №1: цена выкупа для игрока — из каталога, руками не вводится. */
+    /** S62-2: РЕКОМЕНДОВАННЫЙ ОРИЕНТИР цены, а не цена выкупа — по нему
+        подсвечивается ступень «рекомендуем». Цену назначает наставник. */
     price_drops: number;
 }
 
@@ -38,6 +39,25 @@ export const MAX_TITLE_LEN = 24;
 export interface PriceLimits {
     min: number;
     max: number;
+}
+
+/** Ступень цены лота: наставник выбирает смысл, цифру считает бэк (S62-2). */
+export interface LotPricePreset {
+    key: string;
+    label: string;
+    percent: number;
+    price: number;
+}
+
+export interface LotPricing {
+    /** Теоретический месячный потолок капель игрока — подсказка наставнику.
+        ⚠️ Инвариант §1: это потолок ФОРМУЛ, не заработок и не баланс игрока. */
+    cap: number;
+    min: number;
+    max: number;
+    presets: LotPricePreset[];
+    /** key каталога → key рекомендованной ступени. */
+    recommended: Record<string, string>;
 }
 
 /** 8d.1 (П.3a): атрибут досье — чип «🎯 Цель: похудеть» у фото игрока. */
@@ -70,12 +90,16 @@ export interface PlayerPage {
     shelf: ShelfItem[];
     pending: ShelfItem[];
     reports: ShelfItem[];       // исполненные обещания с видеоотчётом игрока
-    reputation_count: number;   // исполнено обещаний (Д3 — главная цифра)
-    reputation_drops: number;   // на сколько капель — расшифровка
+    /** S62-3.3: единая репутация — главная цифра СУММА КАПЕЛЬ (исполненные
+        обещания + выкупленные лоты), счёт позиций ушёл в расшифровку. */
+    reputation_count: number;
+    reputation_drops: number;
     pending_count: number;
     gift_balance: number;
-    price_limits: PriceLimits;
+    price_limits: PriceLimits;  // админ-лимиты цены ВИДЕО-ОБЕЩАНИЯ (не лота)
     catalog: CatalogItem[];
+    /** S62-2: ступени и коридор цены лота для этого игрока. */
+    lot_pricing: LotPricing;
     /** Звание игрока (лот `title`), если выкуплено. */
     player_title: string | null;
     /** Дарение заморозки: цена = витринной, cap_reached — запас игрока полон. */
@@ -137,10 +161,10 @@ export async function createPromise(params: {
 }
 
 export async function createStarItemInvoice(
-    playerId: string, catalogKey: string, titleText?: string,
+    playerId: string, catalogKey: string, priceDrops: number, titleText?: string,
 ): Promise<{ payment_id: string; invoice_link: string }> {
     const { data } = await api.post('/shelf/star-item', {
-        player_id: playerId, catalog_key: catalogKey,
+        player_id: playerId, catalog_key: catalogKey, price_drops: priceDrops,
         ...(titleText ? { title_text: titleText } : {}),
     });
     return data;

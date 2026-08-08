@@ -2,7 +2,7 @@ import React, { useCallback, useState } from 'react';
 import {
     createPromise, createStarItemInvoice, deleteShelfItem, patchShelfItem,
 } from '../../api/shelf';
-import type { CatalogItem, PlayerPage, ShelfItem } from '../../api/shelf';
+import type { CatalogItem, LotPricing, PlayerPage, ShelfItem } from '../../api/shelf';
 import { MAX_TITLE_LEN, TITLE_LOT_KEY } from '../../api/shelf';
 import { openStarInvoice, pollPayment } from '../../utils/starPayment';
 import { hapticImpact, hapticNotification } from '../../utils/haptic';
@@ -47,9 +47,74 @@ function fmtDate(iso: string | null): string {
 
 type VideoTarget = { itemId: string; kind: 'promise' | 'report'; title: string };
 
+/* S62-2 — выбор цены лота: «кто размещает — тот и ценит». Наставник выбирает
+   СМЫСЛ (ступень тяжести), цифру под неё считает бэк от теоретического
+   месячного потолка ЭТОГО игрока; пятый вариант — своя цифра в коридоре.
+
+   ⚠️ Инвариант §1: подсказка говорит только про ПОТОЛОК ФОРМУЛ. Фактический
+   заработок и баланс игрока наставнику не показываются нигде и никогда. */
+const LotPriceChooser: React.FC<{
+    pricing: LotPricing;
+    /** Ступень, ближайшая к ориентиру каталога (Э.5 живёт рекомендацией). */
+    recommended?: string | null;
+    /** Верхняя граница: потолок игрока при размещении, текущая цена — при снижении. */
+    ceiling: number;
+    value: string;
+    onChange: (v: string) => void;
+    hint?: string;
+}> = ({ pricing, recommended, ceiling, value, onChange, hint }) => {
+    const [custom, setCustom] = useState(false);
+    const num = parseInt(value, 10);
+    const matched = pricing.presets.some((p) => p.price === num && p.price <= ceiling);
+    const showInput = custom || !matched;
+
+    return (
+        <>
+            <div className="shelf-limit-hint">
+                При идеальном месяце твой игрок заработает до {pricing.cap} 💧
+            </div>
+            <div className="cube-modal-label">Цена для игрока</div>
+            <div className="lot-price-grid">
+                {pricing.presets.map((p) => (
+                    <button key={p.key} type="button"
+                        className={`lot-price-step${!showInput && num === p.price ? ' active' : ''}`}
+                        disabled={p.price > ceiling}
+                        onClick={(e) => { e.stopPropagation(); setCustom(false); onChange(String(p.price)); }}>
+                        <span className="lot-price-step-label">{p.label}</span>
+                        <span className="lot-price-step-value">{p.price} 💧</span>
+                        {recommended === p.key && (
+                            <span className="lot-price-step-tag">рекомендуем</span>
+                        )}
+                    </button>
+                ))}
+                <button type="button"
+                    className={`lot-price-step${showInput ? ' active' : ''}`}
+                    onClick={(e) => { e.stopPropagation(); setCustom(true); }}>
+                    <span className="lot-price-step-label">Своя цена</span>
+                    <span className="lot-price-step-value">{pricing.min}–{ceiling} 💧</span>
+                </button>
+            </div>
+            {showInput && (
+                <input className="cube-modal-input" type="number" inputMode="numeric"
+                    value={value} onChange={(e) => onChange(e.target.value)} />
+            )}
+            {hint && <div className="shelf-limit-hint">{hint}</div>}
+        </>
+    );
+};
+
+function priceInCorridor(raw: string, pricing: LotPricing, ceiling: number): boolean {
+    const n = parseInt(raw, 10);
+    return Number.isFinite(n) && n >= pricing.min && n <= ceiling;
+}
+
 const MentorShelfPage: React.FC<Props> = ({ page, reload, onBack, onOpenProfile, show }) => {
     const [busy, setBusy] = useState(false);
-    const [editing, setEditing] = useState<{ id: string; price: string } | null>(null);
+    /* `lot` — предмет каталога: цену меняем ступенями/цифрой и только ВНИЗ.
+       `promise` — своё обещание: свободный ввод в админ-лимитах, как было. */
+    const [editing, setEditing] = useState<
+        { id: string; price: string; kind: 'promise' | 'lot'; ceiling: number } | null
+    >(null);
     const [video, setVideo] = useState<VideoTarget | null>(null);
     const [nudge, setNudge] = useState<'promise' | 'star' | null>(null);
     const [allReports, setAllReports] = useState(false);
@@ -61,20 +126,31 @@ const MentorShelfPage: React.FC<Props> = ({ page, reload, onBack, onOpenProfile,
     const [pTitle, setPTitle] = useState('');
     const [pPrice, setPPrice] = useState('');
 
-    /* Цена лота в каплях больше не вводится руками: она приезжает из каталога
-       (эконом-патч №1, цены Э.2a финальные). Руками вводится только свободный
-       текст звания — у лота `title`. */
+    /* S62-2: цену лота назначает наставник — ступенью или своей цифрой. Дефолт
+       при открытии формы — рекомендованная ступень (ближайшая к ориентиру Э.5). */
     const [starForm, setStarForm] = useState<CatalogItem | null>(null);
+    const [starPrice, setStarPrice] = useState('');
     const [titleText, setTitleText] = useState('');
 
     const playerId = page.player_id;
     const slotsFull = page.slots_used >= page.slots_total;
+    const pricing = page.lot_pricing;
+
+    /* Цена по умолчанию для лота: цифра рекомендованной ступени, а если бэк
+       рекомендации не дал — ближайшее к ориентиру каталога внутри коридора. */
+    const defaultPriceFor = useCallback((c: CatalogItem): string => {
+        const rec = pricing.presets.find((p) => p.key === pricing.recommended[c.key]);
+        if (rec) return String(rec.price);
+        return String(Math.min(Math.max(c.price_drops, pricing.min), pricing.cap));
+    }, [pricing]);
 
     const fail = useCallback((e: any, fallback: string) => {
         hapticNotification('error');
         const d = e?.response?.data?.detail;
         const code = typeof d === 'object' ? d?.code : '';
         if (code === 'PRICE_OUT_OF_LIMITS') show(`Цена должна быть от ${d.min} до ${d.max} 💧`);
+        else if (code === 'PRICE_OUT_OF_CORRIDOR') show(`Цена лота — от ${d.min} до ${d.max} 💧`);
+        else if (code === 'PRICE_ONLY_DOWN') show(`Цену можно только снижать: сейчас ${d.current} 💧`);
         else if (code === 'NO_FREE_SLOT') show(`Свободных слотов нет (${d.used}/${d.total})`);
         else if (code === 'SUBSCRIPTION_INACTIVE') show('Подписка неактивна — продлите её');
         else show(fallback);
@@ -128,10 +204,15 @@ const MentorShelfPage: React.FC<Props> = ({ page, reload, onBack, onOpenProfile,
             show('Напиши звание — без текста лот пустой');
             return;
         }
+        if (!priceInCorridor(starPrice, pricing, pricing.cap)) {
+            show(`Цена лота — от ${pricing.min} до ${pricing.cap} 💧`);
+            return;
+        }
         setBusy(true);
         try {
             const { payment_id, invoice_link } = await createStarItemInvoice(
-                playerId, starForm.key, starForm.key === TITLE_LOT_KEY ? text : undefined,
+                playerId, starForm.key, parseInt(starPrice, 10),
+                starForm.key === TITLE_LOT_KEY ? text : undefined,
             );
             const opened = openStarInvoice(invoice_link, async (status) => {
                 if (status === 'paid') {
@@ -142,16 +223,22 @@ const MentorShelfPage: React.FC<Props> = ({ page, reload, onBack, onOpenProfile,
                 } else {
                     show(status === 'cancelled' ? 'Покупка отменена' : 'Оплата не прошла');
                 }
-                setBusy(false); setStarForm(null); setTitleText('');
+                setBusy(false); setStarForm(null); setStarPrice(''); setTitleText('');
             });
             if (!opened) { show('Оплата недоступна в этом клиенте'); setBusy(false); }
         } catch (e) { fail(e, 'Не удалось создать счёт'); setBusy(false); }
-    }, [starForm, titleText, busy, playerId, show, fail, reload]);
+    }, [starForm, starPrice, pricing, titleText, busy, playerId, show, fail, reload]);
 
     /* ---------- Лоты ---------- */
     const savePrice = useCallback(async () => {
         if (!editing || busy) return;
         const price = parseInt(editing.price, 10);
+        /* Лот: коридор и «только вниз» держит RPC, но отказ должен быть виден
+           ДО запроса — иначе кнопка выглядит мёртвой (урок №3). */
+        if (editing.kind === 'lot' && !priceInCorridor(editing.price, pricing, editing.ceiling)) {
+            show(`Цену можно поставить от ${pricing.min} до ${editing.ceiling} 💧 — только ниже текущей`);
+            return;
+        }
         setBusy(true);
         try {
             await patchShelfItem(editing.id, { price_drops: price });
@@ -160,7 +247,7 @@ const MentorShelfPage: React.FC<Props> = ({ page, reload, onBack, onOpenProfile,
             reload();
         } catch (e) { fail(e, 'Не удалось изменить цену'); }
         finally { setBusy(false); }
-    }, [editing, busy, fail, reload]);
+    }, [editing, busy, pricing, show, fail, reload]);
 
     const republish = useCallback(async (item: ShelfItem) => {
         if (busy) return;
@@ -204,8 +291,9 @@ const MentorShelfPage: React.FC<Props> = ({ page, reload, onBack, onOpenProfile,
         const first = page.catalog[0];
         if (!first) { show('Каталог пуст'); return; }
         setStarForm(first);
+        setStarPrice(defaultPriceFor(first));
         setTitleText('');
-    }, [slotsFull, page.catalog, show, bounce]);
+    }, [slotsFull, page.catalog, show, bounce, defaultPriceFor]);
 
     return (
         <div className="mentor-page-inner">
@@ -233,11 +321,14 @@ const MentorShelfPage: React.FC<Props> = ({ page, reload, onBack, onOpenProfile,
                 </div>
             </div>
 
-            {/* Репутация (Д3) — метрика обещаний, поэтому живёт на полке, не в профиле. */}
+            {/* Репутация (Д3, S62-3.3) — единая метрика вклада наставника: она
+                поощряет и исполнение обещаний, и наполнение полки. Засчёт по
+                принципу «игрок ПОЛУЧИЛ ценность»: обещание — по галочке, лот —
+                по выкупу. Невыполненное сюда не входит, оно давит бейджем «⏳». */}
             <div className="mentor-reputation">
-                🏅 Исполнено обещаний: <b>{page.reputation_count}</b>
+                🏅 Репутация: <b>{page.reputation_drops}</b> 💧
                 <span className="mentor-reputation-hint">
-                    обещаний, которые игрок выкупил, а ты выполнил — на {page.reputation_drops} 💧
+                    исполненные обещания и выкупленные подарки — {page.reputation_count} шт.
                 </span>
             </div>
 
@@ -329,15 +420,23 @@ const MentorShelfPage: React.FC<Props> = ({ page, reload, onBack, onOpenProfile,
                         )}
                     </div>
                     <div className="shelf-lot-actions">
-                        {/* Цену меняем только у обещаний: у предметов каталога она
-                            фиксирована (эконом-патч №1) — иначе цена жила бы в двух
-                            местах и появился бы арбитраж с витриной. */}
-                        {it.type === 'promise' && (
-                            <button className="cube-btn-sm" disabled={busy} title="Сменить цену"
-                                onClick={(e) => { e.stopPropagation(); setEditing({ id: it.id, price: String(it.price_drops) }); }}>
-                                💧
-                            </button>
-                        )}
+                        {/* Цену правим у обоих типов, но по-разному: у обещания —
+                            свободный ввод, у лота каталога — ступени и ТОЛЬКО вниз
+                            (S62-2: игрок, копящий на цену, не должен увидеть её
+                            выросшей). Гейт держит RPC, здесь только форма. */}
+                        <button className="cube-btn-sm" disabled={busy}
+                            title={it.type === 'promise' ? 'Сменить цену' : 'Снизить цену'}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setEditing({
+                                    id: it.id,
+                                    price: String(it.price_drops),
+                                    kind: it.type === 'promise' ? 'promise' : 'lot',
+                                    ceiling: it.price_drops,
+                                });
+                            }}>
+                            💧
+                        </button>
                         {it.status === 'hidden' && (
                             <button className="cube-btn-sm" disabled={busy} title="Перевыставить"
                                 onClick={(e) => { e.stopPropagation(); republish(it); }}>↻</button>
@@ -348,7 +447,7 @@ const MentorShelfPage: React.FC<Props> = ({ page, reload, onBack, onOpenProfile,
                 </div>
             ))}
 
-            {editing && (
+            {editing && editing.kind === 'promise' && (
                 <div className="mentor-inline-form">
                     <input className="cube-modal-input" type="number" inputMode="numeric"
                         value={editing.price}
@@ -360,6 +459,28 @@ const MentorShelfPage: React.FC<Props> = ({ page, reload, onBack, onOpenProfile,
                     </button>
                     <button className="cube-btn-sm" disabled={busy}
                         onClick={(e) => { e.stopPropagation(); setEditing(null); }}>Отмена</button>
+                </div>
+            )}
+
+            {editing && editing.kind === 'lot' && (
+                <div className="mentor-inline-card">
+                    <LotPriceChooser
+                        key={editing.id}
+                        pricing={pricing}
+                        ceiling={editing.ceiling}
+                        value={editing.price}
+                        onChange={(v) => setEditing({ ...editing, price: v })}
+                        hint={`Лот залежался — снижай. Поднять цену нельзя: сейчас ${editing.ceiling} 💧`}
+                    />
+                    <div className="mentor-btn-row">
+                        <button className="cube-btn-sm"
+                            disabled={busy || !priceInCorridor(editing.price, pricing, editing.ceiling)}
+                            onClick={(e) => { e.stopPropagation(); savePrice(); }}>
+                            {busy ? '…' : 'Снизить цену'}
+                        </button>
+                        <button className="cube-btn-sm" disabled={busy}
+                            onClick={(e) => { e.stopPropagation(); setEditing(null); }}>Отмена</button>
+                    </div>
                 </div>
             )}
 
@@ -408,17 +529,21 @@ const MentorShelfPage: React.FC<Props> = ({ page, reload, onBack, onOpenProfile,
                             <button key={c.key}
                                 className={`market-player-chip${starForm.key === c.key ? ' active' : ''}`}
                                 onClick={(e) => {
-                                    e.stopPropagation(); setStarForm(c); setTitleText('');
+                                    e.stopPropagation();
+                                    setStarForm(c); setStarPrice(defaultPriceFor(c)); setTitleText('');
                                 }}>
                                 {c.title} — {c.price_stars} ⭐
                             </button>
                         ))}
                     </div>
-                    {/* Цена выкупа фиксирована каталогом — поля ввода больше нет
-                        (эконом-патч №1): один источник правды на цену. */}
-                    <div className="shelf-limit-hint">
-                        Игрок выкупит за {starForm.price_drops} 💧
-                    </div>
+                    <LotPriceChooser
+                        key={starForm.key}
+                        pricing={pricing}
+                        recommended={pricing.recommended[starForm.key]}
+                        ceiling={pricing.cap}
+                        value={starPrice}
+                        onChange={setStarPrice}
+                    />
                     {starForm.key === TITLE_LOT_KEY && (
                         <>
                             <div className="cube-modal-label">
@@ -435,7 +560,9 @@ const MentorShelfPage: React.FC<Props> = ({ page, reload, onBack, onOpenProfile,
                     )}
                     <div className="mentor-btn-row">
                         <button className="cube-btn-sm"
-                            disabled={busy || (starForm.key === TITLE_LOT_KEY && !titleText.trim())}
+                            disabled={busy
+                                || (starForm.key === TITLE_LOT_KEY && !titleText.trim())
+                                || !priceInCorridor(starPrice, pricing, pricing.cap)}
                             onClick={(e) => { e.stopPropagation(); buyStarItem(); }}>
                             {busy ? '…' : `Купить за ${starForm.price_stars} ⭐`}
                         </button>
