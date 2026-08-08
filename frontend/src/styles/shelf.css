@@ -669,6 +669,17 @@
     opacity: 0.6;
 }
 
+/* Причина заблокированной кнопки (смоук S63, урок №3: блокировка не молчит).
+   Границы приезжают из того же коридора, что валидирует RPC, — не хардкод. */
+.shelf-limit-hint--error {
+    color: var(--tg-theme-destructive-text-color, #e74c3c);
+    opacity: 1;
+}
+
+.cube-modal-input.is-invalid {
+    border: 1px solid var(--tg-theme-destructive-text-color, #e74c3c);
+}
+
 .shelf-catalog-row {
     display: flex;
     flex-wrap: wrap;

@@ -67,6 +67,9 @@ const LotPriceChooser: React.FC<{
     const num = parseInt(value, 10);
     const matched = pricing.presets.some((p) => p.price === num && p.price <= ceiling);
     const showInput = custom || !matched;
+    /* Кнопка «Купить/Снизить» гаснет по этому же условию — молчащая блокировка
+       была находкой смоука S63 (урок №3: у запрета всегда видима причина). */
+    const badCustom = showInput && !priceInCorridor(value, pricing, ceiling);
 
     return (
         <>
@@ -95,8 +98,15 @@ const LotPriceChooser: React.FC<{
                 </button>
             </div>
             {showInput && (
-                <input className="cube-modal-input" type="number" inputMode="numeric"
+                <input
+                    className={`cube-modal-input${badCustom ? ' is-invalid' : ''}`}
+                    type="number" inputMode="numeric"
                     value={value} onChange={(e) => onChange(e.target.value)} />
+            )}
+            {badCustom && (
+                <div className="shelf-limit-hint shelf-limit-hint--error">
+                    от {pricing.min} до {ceiling} 💧
+                </div>
             )}
             {hint && <div className="shelf-limit-hint">{hint}</div>}
         </>
