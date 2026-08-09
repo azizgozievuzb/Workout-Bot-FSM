@@ -336,7 +336,12 @@ const MentorShelfPage: React.FC<Props> = ({ page, reload, onBack, onOpenProfile,
                 принципу «игрок ПОЛУЧИЛ ценность»: обещание — по галочке, лот —
                 по выкупу. Невыполненное сюда не входит, оно давит бейджем «⏳». */}
             <div className="mentor-reputation">
-                🏅 Репутация: <b>{page.reputation_drops}</b> 💧
+                {/* Первая строка — ОДНИМ элементом: у flex-колонки голые
+                    текстовые узлы становятся отдельными flex-элементами и
+                    «Репутация:», число и 💧 встают столбиком (смоук S63). */}
+                <span className="mentor-reputation-main">
+                    🏅 Репутация: <b>{page.reputation_drops}</b> 💧
+                </span>
                 <span className="mentor-reputation-hint">
                     исполненные обещания и выкупленные подарки — {page.reputation_count} шт.
                 </span>
