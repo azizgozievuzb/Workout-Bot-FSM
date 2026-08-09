@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     createPromise, createStarItemInvoice, deleteShelfItem, patchShelfItem,
 } from '../../api/shelf';
@@ -129,7 +129,7 @@ const MentorShelfPage: React.FC<Props> = ({ page, reload, onBack, onOpenProfile,
     /* `lot` — предмет каталога: цену меняем ступенями/цифрой и только ВНИЗ.
        `promise` — своё обещание: свободный ввод в админ-лимитах, как было. */
     const [editing, setEditing] = useState<
-        { id: string; price: string; kind: 'promise' | 'lot'; ceiling: number } | null
+        { id: string; price: string; kind: 'promise' | 'lot' } | null
     >(null);
     const [video, setVideo] = useState<VideoTarget | null>(null);
     const [nudge, setNudge] = useState<'promise' | 'star' | null>(null);
@@ -246,13 +246,27 @@ const MentorShelfPage: React.FC<Props> = ({ page, reload, onBack, onOpenProfile,
     }, [starForm, starPrice, pricing, titleText, busy, playerId, show, fail, reload]);
 
     /* ---------- Лоты ---------- */
+    /* Потолок снижения = ЖИВАЯ цена лота из `page`, а не снимок, взятый при
+       открытии формы (смоук S63): после успешного снижения форма показывала
+       старые 200 — старый диапазон, старую подпись, и кнопка пускала цену выше
+       уже сохранённой. Теперь потолок пересчитывается из данных сервера, а
+       исчезнувший лот сам закрывает форму. */
+    const editCeiling = useMemo(() => {
+        if (!editing) return 0;
+        return page.shelf.find((i) => i.id === editing.id)?.price_drops ?? 0;
+    }, [editing, page.shelf]);
+
+    useEffect(() => {
+        if (editing && !page.shelf.some((i) => i.id === editing.id)) setEditing(null);
+    }, [editing, page.shelf]);
+
     const savePrice = useCallback(async () => {
         if (!editing || busy) return;
         const price = parseInt(editing.price, 10);
         /* Лот: коридор и «только вниз» держит RPC, но отказ должен быть виден
            ДО запроса — иначе кнопка выглядит мёртвой (урок №3). */
-        if (editing.kind === 'lot' && !priceInCorridor(editing.price, pricing, editing.ceiling)) {
-            show(`Цену можно поставить от ${pricing.min} до ${editing.ceiling} 💧 — только ниже текущей`);
+        if (editing.kind === 'lot' && !priceInCorridor(editing.price, pricing, editCeiling)) {
+            show(`Цену можно поставить от ${pricing.min} до ${editCeiling} 💧 — только ниже текущей`);
             return;
         }
         setBusy(true);
@@ -263,7 +277,7 @@ const MentorShelfPage: React.FC<Props> = ({ page, reload, onBack, onOpenProfile,
             reload();
         } catch (e) { fail(e, 'Не удалось изменить цену'); }
         finally { setBusy(false); }
-    }, [editing, busy, pricing, show, fail, reload]);
+    }, [editing, busy, pricing, editCeiling, show, fail, reload]);
 
     const republish = useCallback(async (item: ShelfItem) => {
         if (busy) return;
@@ -453,7 +467,6 @@ const MentorShelfPage: React.FC<Props> = ({ page, reload, onBack, onOpenProfile,
                                     id: it.id,
                                     price: String(it.price_drops),
                                     kind: it.type === 'promise' ? 'promise' : 'lot',
-                                    ceiling: it.price_drops,
                                 });
                             }}>
                             💧
@@ -488,14 +501,14 @@ const MentorShelfPage: React.FC<Props> = ({ page, reload, onBack, onOpenProfile,
                     <LotPriceChooser
                         key={editing.id}
                         pricing={pricing}
-                        ceiling={editing.ceiling}
+                        ceiling={editCeiling}
                         value={editing.price}
                         onChange={(v) => setEditing({ ...editing, price: v })}
-                        hint={`Лот залежался — снижай. Поднять цену нельзя: сейчас ${editing.ceiling} 💧`}
+                        hint={`Лот залежался — снижай. Поднять цену нельзя: сейчас ${editCeiling} 💧`}
                     />
                     <div className="mentor-btn-row">
                         <button className="cube-btn-sm"
-                            disabled={busy || !priceInCorridor(editing.price, pricing, editing.ceiling)}
+                            disabled={busy || !priceInCorridor(editing.price, pricing, editCeiling)}
                             onClick={(e) => { e.stopPropagation(); savePrice(); }}>
                             {busy ? '…' : 'Снизить цену'}
                         </button>
