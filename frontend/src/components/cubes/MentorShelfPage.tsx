@@ -126,8 +126,9 @@ function priceInCorridor(raw: string, pricing: LotPricing, ceiling: number): boo
 
 const MentorShelfPage: React.FC<Props> = ({ page, reload, onBack, onOpenProfile, show }) => {
     const [busy, setBusy] = useState(false);
-    /* `lot` — предмет каталога: цену меняем ступенями/цифрой и только ВНИЗ.
-       `promise` — своё обещание: свободный ввод в админ-лимитах, как было. */
+    /* Цену меняем только ВНИЗ у обоих типов (S62-2 + S62-5), различается лишь
+       форма: `lot` — ступени/цифра в коридоре игрока, `promise` — свободный
+       ввод в админ-лимитах. Потолком в обоих случаях служит текущая цена. */
     const [editing, setEditing] = useState<
         { id: string; price: string; kind: 'promise' | 'lot' } | null
     >(null);
@@ -260,13 +261,24 @@ const MentorShelfPage: React.FC<Props> = ({ page, reload, onBack, onOpenProfile,
         if (editing && !page.shelf.some((i) => i.id === editing.id)) setEditing(null);
     }, [editing, page.shelf]);
 
+    /* Обещание: тот же «только вниз», но коридор — админ-лимиты (S62-5). */
+    const promiseBadPrice = useMemo(() => {
+        if (!editing || editing.kind !== 'promise') return false;
+        const n = parseInt(editing.price, 10);
+        return !Number.isFinite(n) || n < page.price_limits.min || n > editCeiling;
+    }, [editing, editCeiling, page.price_limits.min]);
+
     const savePrice = useCallback(async () => {
         if (!editing || busy) return;
         const price = parseInt(editing.price, 10);
-        /* Лот: коридор и «только вниз» держит RPC, но отказ должен быть виден
+        /* Коридор и «только вниз» держит RPC, но отказ должен быть виден
            ДО запроса — иначе кнопка выглядит мёртвой (урок №3). */
         if (editing.kind === 'lot' && !priceInCorridor(editing.price, pricing, editCeiling)) {
             show(`Цену можно поставить от ${pricing.min} до ${editCeiling} 💧 — только ниже текущей`);
+            return;
+        }
+        if (editing.kind === 'promise' && promiseBadPrice) {
+            show(`Цену можно поставить от ${page.price_limits.min} до ${editCeiling} 💧 — только ниже текущей`);
             return;
         }
         setBusy(true);
@@ -277,7 +289,7 @@ const MentorShelfPage: React.FC<Props> = ({ page, reload, onBack, onOpenProfile,
             reload();
         } catch (e) { fail(e, 'Не удалось изменить цену'); }
         finally { setBusy(false); }
-    }, [editing, busy, pricing, editCeiling, show, fail, reload]);
+    }, [editing, busy, pricing, editCeiling, promiseBadPrice, page.price_limits.min, show, fail, reload]);
 
     const republish = useCallback(async (item: ShelfItem) => {
         if (busy) return;
@@ -481,15 +493,22 @@ const MentorShelfPage: React.FC<Props> = ({ page, reload, onBack, onOpenProfile,
                 </div>
             ))}
 
+            {/* S62-5: у обещания цена тоже меняется только ВНИЗ — потолок здесь
+                текущая цена лота, а не админ-максимум. Гейт держит RPC (042),
+                форма лишь показывает границы и причину блокировки. */}
             {editing && editing.kind === 'promise' && (
                 <div className="mentor-inline-form">
-                    <input className="cube-modal-input" type="number" inputMode="numeric"
+                    <input
+                        className={`cube-modal-input${promiseBadPrice ? ' is-invalid' : ''}`}
+                        type="number" inputMode="numeric"
                         value={editing.price}
                         onChange={(e) => setEditing({ ...editing, price: e.target.value })} />
-                    <span className="shelf-limit-hint">{page.price_limits.min}–{page.price_limits.max} 💧</span>
-                    <button className="cube-btn-sm" disabled={busy}
+                    <span className={`shelf-limit-hint${promiseBadPrice ? ' shelf-limit-hint--error' : ''}`}>
+                        {page.price_limits.min}–{editCeiling} 💧 · поднять цену нельзя
+                    </span>
+                    <button className="cube-btn-sm" disabled={busy || promiseBadPrice}
                         onClick={(e) => { e.stopPropagation(); savePrice(); }}>
-                        {busy ? '…' : 'Сохранить'}
+                        {busy ? '…' : 'Снизить цену'}
                     </button>
                     <button className="cube-btn-sm" disabled={busy}
                         onClick={(e) => { e.stopPropagation(); setEditing(null); }}>Отмена</button>

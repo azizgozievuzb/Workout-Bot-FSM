@@ -373,8 +373,10 @@ async def _assert_lot_price(db, player_id: str, price: int) -> None:
 
 
 async def _set_lot_price(db, responsible_id: str, item_id: str, price: int) -> None:
-    """Смена цены выставленного лота каталога — только через RPC: коридор и
-    «только вниз» проверяются атомарно, между чтением и записью нет окна."""
+    """Смена цены выставленного лота — только через RPC: коридор и «только вниз»
+    проверяются атомарно, между чтением и записью нет окна. С 042 (S62-5) сюда
+    ходят оба типа; коридор RPC выбирает сама — потолок игрока для лота
+    каталога, админ-лимиты `shelf_lot` для обещания."""
     res = await db.rpc("set_shelf_item_price", {
         "p_responsible_id": responsible_id,
         "p_item_id": item_id,
@@ -384,7 +386,8 @@ async def _set_lot_price(db, responsible_id: str, item_id: str, price: int) -> N
     if out.get("ok"):
         return
     code = out.get("code") or "PRICE_UPDATE_FAILED"
-    status = 409 if code in ("PRICE_ONLY_DOWN", "ITEM_LOCKED", "NOT_A_CATALOG_LOT") else 400
+    # NOT_A_CATALOG_LOT ушёл вместе с 042: RPC принимает оба типа лота (S62-5).
+    status = 409 if code in ("PRICE_ONLY_DOWN", "ITEM_LOCKED") else 400
     if code == "ITEM_NOT_FOUND":
         status = 404
     raise HTTPException(status_code=status, detail=out or {"code": code})
@@ -688,18 +691,13 @@ async def patch_item(
         raise HTTPException(status_code=409, detail={"code": "ITEM_LOCKED", "status": item["status"]})
 
     update: dict = {}
-    if body.price_drops is not None and item.get("type") != "promise":
-        # Лот каталога (S62-2/S62-3.2): цену ставит наставник, но менять её можно
-        # ТОЛЬКО вниз и только внутри коридора игрока. Оба гейта и гонку
-        # «прочитал/записал» держит RPC, не питон.
+    if body.price_drops is not None:
+        # S62-2 + S62-5: цену выставленного лота — и каталожного, и обещания —
+        # можно менять ТОЛЬКО вниз и только внутри коридора. Игрок, копящий на
+        # цену, не должен увидеть её выросшей; какого типа лот — ему всё равно.
+        # Оба гейта и гонку «прочитал/записал» держит RPC, не питон; коридор
+        # внутри неё свой на тип (потолок игрока / админ-лимиты).
         await _set_lot_price(db, me["id"], str(item_id), body.price_drops)
-    elif body.price_drops is not None:
-        # Видео-обещание: свободный ввод в админ-лимитах, как было (S62-3.2 их
-        # не трогает — личный товар наставника, он сам его ценит).
-        lo, hi = await shelf_svc.price_limits(db)
-        if not (lo <= body.price_drops <= hi):
-            raise HTTPException(status_code=400, detail={"code": "PRICE_OUT_OF_LIMITS", "min": lo, "max": hi})
-        update["price_drops"] = body.price_drops
     if body.status is not None:
         if body.status not in shelf_svc.OCCUPYING_STATUSES:
             raise HTTPException(status_code=400, detail={"code": "BAD_STATUS"})
