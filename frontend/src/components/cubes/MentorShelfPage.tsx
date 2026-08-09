@@ -73,9 +73,15 @@ const LotPriceChooser: React.FC<{
 
     return (
         <>
-            <div className="shelf-limit-hint">
-                При идеальном месяце твой игрок заработает до {pricing.cap} 💧
-            </div>
+            {/* Потолок игрока — только при РАЗМЕЩЕНИИ. В форме снижения потолок
+                другой (текущая цена), и два разных потолка на одном экране
+                читались противоречиво: «до 650 💧» над коридором 10–200
+                (смоук S63). Там причину объясняет hint «Поднять цену нельзя». */}
+            {ceiling >= pricing.cap && (
+                <div className="shelf-limit-hint">
+                    При идеальном месяце твой игрок заработает до {pricing.cap} 💧
+                </div>
+            )}
             <div className="cube-modal-label">Цена для игрока</div>
             <div className="lot-price-grid">
                 {pricing.presets.map((p) => (
