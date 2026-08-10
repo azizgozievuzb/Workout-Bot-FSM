@@ -42,6 +42,15 @@ const STAR_ITEM_EFFECT: Record<string, string> = {
 };
 const STAR_ITEM_EFFECT_DEFAULT = '✅ Получено';
 
+function todayShortISO(): string {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function fmtShortDate(iso: string): string {
+    const [, m, d] = iso.split('-');
+    return d && m ? `${d}.${m}` : iso;
+}
+
 /* Смоук 8d.1: «Мои покупки» показывали ВСЮ историю пары без лимита. Наверху
    держим только то, где от игрока ещё ждут шага; всё остальное — чек, ему
    место в свёрнутой истории. Признак «ждут шага» ровно один: у карточки есть
@@ -339,6 +348,22 @@ const PlayerShop: React.FC = () => {
         ? Math.max(0, shop.shelf_slots_total - shop.shelf.length)
         : 0;
 
+    /* Смоук S63: игрок выкупал трайал и нигде не видел, что light включится
+       со СЛЕДУЮЩЕГО понедельника, а не сейчас (даты жили только в панели
+       расписания — экране за скрытым жестом). Формулировки те же, что там:
+       окно [from, until) полуоткрытое, обе границы — понедельники. */
+    const trialLine = (item: ShelfItem): string | null => {
+        if (item.star_catalog_key !== 'light_trial') return null;
+        if (!sched?.light_trial_from || !sched.light_trial_until) return null;
+        if (sched.light_trial_active) {
+            return `🌤 Идёт до понедельника ${fmtShortDate(sched.light_trial_until)}`;
+        }
+        if (todayShortISO() < sched.light_trial_from) {
+            return `🌤 Включится с понедельника ${fmtShortDate(sched.light_trial_from)}`;
+        }
+        return null;
+    };
+
     /* Одна карточка «Моих покупок» — рисуется и в активных, и в истории. */
     const renderPurchase = (item: ShelfItem) => {
         const mine = acting?.id === item.id ? acting.action : null;
@@ -358,6 +383,9 @@ const PlayerShop: React.FC = () => {
                     {isPromise ? '🎬 ' : '⭐ '}{item.title}
                 </div>
                 <div className="shelf-lot-meta">{item.price_drops} 💧 · {statusLine}</div>
+                {trialLine(item) && (
+                    <div className="shelf-lot-meta">{trialLine(item)}</div>
+                )}
 
                 {/* Главная кнопка текущего шага — во всю ширину */}
                 {pending && (
