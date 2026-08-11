@@ -166,10 +166,16 @@ const MentorPlayerProfile: React.FC<Props> = ({
                     </div>
                 ) : (
                     <div className="mentor-btn-row">
-                        <button className="cube-btn-sm" disabled={busy}
+                        {/* Серая, но живая — тот же паттерн П.9, что у заморозки.
+                            Смоук S63: раньше пустой пул гасил только заморозку, а
+                            «Подарить капли» выглядела рабочей и отказывала лишь по
+                            тапу — две кнопки одного блока вели себя по-разному. */}
+                        <button
+                            className={`cube-btn-sm${page.gift_balance < 1 ? ' cube-btn-sm--muted' : ''}`}
+                            disabled={busy}
                             onClick={(e) => {
                                 e.stopPropagation();
-                                if (page.gift_balance < 1) { show('Пул пуст — сначала пополни его'); return; }
+                                if (page.gift_balance < 1) { show('Пул пуст — сначала пополни'); return; }
                                 hapticImpact('light'); setGiftForm(true);
                             }}>
                             💧 Подарить капли
