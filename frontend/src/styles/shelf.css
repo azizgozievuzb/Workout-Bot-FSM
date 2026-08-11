@@ -475,6 +475,12 @@
     font-size: 14px;
 }
 
+/* Та же плашка в шапке Market режима R (S62-6): там она сводка по всем парам,
+   поэтому ужимаем отступ — над ней уже строка подписки. */
+.mentor-reputation--head {
+    margin-top: 8px;
+}
+
 .mentor-reputation-hint {
     font-size: 11px;
     line-height: 1.35;

@@ -247,6 +247,34 @@ async def reputation(db, partnership_id: str) -> tuple[int, int]:
     return len(rows), sum(int(r.get("price_drops") or 0) for r in rows)
 
 
+async def reputation_total(db, responsible_id: str) -> tuple[int, int]:
+    """ОБЩАЯ репутация наставника по ВСЕМ его парам (S62-6).
+
+    Тот же живой агрегат и тот же принцип засчёта, что в ``reputation``, только
+    без фильтра по одной паре: цифра в шапке режима R отвечает на вопрос «что я
+    дал своим игрокам вообще», не заходя к каждому. Пары берём независимо от
+    статуса — репутация это история, разрыв пары её не стирает.
+
+    Инвариант §1 не задет: это сумма СОБСТВЕННЫХ выкупов наставника, из неё не
+    вычислить ни баланс игрока, ни его заработок.
+    """
+    pres = await (
+        db.table("partnerships").select("id").eq("responsible_id", str(responsible_id)).execute()
+    )
+    ids = [r["id"] for r in (pres.data or [])]
+    if not ids:
+        return 0, 0
+    res = await (
+        db.table("shelf_items")
+        .select("price_drops")
+        .in_("partnership_id", ids)
+        .in_("status", ["fulfilled", "archived"])
+        .execute()
+    )
+    rows = res.data or []
+    return len(rows), sum(int(r.get("price_drops") or 0) for r in rows)
+
+
 async def occupied_counts(db, partnership_ids: list[str]) -> dict[str, int]:
     """partnership_id → сколько слотов полки занято (счётчик «🎁 X/N» в строке Market).
 

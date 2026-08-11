@@ -718,6 +718,7 @@ const ResponsibleShop: React.FC = () => {
     const [loadingPlayers, setLoadingPlayers] = useState(true);
     const [giftBalance, setGiftBalance] = useState(0);
     const [sub, setSub] = useState<{ tier: string | null; days: number | null; warn: boolean } | null>(null);
+    const [rep, setRep] = useState<{ drops: number; count: number } | null>(null);
     const [renewBusy, setRenewBusy] = useState(false);
     const [toast, setToast] = useState('');
     const [packs, setPacks] = useState(false);
@@ -761,6 +762,7 @@ const ResponsibleShop: React.FC = () => {
                     days: c.subscription_days_left,
                     warn: c.subscription_warn,
                 });
+                setRep({ drops: c.reputation_drops, count: c.reputation_count });
             })
             .catch(() => {});
     }, [subActive]);
@@ -786,6 +788,20 @@ const ResponsibleShop: React.FC = () => {
                         onClick={(e) => { e.stopPropagation(); hapticImpact('light'); renew(); }}>
                         {renewBusy ? '…' : 'Продлить'}
                     </button>
+                </div>
+            )}
+
+            {/* S62-6: общая репутация по всем парам — сводка «что я дал своим
+                игрокам вообще», без захода к каждому. Цифра per-player живёт на
+                полке игрока; при одном игроке они совпадают, и это нормально. */}
+            {rep && rep.count > 0 && (
+                <div className="mentor-reputation mentor-reputation--head">
+                    <span className="mentor-reputation-main">
+                        🏅 Репутация: <b>{rep.drops}</b> 💧
+                    </span>
+                    <span className="mentor-reputation-hint">
+                        исполненные обещания и выкупленные подарки — {rep.count} шт.
+                    </span>
                 </div>
             )}
 

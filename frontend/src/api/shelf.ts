@@ -115,6 +115,9 @@ export interface ShelfCatalogState {
     tier: string | null;
     subscription_days_left: number | null;
     subscription_warn: boolean;
+    /** S62-6: общая репутация по ВСЕМ парам наставника (сводка в шапке R). */
+    reputation_drops: number;
+    reputation_count: number;
 }
 
 /* ---------- Responsible ---------- */

@@ -98,6 +98,11 @@ class ShelfCatalogResp(BaseModel):
     tier: str | None = None
     subscription_days_left: int | None = None
     subscription_warn: bool = False
+    # S62-6: ОБЩАЯ репутация по всем парам наставника — сводка в шапке режима R,
+    # рядом с пулом. Per-player цифра живёт на полке игрока и считается тем же
+    # агрегатом; при одном игроке они совпадают.
+    reputation_drops: int = 0
+    reputation_count: int = 0
 
 
 class ShelfItemOut(BaseModel):
@@ -433,6 +438,7 @@ async def get_catalog(current_user: dict = Depends(get_current_user)) -> ShelfCa
     me = await _mentor(db, current_user)
     lo, hi = await shelf_svc.price_limits(db)
     days_left = _days_left(me.get("_sub_expires_at"))
+    rep_count, rep_drops = await shelf_svc.reputation_total(db, me["id"])
     return ShelfCatalogResp(
         catalog=await _catalog(db),
         price_limits=PriceLimits(min=lo, max=hi),
@@ -442,6 +448,8 @@ async def get_catalog(current_user: dict = Depends(get_current_user)) -> ShelfCa
         subscription_warn=(
             days_left is not None and days_left <= shelf_svc.SUBSCRIPTION_WARN_DAYS
         ),
+        reputation_drops=rep_drops,
+        reputation_count=rep_count,
     )
 
 
