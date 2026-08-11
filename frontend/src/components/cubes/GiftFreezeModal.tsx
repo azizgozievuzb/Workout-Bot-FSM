@@ -55,7 +55,7 @@ const GiftFreezeModal: React.FC<Props> = ({
                 code === 'INSUFFICIENT_GIFT_BALANCE'
                     ? `В пуле только ${detail?.gift_balance ?? 0} 💧 — пополните`
                     : code === 'FREEZE_CAP'
-                        ? 'У игрока запас заморозок полон'
+                        ? 'У игрока запас заморозок уже полон'
                         : 'Не удалось подарить',
             );
             hapticNotification('error');

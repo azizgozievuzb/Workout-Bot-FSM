@@ -184,7 +184,11 @@ const MentorPlayerProfile: React.FC<Props> = ({
                             onClick={(e) => {
                                 e.stopPropagation();
                                 if (page.freeze_gift_cap_reached) {
-                                    show('У игрока запас заморозок полон (3/3)'); return;
+                                    /* Смоук S63: без цифры. Утечки в «3/3» не было
+                                       (кап — константа, а не запас игрока), но тон
+                                       «я считаю твои вещи» противоречит тому, ради
+                                       чего бэк отдаёт сюда флаг, а не число. */
+                                    show('У игрока запас заморозок уже полон'); return;
                                 }
                                 if (page.gift_balance < page.freeze_gift_price) {
                                     show(`Нужно ${page.freeze_gift_price} 💧 — пополни пул`); return;
