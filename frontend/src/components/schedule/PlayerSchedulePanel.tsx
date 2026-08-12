@@ -107,11 +107,22 @@ const PlayerSchedulePanel: React.FC<Props> = ({
     /* Бесплатная смена (первичная установка / grace) окном не гейтится: тратить
        там нечего, а лишний шаг мешал бы онбордингу. */
     const paidChange = !inGrace && !!changePrice;
+    /* Кулдаун 30 дней (смоук S63): бэк отбивает смену 409 SCHEDULE_COOLDOWN ДО
+       списания, но кнопка этого не знала — игрок открывал окно, где обещаны
+       «Спишется 100 💧» и «вступят со следующего понедельника», жал «Сменить» и
+       получал отказ. Гейтим здесь: серая, но живая, тап называет дату (П.9). */
+    const onCooldown = !!sched && !sched.can_change_now;
     const submitDays = useCallback(() => {
         if (draftDays.length !== 3) return;
+        if (onCooldown) {
+            hapticNotification('error');
+            const na = sched?.next_change_available_at;
+            setMsg(`Смена доступна с ${na ? new Date(na).toLocaleDateString() : 'позже'}`);
+            return;
+        }
         if (paidChange) { setConfirmChange(true); return; }
         void saveDays();
-    }, [draftDays.length, paidChange, saveDays]);
+    }, [draftDays.length, onCooldown, sched, paidChange, saveDays]);
 
     const cooldownText = sched && !sched.can_change_now && sched.next_change_available_at
         ? `Следующая смена доступна с ${new Date(sched.next_change_available_at).toLocaleDateString()}`
@@ -216,7 +227,9 @@ const PlayerSchedulePanel: React.FC<Props> = ({
                     <>
                         <ScheduleDaysPicker selected={draftDays} onChange={setDraftDays} disabled={busy} />
                         <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                            <button className="sched-save-btn" disabled={busy || draftDays.length !== 3} onClick={submitDays}>
+                            <button
+                                className={`sched-save-btn${onCooldown ? ' sched-save-btn--muted' : ''}`}
+                                disabled={busy || draftDays.length !== 3} onClick={submitDays}>
                                 Сохранить
                             </button>
                             <button

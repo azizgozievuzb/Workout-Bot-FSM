@@ -2280,6 +2280,12 @@
     color: var(--tg-theme-text-color, inherit);
 }
 
+/* Смена графика на кулдауне: кнопка серая, но живая — тап называет дату
+   (смоук S63, паттерн П.9). */
+.sched-save-btn--muted {
+    opacity: 0.45;
+}
+
 .player-title-line {
     font-size: 12px;
     font-weight: 600;
