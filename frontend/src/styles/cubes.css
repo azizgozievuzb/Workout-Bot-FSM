@@ -2209,6 +2209,32 @@
     .shop-item-grid--slots { grid-template-columns: repeat(4, 1fr); }
 }
 
+/* Неполный ряд слотов — по центру, а не прижатым влево (смоук S63). Grid с
+   1fr-колонками так не умеет: пустая колонка всё равно занимает место, поэтому
+   для полки переходим на flex с той же шириной ячейки. Число колонок держим
+   одной переменной, чтобы ширина не разъехалась с лестницей выше.
+   Случай premium (4 слота при 3 колонках) даёт ряд 3 + один по центру — это и
+   есть желаемое поведение, ряд из трёх остаётся ровным. */
+.shop-item-grid--center {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    --slot-cols: 2;
+}
+
+@media (min-width: 420px) {
+    .shop-item-grid--center { --slot-cols: 3; }
+}
+
+@media (min-width: 560px) {
+    .shop-item-grid--center { --slot-cols: 4; }
+}
+
+.shop-item-grid--center > * {
+    flex: 0 1 calc((100% - (var(--slot-cols) - 1) * 8px) / var(--slot-cols));
+    min-width: 0;
+}
+
 .shop-item-grid--slots .shop-item-card,
 .shop-item-grid--slots .shelf-player-card {
     padding: 10px 8px;

@@ -549,7 +549,10 @@ const PlayerShop: React.FC = () => {
                 <>
                     <div className="cube-section-title" style={{ marginTop: 12 }}>🎁 Полка наставника</div>
                     <div className="cube-hint">{SHELF_SECTION_CAPTION}</div>
-                    <div className="shop-item-grid shop-item-grid--slots">
+                    {/* Слоты полки центрируем: их 2–6 по тарифу, и неполный ряд
+                        прижимался к левому краю с дырой справа (смоук S63).
+                        Витрину не трогаем — там ячеек всегда хватает на ряд. */}
+                    <div className="shop-item-grid shop-item-grid--slots shop-item-grid--center">
                         {shop.shelf.map(item => {
                             const mine = acting?.id === item.id ? acting.action : null;
                             const isBusy = acting !== null;
