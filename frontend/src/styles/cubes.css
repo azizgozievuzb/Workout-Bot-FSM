@@ -2286,6 +2286,20 @@
     opacity: 0.45;
 }
 
+/* Отложенная смена дней — не «предупреждение», а факт: держим нейтральным,
+   но заметным (смоук S63). */
+.sched-cooldown--pending {
+    opacity: 0.9;
+    font-weight: 600;
+}
+
+/* День, который уйдёт из графика с понедельника: гасим, чтобы разница между
+   «сейчас» и «с 17.08» читалась в самой неделе, а не только в подписи. */
+.week-dot--leaving {
+    opacity: 0.4;
+    text-decoration: line-through;
+}
+
 .sched-cooldown--flash {
     animation: schedCooldownFlash 0.9s ease;
 }

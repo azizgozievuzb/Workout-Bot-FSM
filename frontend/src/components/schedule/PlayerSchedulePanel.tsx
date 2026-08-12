@@ -129,6 +129,17 @@ const PlayerSchedulePanel: React.FC<Props> = ({
         void saveDays();
     }, [draftDays.length, onCooldown, paidChange, saveDays]);
 
+    /* Отложенная смена (смоук S63): игрок платил 100 💧 и не видел НИКАКОГО
+       следа покупки — дни на экране прежние, новых нигде нет («списали и ничего
+       не произошло», класс находки №11 из S59). Транзиентного тоста после
+       сохранения мало: он исчезает, а ждать понедельника — дни. Держим строку
+       постоянно, пока смена не вступила в силу. */
+    const pendingText = sched?.pending_main_days && sched.pending_schedule_from
+        ? `С понедельника ${fmtDate(sched.pending_schedule_from)}: `
+          + [...sched.pending_main_days].sort((a, b) => a - b)
+              .map((d) => DAY_LABELS[d]?.[1] ?? d).join('·')
+        : null;
+
     const cooldownText = sched && !sched.can_change_now && sched.next_change_available_at
         ? `Следующая смена доступна с ${new Date(sched.next_change_available_at).toLocaleDateString()}`
         : sched?.in_grace ? 'Первые 14 дней — смена бесплатно и без ограничений'
@@ -212,7 +223,11 @@ const PlayerSchedulePanel: React.FC<Props> = ({
                     <>
                         <div className="week-strip">
                             {mainDays.map((wd) => (
-                                <div key={wd} className="week-dot main">{DAY_LABELS[wd]?.[1]}</div>
+                                <div key={wd}
+                                    className={`week-dot main${
+                                        sched?.pending_main_days
+                                        && !sched.pending_main_days.includes(wd) ? ' week-dot--leaving' : ''}`}>
+                                    {DAY_LABELS[wd]?.[1]}</div>
                             ))}
                         </div>
                         <button
@@ -251,6 +266,9 @@ const PlayerSchedulePanel: React.FC<Props> = ({
                             <div className="sched-cooldown">У тебя {dropsBalance} 💧</div>
                         )}
                     </>
+                )}
+                {pendingText && (
+                    <div className="sched-cooldown sched-cooldown--pending">📅 {pendingText}</div>
                 )}
                 {cooldownText && (
                     <div className={`sched-cooldown${cooldownFlash ? ' sched-cooldown--flash' : ''}`}>
