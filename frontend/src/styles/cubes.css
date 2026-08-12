@@ -2280,10 +2280,19 @@
     color: var(--tg-theme-text-color, inherit);
 }
 
-/* Смена графика на кулдауне: кнопка серая, но живая — тап называет дату
-   (смоук S63, паттерн П.9). */
+/* Смена графика на кулдауне: кнопка серая, но живая — тап подсвечивает строку
+   с датой (смоук S63, паттерн П.9). Саму дату не дублируем вторым сообщением. */
 .sched-save-btn--muted {
     opacity: 0.45;
+}
+
+.sched-cooldown--flash {
+    animation: schedCooldownFlash 0.9s ease;
+}
+
+@keyframes schedCooldownFlash {
+    0%, 100% { opacity: 1; }
+    20%, 60% { opacity: 1; color: var(--tg-theme-destructive-text-color, #e74c3c); }
 }
 
 .player-title-line {

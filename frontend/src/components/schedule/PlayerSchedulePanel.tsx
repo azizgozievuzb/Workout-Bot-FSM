@@ -75,6 +75,8 @@ const PlayerSchedulePanel: React.FC<Props> = ({
         } finally { setBusy(false); }
     }, [time, setReminderStore]);
 
+    const [cooldownFlash, setCooldownFlash] = useState(false);
+
     const saveDays = useCallback(async () => {
         if (draftDays.length !== 3) return;
         setBusy(true); setMsg('');
@@ -115,14 +117,17 @@ const PlayerSchedulePanel: React.FC<Props> = ({
     const submitDays = useCallback(() => {
         if (draftDays.length !== 3) return;
         if (onCooldown) {
+            /* Причину НЕ дублируем в msg: строка cooldownText висит рядом с
+               кнопкой постоянно (смоук S63 — две одинаковые фразы на экране).
+               Тап отвечает haptic-ом и подсветкой той самой строки. */
             hapticNotification('error');
-            const na = sched?.next_change_available_at;
-            setMsg(`Смена доступна с ${na ? new Date(na).toLocaleDateString() : 'позже'}`);
+            setCooldownFlash(true);
+            window.setTimeout(() => setCooldownFlash(false), 900);
             return;
         }
         if (paidChange) { setConfirmChange(true); return; }
         void saveDays();
-    }, [draftDays.length, onCooldown, sched, paidChange, saveDays]);
+    }, [draftDays.length, onCooldown, paidChange, saveDays]);
 
     const cooldownText = sched && !sched.can_change_now && sched.next_change_available_at
         ? `Следующая смена доступна с ${new Date(sched.next_change_available_at).toLocaleDateString()}`
@@ -220,7 +225,6 @@ const PlayerSchedulePanel: React.FC<Props> = ({
                                 ? `Сменить за ${changePrice} 💧`
                                 : 'Изменить дни main-тренировок'}
                         </button>
-                        {cooldownText && <div className="sched-cooldown">{cooldownText}</div>}
                     </>
                 )}
                 {editing && (
@@ -241,7 +245,17 @@ const PlayerSchedulePanel: React.FC<Props> = ({
                                 Отмена
                             </button>
                         </div>
+                        {/* Баланс на экране траты: без него игрок не знает,
+                            хватает ли на смену (смоук S63). */}
+                        {paidChange && dropsBalance !== undefined && (
+                            <div className="sched-cooldown">У тебя {dropsBalance} 💧</div>
+                        )}
                     </>
+                )}
+                {cooldownText && (
+                    <div className={`sched-cooldown${cooldownFlash ? ' sched-cooldown--flash' : ''}`}>
+                        {cooldownText}
+                    </div>
                 )}
             </div>
 
