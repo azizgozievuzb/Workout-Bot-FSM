@@ -188,7 +188,7 @@ const PlayerShop: React.FC = () => {
         if (code === 'INSUFFICIENT_DROPS') {
             showToast(`Недостаточно капель (${detail?.balance}/${detail?.price})`);
         } else if (code === 'FREEZE_CAP') {
-            showToast('Запас купленных заморозок полон (3/3)');
+            showToast('Запас заморозок полон (3/3)');
         } else {
             /* HTTP-код в тексте: на смоуке 8d.1 «Не удалось отметить» стоило
                целого круга переписки, чтобы выяснить, что это 400 от парсера
@@ -454,7 +454,7 @@ const PlayerShop: React.FC = () => {
                 {!lightUnlocked ? (
                     <div className="shop-item-card">
                         <div className="shop-item-name">✨ Открыть light-режим</div>
-                        <div className="shop-item-desc">Лёгкая зарядка каждый день. Стрик станет ежедневным.</div>
+                        <div className="shop-item-desc">Лёгкая зарядка каждый день</div>
                         <div className="shop-item-price-row">
                             <span className="shop-item-price">{unlockPrice} 💧</span>
                         </div>
@@ -466,7 +466,7 @@ const PlayerShop: React.FC = () => {
                 ) : (
                     <div className="shop-item-card">
                         <div className="shop-item-name">Закрыть light-режим</div>
-                        <div className="shop-item-desc">Main-only со следующего понедельника.</div>
+                        <div className="shop-item-desc">Только main-дни</div>
                         <div className="shop-item-price-row">
                             <span className="shop-item-price">{lockPrice} 💧</span>
                         </div>
@@ -480,8 +480,12 @@ const PlayerShop: React.FC = () => {
                 {/* 3. Заморозка */}
                 <div className="shop-item-card shop-item-card--freeze">
                     <div className="shop-item-name">❄️ Заморозка</div>
+                    {/* Слово «купленных» врало: под ним лежат и ПОДАРЕННЫЕ
+                        наставником заморозки (смоук S63). Бесплатные дописываем
+                        только когда они есть — иначе строка не влезает в ячейку. */}
                     <div className="shop-item-desc">
-                        В запасе: бесплатных {shop.free_freezes_left}, купленных {shop.paid_freezes}/{shop.paid_freezes_cap}
+                        В запасе: {shop.paid_freezes}/{shop.paid_freezes_cap}
+                        {shop.free_freezes_left > 0 && ` + ${shop.free_freezes_left} бесплатных`}
                     </div>
                     <div className="shop-item-price-row">
                         <span className="shop-item-price">{freezePrice} 💧</span>
@@ -514,8 +518,8 @@ const PlayerShop: React.FC = () => {
                     ) : (
                         <div className="shop-item-desc">
                             {photoFlowPending
-                                ? 'Смена фото не закончена — продолжи с того же места.'
-                                : 'Наставник видит мультяшку. Поставь своё фото.'}
+                                ? 'Смена не закончена'
+                                : 'Поставь своё фото'}
                         </div>
                     )}
                     <div className="shop-item-price-row">
@@ -525,7 +529,7 @@ const PlayerShop: React.FC = () => {
                         а не на самой покупке фото — без этой строки игрок ждал, что
                         карточка станет бесплатной (смоук 8d.1, п.12). */}
                     {shop.reroll_credits > 0 && (
-                        <div className="shop-item-desc">
+                        <div className="shop-item-desc shop-item-desc--full">
                             🎁 От наставника: {shop.reroll_credits} бесплатн{shop.reroll_credits === 1 ? 'ая попытка' : 'ых попытки'} обновить
                             варианты — тратится внутри, на шаге «ещё 2 варианта».
                         </div>

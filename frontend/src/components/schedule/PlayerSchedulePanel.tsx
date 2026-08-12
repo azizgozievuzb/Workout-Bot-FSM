@@ -170,7 +170,9 @@ const PlayerSchedulePanel: React.FC<Props> = ({
             {/* Заморозки */}
             <div className="sched-freeze-badge">
                 ❄️ Заморозки: {(freeFreezes ?? 0) + (paidFreezes ?? 0)}
-                <span style={{ opacity: 0.5 }}> (бесплатных {freeFreezes ?? 0}, докупленных {paidFreezes ?? 0})</span>
+                {/* Не «докупленных»: в этой цифре лежат и подаренные наставником
+                    заморозки (смоук S63) — слово врало про происхождение. */}
+                <span style={{ opacity: 0.5 }}> (бесплатных {freeFreezes ?? 0}, в запасе {paidFreezes ?? 0})</span>
             </div>
 
             {/* Утреннее напоминание */}
