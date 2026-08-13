@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Backdrop from './design/backdrop/Backdrop';
 import type { GlassCubesHandle } from './design/backdrop/GlassCubes';
@@ -11,6 +11,7 @@ import MarketCube from './components/cubes/MarketCube';
 import BondCube from './components/cubes/BondCube';
 import AdminCube from './components/cubes/AdminCube';
 import { ThemeContext } from './contexts/ThemeContext';
+import type { AppTheme } from './contexts/ThemeContext';
 import { useAuthStore } from './stores/authStore';
 import AccessRevokedScreen from './components/shared/AccessRevokedScreen';
 import MaintenanceScreen from './components/shared/MaintenanceScreen';
@@ -30,9 +31,27 @@ type ModuleName = 'Action' | 'Market' | 'Bond' | 'Admin';
 
 // --- Константы таймеров (мс) ---
 const TAP_MAX = 300;
-const HOLD_DASHBOARD = 3000; // 3 сек → toggle dashboard
-const SWIPE_UP_THRESHOLD = 80; // px минимальная дистанция свайпа вверх
-const HOLD_FOR_SWIPE = 400; // мс минимальное удержание перед свайпом
+/* S64-2: удержание на кубах открывает статическую сводку. Порог поднят 3с → 5с,
+   чтобы жест не срабатывал случайно; эксклюзивных функций за ним больше нет.
+   Одно число в одном месте: им же задаётся длительность индикатора прогресса
+   (--hold-ms ниже). Рабочий диапазон 4000–6000, крутится на смоуке. */
+const HOLD_DASHBOARD_MS = 5000;
+/* Уход пальца в свайп/скролл отменяет удержание (S64-9г): дальше этого сдвига
+   жест уже не «держу», а «веду». */
+const HOLD_CANCEL_PX = 24;
+
+/* S64-9а: выбор темы — оформление устройства, а не игровая механика, поэтому
+   живёт в localStorage, а не в БД. У скрытого жеста сброс при перезаходе никто
+   не замечал; у явной кнопки он читался бы как баг. */
+const THEME_KEY = 'wb_theme';
+
+function readStoredTheme(): AppTheme {
+    try {
+        const saved = localStorage.getItem(THEME_KEY);
+        if (saved === 'dark' || saved === 'light') return saved;
+    } catch { /* приватный режим / отключённое хранилище — молча дефолт */ }
+    return 'dark';
+}
 
 const carouselVariants = {
     enter: (dir: number) => ({ x: dir ? dir * 300 : 0, opacity: 0 }),
@@ -44,9 +63,14 @@ const App: React.FC = () => {
     const { isLoading, onboardingDone, photoUrl, error, role } = useAuth();
     const { is_admin, accessRevoked, banInfo, maintenanceMode, onboardingBlocked, onboardingBlockedMessage,
         subscription, has_responsible_access, has_player_access, needsScheduleSetup } = useAuthStore();
-    const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+    const [theme, setTheme] = useState<AppTheme>(readStoredTheme);
     const [layoutMode, setLayoutMode] = useState<LayoutMode>('chaos');
     const [activeModule, setActiveModule] = useState<ModuleName | null>(null);
+    /* Строка сводки «👤 Профиль» / «⚙️ Настройки» обязана открывать сам экран
+       профиля, а не просто куб (S64-9в): раньше аргумент `sub` выбрасывался. */
+    const [pendingSub, setPendingSub] = useState<string | null>(null);
+    // Видимый прогресс удержания (S64-9г): 5 секунд «в никуда» читаются как поломка.
+    const [holdActive, setHoldActive] = useState(false);
 
     const cubesRef = useRef<GlassCubesHandle>(null);
     const contentRef = useRef<HTMLElement>(null);
@@ -83,7 +107,18 @@ const App: React.FC = () => {
 
     const clearTimers = useCallback(() => {
         if (holdTimer.current) { clearTimeout(holdTimer.current); holdTimer.current = null; }
+        setHoldActive(false);
     }, []);
+
+    const toggleTheme = useCallback(() => {
+        setTheme(prev => {
+            const next: AppTheme = prev === 'dark' ? 'light' : 'dark';
+            try { localStorage.setItem(THEME_KEY, next); } catch { /* см. readStoredTheme */ }
+            return next;
+        });
+    }, []);
+
+    const themeValue = useMemo(() => ({ theme, toggleTheme }), [theme, toggleTheme]);
 
     // --- Тап/удержание на gesture-layer ---
     const handleGestureDown = useCallback((e: React.PointerEvent) => {
@@ -102,15 +137,25 @@ const App: React.FC = () => {
 
         clearTimers();
 
-        // Удержание 2.5с → toggle: chaos→dashboard (only from chaos)
+        // Удержание HOLD_DASHBOARD_MS → chaos→dashboard (только из chaos)
+        if (layoutModeRef.current === 'chaos') setHoldActive(true);
         holdTimer.current = setTimeout(() => {
             holdFired.current = true;
+            setHoldActive(false);
             if (layoutModeRef.current === 'chaos') {
                 setLayout('dashboard');
                 setActiveModule(null);
             }
-        }, HOLD_DASHBOARD);
+        }, HOLD_DASHBOARD_MS);
     }, [clearTimers, setLayout]);
+
+    /* Палец поехал → это уже не удержание: гасим и таймер, и индикацию (S64-9г). */
+    const handleGestureMove = useCallback((e: React.PointerEvent) => {
+        if (!holdTimer.current) return;
+        const dx = e.clientX - pointerStartX.current;
+        const dy = e.clientY - pointerStartY.current;
+        if (Math.sqrt(dx * dx + dy * dy) > HOLD_CANCEL_PX) clearTimers();
+    }, [clearTimers]);
 
     const handleGestureUp = useCallback((e: React.PointerEvent) => {
         const elapsed = Date.now() - pointerDownAt.current;
@@ -119,17 +164,15 @@ const App: React.FC = () => {
         const deltaY = pointerStartY.current - e.clientY; // положительный = вверх
         const deltaX = e.clientX - pointerStartX.current;  // положительный = вправо
 
-        // --- Hold + swipe up → смена темы (ВСЕ режимы) ---
-        if (elapsed > HOLD_FOR_SWIPE && deltaY > SWIPE_UP_THRESHOLD && Math.abs(deltaY) > Math.abs(deltaX)) {
-            setTheme(prev => prev === 'dark' ? 'light' : 'dark');
-            return;
-        }
+        /* S64-4: ветка «удержание + свайп вверх → смена темы» удалена. Тема
+           переключается кнопкой ☀️/🌙 на экране профиля (Bond → Профиль). */
 
         // --- Горизонтальный свайп в fullscreen → карусель ---
         if (layoutModeRef.current === 'fullscreen' && activeModule
             && elapsed < 500 && Math.abs(deltaX) > 50 && Math.abs(deltaX) > Math.abs(deltaY)) {
             const dir: 1 | -1 = deltaX < 0 ? 1 : -1;
             setSwipeDir(dir);
+            setPendingSub(null);
             setActiveModule(nextMod(activeModule, dir));
             return;
         }
@@ -142,6 +185,7 @@ const App: React.FC = () => {
                 const hit = cubesRef.current?.checkHit(pointerPos.current.x, pointerPos.current.y);
                 if (hit) {
                     setSwipeDir(0);
+                    setPendingSub(null);
                     setLayout('fullscreen');
                     setActiveModule(hit.label as ModuleName);
                 }
@@ -156,6 +200,7 @@ const App: React.FC = () => {
         wheelCooldown.current = true;
         const dir: 1 | -1 = delta > 0 ? 1 : -1;
         setSwipeDir(dir);
+        setPendingSub(null);
         setActiveModule(nextMod(activeModule, dir));
         setTimeout(() => { wheelCooldown.current = false; }, 400);
     }, [activeModule, nextMod]);
@@ -185,7 +230,7 @@ const App: React.FC = () => {
     }
 
     return (
-        <ThemeContext.Provider value={theme}>
+        <ThemeContext.Provider value={themeValue}>
         <div className={`app-container ${theme}-theme`}>
             {maintenanceMode && is_admin && (
                 <div
@@ -209,8 +254,26 @@ const App: React.FC = () => {
                         className="gesture-layer"
                         onPointerDown={handleGestureDown}
                         onPointerUp={handleGestureUp}
+                        onPointerMove={handleGestureMove}
+                        onPointerCancel={clearTimers}
                         style={{ pointerEvents: gestureEnabled && layoutMode === 'chaos' ? 'auto' : 'none' }}
                     />
+
+                    {/* Прогресс удержания (S64-9г): пока палец держат — кольцо
+                        заполняется ровно за HOLD_DASHBOARD_MS, фон темнеет.
+                        Отпустил или повёл пальцем — исчезло, сводка не открылась. */}
+                    {holdActive && (
+                        <div
+                            className="hold-progress"
+                            style={{ ['--hold-ms' as string]: `${HOLD_DASHBOARD_MS}ms` } as React.CSSProperties}
+                            aria-hidden="true"
+                        >
+                            <svg className="hold-progress-ring" viewBox="0 0 52 52">
+                                <circle className="hold-progress-track" cx="26" cy="26" r="23" />
+                                <circle className="hold-progress-fill" cx="26" cy="26" r="23" />
+                            </svg>
+                        </div>
+                    )}
 
                     {/* PHOTO GATE — обязательное селфи для ВСЕХ пользователей */}
                     {/* Показываем только после загрузки auth (isLoading=false), чтобы кубы не мелькали */}
@@ -245,8 +308,8 @@ const App: React.FC = () => {
 
                         {/* === FULLSCREEN MODULE (carousel) === */}
                         {layoutMode === 'fullscreen' && activeModule && (
-                            <div className="overlay-fullscreen" onPointerDown={handleGestureDown} onPointerUp={handleGestureUp} onWheel={handleWheel}>
-                                <button className="overlay-close" onClick={(e) => { e.stopPropagation(); setLayout('chaos'); setActiveModule(null); }} aria-label="Закрыть" />
+                            <div className="overlay-fullscreen" onPointerDown={handleGestureDown} onPointerUp={handleGestureUp} onPointerMove={handleGestureMove} onPointerCancel={clearTimers} onWheel={handleWheel}>
+                                <button className="overlay-close" onClick={(e) => { e.stopPropagation(); setLayout('chaos'); setActiveModule(null); setPendingSub(null); }} aria-label="Закрыть" />
                                 <div className="overlay-title">{activeModule}</div>
                                 <AnimatePresence mode="wait" custom={swipeDir}>
                                     <motion.div
@@ -261,7 +324,7 @@ const App: React.FC = () => {
                                     >
                                         {activeModule === 'Action' && <ActionCube />}
                                         {activeModule === 'Market' && <MarketCube />}
-                                        {activeModule === 'Bond' && <BondCube />}
+                                        {activeModule === 'Bond' && <BondCube initialSub={pendingSub} />}
                                         {activeModule === 'Admin' && <AdminCube />}
                                     </motion.div>
                                 </AnimatePresence>
@@ -279,11 +342,24 @@ const App: React.FC = () => {
                             <div className="overlay-dashboard"
                                 onPointerDown={handleGestureDown}
                                 onPointerUp={handleGestureUp}
+                                onPointerMove={handleGestureMove}
+                                onPointerCancel={clearTimers}
+                                /* S64-2г: тап по фону закрывает сводку. Именно
+                                   onClick и именно по самому слою-фону: защиты
+                                   внутри панели — onClick+stopPropagation, на
+                                   pointer-уровне они не срабатывают, и тап по
+                                   содержимому закрывал бы экран. */
+                                onClick={(e) => {
+                                    if (e.target !== e.currentTarget) return;
+                                    setLayout('chaos');
+                                    setActiveModule(null);
+                                }}
                             >
                                 <button className="overlay-close" onClick={(e) => { e.stopPropagation(); setLayout('chaos'); setActiveModule(null); }} aria-label="Закрыть" />
                                 <DashboardRoleSwitch />
-                                <DashboardPanel onOpen={(mod) => {
+                                <DashboardPanel onOpen={(mod, sub) => {
                                     setSwipeDir(0);
+                                    setPendingSub(sub ?? null);
                                     setLayout('fullscreen');
                                     setActiveModule(mod as ModuleName);
                                 }} />

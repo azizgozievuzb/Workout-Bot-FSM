@@ -7,3 +7,11 @@ export const TIER_LIMIT_LABEL: Record<AccessTier, string> = {
   premium: 'до 2 игроков',
   elite: 'до 3 игроков',
 };
+
+/** Форма слова «игрок» после числа в наших контекстах — «до N …» и
+ *  «допускает N …» (родительный / винительный одушевлённый): 1 → игрока,
+ *  остальные → игроков. Хвост шлифовки S63: «до 1 игроков» / «1 игрок(ов)».
+ *  Паттерн тот же, что у pluralDays в DashboardSection. */
+export function pluralPlayers(n: number): string {
+  return n % 10 === 1 && n % 100 !== 11 ? 'игрока' : 'игроков';
+}

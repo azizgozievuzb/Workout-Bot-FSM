@@ -7,7 +7,7 @@ import type { TierPrice, SubscriptionPeriod, CouponPreview } from '../../api/pay
 import { getMyPlayers } from '../../api/partnerships';
 import { pollPayment, openStarInvoice } from '../../utils/starPayment';
 import { hapticNotification } from '../../utils/haptic';
-import { TIER_LIMIT_LABEL } from '../../utils/tierText';
+import { TIER_LIMIT_LABEL, pluralPlayers } from '../../utils/tierText';
 import TierDowngradeModal from '../cubes/TierDowngradeModal';
 
 const TIER_META: Record<AccessTier, { title: string; limit: number }> = {
@@ -196,7 +196,7 @@ const RenewalScreen: React.FC<RenewalScreenProps> = ({ onClose }) => {
             <>
               <h2 className="paywall-sub" style={{ fontWeight: 600, marginTop: 4 }}>Персональный доступ</h2>
               <p className="paywall-sub">
-                ✨ Вам предоставлен бесплатный доступ — тариф {TIER_META[t].title} · до {TIER_META[t].limit} игроков.
+                ✨ Вам предоставлен бесплатный доступ — тариф {TIER_META[t].title} · до {TIER_META[t].limit} {pluralPlayers(TIER_META[t].limit)}.
                 Оплата не требуется.
               </p>
             </>
@@ -258,7 +258,7 @@ const RenewalScreen: React.FC<RenewalScreenProps> = ({ onClose }) => {
 
             {overLimit && (
               <div className="renew-warn">
-                Тариф {TIER_META[tier].title} допускает {targetLimit} игрок(ов), у вас {playerCount}.
+                Тариф {TIER_META[tier].title} допускает {targetLimit} {pluralPlayers(targetLimit)}, у вас {playerCount}.
                 Нужно удалить лишних.
               </div>
             )}

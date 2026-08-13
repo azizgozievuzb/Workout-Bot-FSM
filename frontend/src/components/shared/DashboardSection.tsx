@@ -61,7 +61,10 @@ function buildPrimary(module: DashboardModule, view: DashboardView, d: Dashboard
         if (view === 'player') {
             const bal = d.drops_balance ?? null;
             return [
-                { icon: '\u2B50', label: bal !== null ? `${bal}` : dash, key: 'balance' },
+                /* S64-9\u0431: \u044D\u0442\u043E \u041A\u0410\u041F\u041B\u0418 \u0438\u0433\u0440\u043E\u043A\u0430 (\u0442\u0440\u0443\u0434), \u0430 \u043D\u0435 Stars \u043D\u0430\u0441\u0442\u0430\u0432\u043D\u0438\u043A\u0430 (\u0434\u0435\u043D\u044C\u0433\u0438) \u2014
+                   \u2B50 \u043D\u0430 \u044D\u0442\u043E\u0439 \u0441\u0442\u0440\u043E\u043A\u0435 \u043F\u0443\u0442\u0430\u043B \u0434\u0432\u0435 \u0432\u0430\u043B\u044E\u0442\u044B. \u0423 \u0441\u0442\u0440\u043E\u043A\u0438 \u043D\u0430\u0441\u0442\u0430\u0432\u043D\u0438\u043A\u0430 \u043D\u0438\u0436\u0435
+                   \u2B50 \u0437\u0430\u043A\u043E\u043D\u043D\u0430: \u0442\u0430\u043C \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0442\u0435\u043B\u044C\u043D\u043E Stars. */
+                { icon: '\u{1F4A7}', label: bal !== null ? `${bal}` : dash, key: 'balance' },
                 { icon: '\u{1F6D2}', label: 'Магазин', key: 'shop', accent: true },
             ];
         }

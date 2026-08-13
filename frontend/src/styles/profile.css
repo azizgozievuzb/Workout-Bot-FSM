@@ -1,0 +1,56 @@
+/* S64-4 — экран «Профиль и настройки» (Bond → Профиль, обе роли).
+   Каркас берём у подэкранов наставника (.mentor-page), здесь только своё.
+
+   ⚠️ Экран рендерится порталом в body, куда классы .dark-theme/.light-theme не
+   достают (урок №2 PLAYBOOK). Поэтому всё красится через --tg-theme-* или
+   через `inherit`/полупрозрачный серый, одинаково читаемый в обеих темах. */
+
+/* Блоки расписания приехали из тёмного оверлея, где цвета были захардкожены
+   белым, — внутри портала это невидимый текст на светлом фоне. */
+.profile-page .sched-row-label,
+.profile-page .sched-freeze-badge {
+    color: inherit;
+    opacity: 0.7;
+}
+
+.profile-page .sched-cooldown {
+    color: inherit;
+    opacity: 0.5;
+}
+
+.profile-page .sched-time-input {
+    background: rgba(127, 127, 127, 0.12);
+    border: 1px solid rgba(127, 127, 127, 0.3);
+    color: inherit;
+}
+
+.profile-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.profile-row-hint {
+    font-size: 12px;
+    opacity: 0.5;
+}
+
+.profile-theme-btn {
+    flex: 0 0 auto;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    border: 1px solid rgba(127, 127, 127, 0.3);
+    background: rgba(127, 127, 127, 0.14);
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.profile-theme-btn:active {
+    transform: scale(0.92);
+}

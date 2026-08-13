@@ -15,6 +15,7 @@ import RoleTransition from '../shared/RoleTransition';
 import MentorPlayerScreens from './MentorPlayerScreens';
 import WorkoutScreen from '../workout/WorkoutScreen';
 import { getSchedule, type ScheduleState } from '../../api/schedule';
+import { PlayerScheduleSection } from '../schedule/scheduleBlocks';
 import type { SessionType } from '../../api/workout';
 import ConfirmSpendModal from '../shared/ConfirmSpendModal';
 import '../../styles/cubes.css';
@@ -278,6 +279,19 @@ const PlayerView: React.FC = () => {
                     </span>
                 </div>
             </div>
+
+            {/* S64-3: расписание переехало сюда из скрытой сводки — неделя,
+                заморозки, дни main с платной сменой и инфо про light. Стоит
+                НИЖЕ кнопок запуска: первый экран Action остаётся про «начать». */}
+            <PlayerScheduleSection
+                sched={sched}
+                setSched={setSched}
+                lastClosedDay={stats.last_closed_day ?? null}
+                freeFreezes={stats.free_freezes_left ?? 0}
+                paidFreezes={stats.paid_freezes ?? 0}
+                dropsBalance={shop?.drops_balance ?? stats.drops_balance}
+                onSpent={() => { getPlayerShop().then(setShop).catch(() => {}); }}
+            />
 
             <div className="cube-funfact">
                 Знаешь ли ты, что регулярные тренировки улучшают качество сна на 65%? Твоё тело скажет спасибо!

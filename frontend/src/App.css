@@ -317,3 +317,66 @@ html, body {
 .light-theme .carousel-dot.active {
     background: rgba(0, 0, 0, 0.7);
 }
+
+/* --- ПРОГРЕСС УДЕРЖАНИЯ (S64-9г) ---
+   Порог удержания поднят до 5с, а 5 секунд без отклика читаются как поломка
+   (урок №3 PLAYBOOK: состояние есть в логике — покажи его глазу). Длительность
+   приходит из App.tsx переменной --hold-ms: одно число в одном месте. */
+
+.hold-progress {
+    position: absolute;
+    inset: 0;
+    z-index: 55;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* Слой чисто индикаторный: события обязаны доходить до .gesture-layer,
+       иначе собственное удержание себя же и отменит. */
+    pointer-events: none;
+    background: rgba(0, 0, 0, 0.32);
+    animation: holdDim var(--hold-ms, 5000ms) linear forwards;
+}
+
+.light-theme .hold-progress {
+    background: rgba(255, 252, 248, 0.32);
+}
+
+.hold-progress-ring {
+    width: 92px;
+    height: 92px;
+    transform: rotate(-90deg);
+}
+
+.hold-progress-track,
+.hold-progress-fill {
+    fill: none;
+    stroke-width: 3;
+}
+
+.hold-progress-track {
+    stroke: rgba(255, 255, 255, 0.18);
+}
+
+.light-theme .hold-progress-track {
+    stroke: rgba(44, 32, 22, 0.18);
+}
+
+.hold-progress-fill {
+    stroke: rgba(255, 170, 60, 0.9);
+    stroke-linecap: round;
+    /* 2πr при r=23 ≈ 144.5 */
+    stroke-dasharray: 145;
+    stroke-dashoffset: 145;
+    animation: holdRing var(--hold-ms, 5000ms) linear forwards;
+}
+
+@keyframes holdDim {
+    from { opacity: 0; }
+    25% { opacity: 1; }
+    to { opacity: 1; }
+}
+
+@keyframes holdRing {
+    from { stroke-dashoffset: 145; }
+    to { stroke-dashoffset: 0; }
+}

@@ -8,6 +8,7 @@ import { getUnreadCount } from '../../api/notifications';
 import { NotificationList } from '../bond/NotificationList';
 import RoleTransition from '../shared/RoleTransition';
 import RenewalScreen from '../shared/RenewalScreen';
+import ProfileScreen from '../shared/ProfileScreen';
 import { getMyPlayers } from '../../api/partnerships';
 import type { MyPlayer } from '../../api/partnerships';
 import { createInvite, listInvites, deleteInvite } from '../../api/invites';
@@ -86,8 +87,19 @@ const NotificationsSection: React.FC = () => {
     );
 };
 
-const BondCube: React.FC = () => {
+/* S64-9в: строки сводки «👤 Профиль» и «⚙️ Настройки» обещают вход в профиль —
+   значит должны его и открывать, а не просто открывать куб. App пробрасывает
+   сюда ключ строки, по которому куб сразу поднимает экран профиля. */
+const PROFILE_SUBS = ['profile', 'settings'];
+
+interface BondCubeProps {
+    /** Ключ строки сводки, из которой вошли (S64-9в). */
+    initialSub?: string | null;
+}
+
+const BondCube: React.FC<BondCubeProps> = ({ initialSub = null }) => {
     const { primary_role, has_player_access, has_responsible_access, is_admin, activeRoleView, setActiveRoleView } = useAuthStore();
+    const [showProfile, setShowProfile] = useState(() => PROFILE_SUBS.includes(initialSub ?? ''));
     const user: DualRoleUser = {
         primary_role: primary_role || 'player',
         has_player_access,
@@ -115,18 +127,23 @@ const BondCube: React.FC = () => {
                     : 'Оформите подписку, чтобы приглашать игроков'}
             >
                 {view === 'player' ? (
-                    canPlay(user) ? <PlayerBond /> : <LockedPlayer />
+                    canPlay(user) ? <PlayerBond onOpenProfile={() => setShowProfile(true)} /> : <LockedPlayer />
                 ) : (
-                    canMonitor(user) ? <ResponsibleBond /> : <LockedResponsible />
+                    canMonitor(user)
+                        ? <ResponsibleBond onOpenProfile={() => setShowProfile(true)} />
+                        : <LockedResponsible />
                 )}
             </RoleTransition>
+            {/* S64-8: профиль есть у ОБЕИХ ролей — кнопка темы живёт в нём, и у
+                наставника без роли игрока другого пути к теме не осталось. */}
+            {showProfile && <ProfileScreen view={view} onClose={() => setShowProfile(false)} />}
         </div>
     );
 };
 
 /* ---------- PLAYER BOND ---------- */
 
-const PlayerBond: React.FC = () => {
+const PlayerBond: React.FC<{ onOpenProfile: () => void }> = ({ onOpenProfile }) => {
     const [feed, setFeed] = useState<FeedItem[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -163,7 +180,10 @@ const PlayerBond: React.FC = () => {
                 ))
             )}
 
-            <button className="cube-btn-secondary" onClick={(e) => e.stopPropagation()}>
+            <button
+                className="cube-btn-secondary"
+                onClick={(e) => { e.stopPropagation(); onOpenProfile(); }}
+            >
                 Профиль и настройки
             </button>
         </>
@@ -302,7 +322,7 @@ const InvitesPanel: React.FC<{ refreshKey?: number }> = ({ refreshKey = 0 }) => 
 
 /* ---------- RESPONSIBLE BOND ---------- */
 
-const ResponsibleBond: React.FC = () => {
+const ResponsibleBond: React.FC<{ onOpenProfile: () => void }> = ({ onOpenProfile }) => {
     const [feed, setFeed] = useState<FeedItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [showBilling, setShowBilling] = useState(false);
@@ -344,6 +364,14 @@ const ResponsibleBond: React.FC = () => {
                     </div>
                 ))
             )}
+
+            {/* S64-8: у наставника профиль — единственный дом кнопки темы. */}
+            <button
+                className="cube-btn-secondary"
+                onClick={(e) => { e.stopPropagation(); onOpenProfile(); }}
+            >
+                Профиль и настройки
+            </button>
 
             <button className="cube-btn-secondary" onClick={(e) => e.stopPropagation()}>
                 Связь

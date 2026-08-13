@@ -81,10 +81,19 @@ def invoice_title(tier: str, period: str) -> str:
     return f"Подписка {TIER_TITLES.get(tier, tier)} — {PERIOD_LABELS.get(period, period)}"
 
 
+def plural_players(n: int) -> str:
+    """Форма «игрок» после числа в контексте «до N …»: 1 → игрока, иначе игроков.
+
+    Хвост шлифовки S63: в счёте на продление стояло «до 1 игрок(ов)».
+    Фронтовая пара — pluralPlayers в frontend/src/utils/tierText.ts.
+    """
+    return "игрока" if n % 10 == 1 and n % 100 != 11 else "игроков"
+
+
 def invoice_description(tier: str, period: str) -> str:
     limit = TIER_PLAYER_LIMITS.get(tier, 1)
     return (
-        f"Тариф {TIER_TITLES.get(tier, tier)} (до {limit} игрок(ов)). "
+        f"Тариф {TIER_TITLES.get(tier, tier)} (до {limit} {plural_players(limit)}). "
         f"Доступ на {PERIOD_LABELS.get(period, period)}."
     )
 
