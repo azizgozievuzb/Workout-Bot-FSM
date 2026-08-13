@@ -116,6 +116,34 @@
 | S64-9б | баланс капель игрока в строке-сводке: ⭐ → 💧; строка наставника (⭐ = Stars) не тронута | `shared/DashboardSection.tsx` |
 | S63-хвост | склонение «игрок(ов)»: помощник `pluralPlayers` в `utils/tierText.ts` (2 места `RenewalScreen`) + парный `plural_players` в питоне (текст счёта продления) | `utils/tierText.ts`, `shared/RenewalScreen.tsx`, `backend/services/tier_pricing.py` |
 
+## 📸 BEFORE-снимок смоука навигации (снят 2026-08-13 20:28, Cell TG 8777447186)
+
+Эталон для отката (п.13 чеклиста). Смоук начат: п.0 закрыт, п.1 — следующий.
+
+| Поле | Значение | Таблица |
+|---|---|---|
+| `main_days` | `[0,2,4]` (пн·ср·пт) | `users` |
+| `pending_main_days` | `[1,3,5]` (вт·чт·сб) | `users` |
+| `pending_schedule_from` | `2026-08-17` | `users` |
+| `morning_reminder_time` | `09:00:00` | `users` |
+| `timezone` | `Asia/Tashkent` | `users` |
+| `schedule_changed_at` | `2026-08-12 18:24:52.034975+00` | `users` |
+| `schedule_grace_until` | `2026-08-07 19:46:57.089455+00` (в прошлом) | `users` |
+| `light_unlocked` / `light_active_from` | `false` / `null` | `users` |
+| `light_trial_from` / `light_trial_until` | `2026-08-17` / `2026-08-24` | `users` |
+| `player_title` | `Железная воля и стальные` | `users` |
+| `drops_balance` | `0` | `player_stats` |
+| `free_freezes_left` / `paid_freezes` | `0` / `1` | `player_stats` |
+| `current_streak` / `last_closed_day` | `7` / `2026-08-12` | `player_stats` |
+
+**Поправки к чеклисту, найденные на п.0:**
+1. Колонки `next_change_available_at` в БД **нет** — бэк считает её как
+   `users.schedule_changed_at + 30 дней` (`api/routers/schedule.py:78`). Подмена
+   в п.9 идёт в `schedule_changed_at`, откат — значением из таблицы выше.
+2. Кулдаун активен по-настоящему (до `2026-09-11`) → п.8 проходится **без подмен**.
+3. У Cell **0 капель** — на п.9 окно траты покажет нехватку; покупку всё равно
+   не совершаем, проверяем живые цифры и «Отменить».
+
 ## 🧩 Допущения реализации (решения на моё усмотрение — вернуться, если не так)
 
 1. **Путь к сеттеру темы — расширенный контекст, а не отдельный хук-обёртка.**
