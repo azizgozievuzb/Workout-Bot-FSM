@@ -145,3 +145,13 @@
     color: #2C2016;
 }
 .light-theme .sched-light-caption { color: rgba(150, 100, 0, 0.95); }
+
+/* S64 (смоук 23.08): в светлой теме белый текст чипов и жёлтых предупреждений
+   сливался с фоном — здесь тёмные аналоги той же роли. */
+.light-theme .sched-chip {
+    border-color: rgba(44, 32, 22, 0.2);
+    background: rgba(44, 32, 22, 0.05);
+    color: rgba(44, 32, 22, 0.8);
+}
+.light-theme .sched-warn { color: #8a5a00; }
+.light-theme .sched-light-btn.lock { color: rgba(44, 32, 22, 0.75); }

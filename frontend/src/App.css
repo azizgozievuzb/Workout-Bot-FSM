@@ -19,6 +19,24 @@ html, body {
     background: #000;
 }
 
+/* S64 (смоук 23.08): наша тема переопределяет переменные Telegram и задаёт
+   базовый цвет текста. Иначе всё, что покрашено var(--tg-theme-text-color)
+   (имя игрока в профиле и сводке и ещё десяток мест), берёт цвет клиента
+   Telegram — белый — и в светлой теме сливается с фоном. */
+.app-container.dark-theme {
+    color: #FAF5EF;
+    --tg-theme-text-color: #FAF5EF;
+    --tg-theme-hint-color: rgba(250, 245, 239, 0.6);
+    --tg-theme-bg-color: #14161c;
+}
+
+.app-container.light-theme {
+    color: #2C2016;
+    --tg-theme-text-color: #2C2016;
+    --tg-theme-hint-color: rgba(44, 32, 22, 0.62);
+    --tg-theme-bg-color: #FAF6F1;
+}
+
 .app-container {
     background: transparent;
     width: 100%;

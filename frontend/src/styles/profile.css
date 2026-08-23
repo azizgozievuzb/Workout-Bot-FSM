@@ -11,11 +11,15 @@
 .profile-page.dark-theme {
     background: #14161c;
     color: #FAF5EF;
+    --tg-theme-text-color: #FAF5EF;
+    --tg-theme-hint-color: rgba(250, 245, 239, 0.6);
 }
 
 .profile-page.light-theme {
     background: #FAF6F1;
     color: #2C2016;
+    --tg-theme-text-color: #2C2016;
+    --tg-theme-hint-color: rgba(44, 32, 22, 0.62);
 }
 
 /* Шапка липкая и обязана быть непрозрачной — красим тем же фоном. */
