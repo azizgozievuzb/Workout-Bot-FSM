@@ -344,16 +344,9 @@ const App: React.FC = () => {
                                 onPointerUp={handleGestureUp}
                                 onPointerMove={handleGestureMove}
                                 onPointerCancel={clearTimers}
-                                /* S64-2г: тап по фону закрывает сводку. Именно
-                                   onClick и именно по самому слою-фону: защиты
-                                   внутри панели — onClick+stopPropagation, на
-                                   pointer-уровне они не срабатывают, и тап по
-                                   содержимому закрывал бы экран. */
-                                onClick={(e) => {
-                                    if (e.target !== e.currentTarget) return;
-                                    setLayout('chaos');
-                                    setActiveModule(null);
-                                }}
+                                /* S64-10 (решение юзера, смоук 23.08): выход со сводки —
+                                   ТОЛЬКО крестик. Прежнее закрытие тапом по фону (S64-2г)
+                                   удалено целиком, а не починено. */
                             >
                                 <button className="overlay-close" onClick={(e) => { e.stopPropagation(); setLayout('chaos'); setActiveModule(null); }} aria-label="Закрыть" />
                                 <DashboardRoleSwitch />
