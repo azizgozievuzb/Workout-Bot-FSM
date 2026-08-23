@@ -133,7 +133,7 @@ html, body {
 }
 
 .light-theme .overlay-body {
-    color: rgba(44, 32, 22, 0.4);
+    color: rgba(44, 32, 22, 0.55);
 }
 
 /* --- Close button — cosmic orb (matches role switch button) --- */

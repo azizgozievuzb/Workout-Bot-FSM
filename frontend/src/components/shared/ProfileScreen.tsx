@@ -48,7 +48,12 @@ const ProfileScreen: React.FC<Props> = ({ view, onClose }) => {
     }, [view]);
 
     return createPortal(
-        <div className="mentor-page profile-page">
+        /* Тема-класс вешаем на КОРЕНЬ портала (S64, смоук 23.08): портал живёт в
+           body, куда .dark-theme/.light-theme с .app-container не достаёт, — из-за
+           этого экран оставался серым по --tg-theme-* и не реагировал на свою же
+           кнопку темы. Урок №2 PLAYBOOK этим не нарушен: классы не «достают
+           снаружи», а объявлены здесь же. */
+        <div className={`mentor-page profile-page ${theme}-theme`}>
             <div className="mentor-page-inner">
                 <div className="mentor-page-bar">
                     <button className="mentor-back" onClick={(e) => { e.stopPropagation(); onClose(); }}>

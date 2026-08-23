@@ -236,7 +236,7 @@
 }
 
 .light-theme .onb-title { color: #2C2016; }
-.light-theme .onb-subtitle { color: rgba(44, 32, 22, 0.4); }
+.light-theme .onb-subtitle { color: rgba(44, 32, 22, 0.55); }
 
 .light-theme .onb-btn {
   background: rgba(44, 32, 22, 0.04);

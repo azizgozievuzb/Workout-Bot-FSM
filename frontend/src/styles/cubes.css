@@ -167,7 +167,7 @@
 .dark-theme .cube-stat { color: rgba(250, 245, 239, 0.6); }
 .dark-theme .cube-stat-value { color: #FAF5EF; }
 
-.light-theme .cube-stat { color: rgba(44, 32, 22, 0.5); }
+.light-theme .cube-stat { color: rgba(44, 32, 22, 0.62); }
 .light-theme .cube-stat-value { color: #2C2016; }
 
 /* --- Locked role screen --- */
@@ -210,7 +210,7 @@
 }
 
 .dark-theme .cube-locked-title { color: rgba(250, 245, 239, 0.4); }
-.light-theme .cube-locked-title { color: rgba(44, 32, 22, 0.35); }
+.light-theme .cube-locked-title { color: rgba(44, 32, 22, 0.5); }
 
 .cube-locked-text {
     font-size: 14px;
@@ -279,7 +279,7 @@
 }
 
 .dark-theme .cube-player-meta { color: rgba(250, 245, 239, 0.35); }
-.light-theme .cube-player-meta { color: rgba(44, 32, 22, 0.35); }
+.light-theme .cube-player-meta { color: rgba(44, 32, 22, 0.5); }
 
 .cube-player-actions {
     display: flex;
@@ -1633,7 +1633,7 @@
 }
 
 .dark-theme .ban-history-date { color: rgba(250,245,239,0.3); }
-.light-theme .ban-history-date { color: rgba(44,32,22,0.3); }
+.light-theme .ban-history-date { color: rgba(44,32,22,0.45); }
 
 .ban-status-badge {
     font-size: 11px;
@@ -1737,7 +1737,7 @@
     color: #fff;
 }
 
-.light-theme .ban-filter-btn { color: rgba(44,32,22,0.5); }
+.light-theme .ban-filter-btn { color: rgba(44,32,22,0.62); }
 .light-theme .ban-filter-btn.active { color: #fff; }
 
 /* --- Market payment hint --- */
@@ -2407,7 +2407,7 @@
 }
 
 .dark-theme .shop-item-desc { color: rgba(250, 245, 239, 0.4); }
-.light-theme .shop-item-desc { color: rgba(44, 32, 22, 0.4); }
+.light-theme .shop-item-desc { color: rgba(44, 32, 22, 0.55); }
 
 .shop-item-price-row {
     display: flex;
@@ -2778,7 +2778,7 @@
 }
 
 .dark-theme .notif-ts { color: rgba(250, 245, 239, 0.3); }
-.light-theme .notif-ts { color: rgba(44, 32, 22, 0.32); }
+.light-theme .notif-ts { color: rgba(44, 32, 22, 0.48); }
 
 /* --- Mark all read button --- */
 
@@ -2822,7 +2822,7 @@
 }
 
 .dark-theme .notif-empty { color: rgba(250, 245, 239, 0.3); }
-.light-theme .notif-empty { color: rgba(44, 32, 22, 0.3); }
+.light-theme .notif-empty { color: rgba(44, 32, 22, 0.45); }
 
 /* --- Admin: labeled fields, checkbox row, coupon code styling (7.5.1) --- */
 .admin-field {

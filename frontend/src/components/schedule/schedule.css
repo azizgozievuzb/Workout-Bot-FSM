@@ -127,13 +127,13 @@
    захардкожены белым; после переезда в Action оно видно и в светлой теме,
    а тему теперь переключают явной кнопкой (S64-4) — контраст обязателен.
    Родня урока №2 PLAYBOOK: там же про цвета, не доезжающие до нового дома. */
-.light-theme .sched-row-label { color: rgba(44, 32, 22, 0.7); }
-.light-theme .sched-cooldown { color: rgba(44, 32, 22, 0.5); }
+.light-theme .sched-row-label { color: rgba(44, 32, 22, 0.8); }
+.light-theme .sched-cooldown { color: rgba(44, 32, 22, 0.62); }
 .light-theme .sched-freeze-badge { color: rgba(44, 32, 22, 0.75); }
-.light-theme .sched-hint { color: rgba(44, 32, 22, 0.5); }
+.light-theme .sched-hint { color: rgba(44, 32, 22, 0.62); }
 .light-theme .week-dot {
-    border-color: rgba(44, 32, 22, 0.18);
-    color: rgba(44, 32, 22, 0.5);
+    border-color: rgba(44, 32, 22, 0.26);
+    color: rgba(44, 32, 22, 0.62);
     background: rgba(44, 32, 22, 0.04);
 }
 .light-theme .week-dot.main { color: rgba(44, 32, 22, 0.85); }

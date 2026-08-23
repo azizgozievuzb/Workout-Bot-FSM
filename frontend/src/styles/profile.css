@@ -5,17 +5,39 @@
    достают (урок №2 PLAYBOOK). Поэтому всё красится через --tg-theme-* или
    через `inherit`/полупрозрачный серый, одинаково читаемый в обеих темах. */
 
+/* Палитра экрана — по нашей теме, а не по цветам Telegram: класс темы висит на
+   самом корне портала (см. ProfileScreen.tsx). Значения те же, что у оверлеев
+   в App.css: тёмный #14161c/#FAF5EF, светлый #FAF6F1/#2C2016. */
+.profile-page.dark-theme {
+    background: #14161c;
+    color: #FAF5EF;
+}
+
+.profile-page.light-theme {
+    background: #FAF6F1;
+    color: #2C2016;
+}
+
+/* Шапка липкая и обязана быть непрозрачной — красим тем же фоном. */
+.profile-page.dark-theme .mentor-page-bar {
+    background: #14161c;
+}
+
+.profile-page.light-theme .mentor-page-bar {
+    background: #FAF6F1;
+}
+
 /* Блоки расписания приехали из тёмного оверлея, где цвета были захардкожены
    белым, — внутри портала это невидимый текст на светлом фоне. */
 .profile-page .sched-row-label,
 .profile-page .sched-freeze-badge {
     color: inherit;
-    opacity: 0.7;
+    opacity: 0.8;
 }
 
 .profile-page .sched-cooldown {
     color: inherit;
-    opacity: 0.5;
+    opacity: 0.62;
 }
 
 .profile-page .sched-time-input {
@@ -33,7 +55,7 @@
 
 .profile-row-hint {
     font-size: 12px;
-    opacity: 0.5;
+    opacity: 0.6;
 }
 
 .profile-theme-btn {
