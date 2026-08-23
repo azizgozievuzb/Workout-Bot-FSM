@@ -334,7 +334,7 @@ html, body {
        иначе собственное удержание себя же и отменит. */
     pointer-events: none;
     background: rgba(0, 0, 0, 0.32);
-    animation: holdDim var(--hold-ms, 5000ms) linear forwards;
+    animation: holdDim var(--hold-ms, 3500ms) linear forwards;
 }
 
 .light-theme .hold-progress {
@@ -367,7 +367,7 @@ html, body {
     /* 2πr при r=23 ≈ 144.5 */
     stroke-dasharray: 145;
     stroke-dashoffset: 145;
-    animation: holdRing var(--hold-ms, 5000ms) linear forwards;
+    animation: holdRing var(--hold-ms, 3500ms) linear forwards;
 }
 
 @keyframes holdDim {
