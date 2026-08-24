@@ -69,7 +69,7 @@
 
 | File / Dir | Purpose |
 |------------|---------|
-| `SESSION_STATUS.md` | Current task & last stop point. Update this before ending session. |
+| `SESSION_STATUS.md` | ТОЛЬКО текущая сессия. Update before ending session. История закрытых сессий — `_archive/SESSION_LOG.md`; ротация при >~400 строк (правило — PLAYBOOK §1-F, введено 2026-08-25). Отработавшие `PROMPT_*.md` — тоже в `_archive/`. |
 | `PLAYBOOK.md` | Процесс и уроки проекта (цикл постановок, смоуки, инварианты-принцип, «чего не делать»). Читать при подготовке постановок и смоуков. |
 | `BACKLOG.md` | Парк идей/фич «на потом». Читается перед постановкой новой фазы. См. Workflow Protocol. |
 | **Схема БД** | НЕ в файлах-планах. Источник правды: живая БД через `my-supabase` (`list_tables`) + код (`backend/db`, `backend/models`, роутеры). `PLAN.md` удалён, `ROADMAP.md` → `_archive/` (апрель-2026, там ложь про boosts/shop_items/star_balance — S61). |
