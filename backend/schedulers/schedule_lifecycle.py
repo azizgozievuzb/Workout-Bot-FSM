@@ -145,6 +145,8 @@ async def close_streak_day() -> None:
                         "main_days": pending,
                         "pending_main_days": None,
                         "pending_schedule_from": None,
+                        # S64-13: заявка вступила — возвращать больше нечего.
+                        "pending_schedule_paid_drops": None,
                     }).eq("id", pid).execute()
                 )
                 p["main_days"] = pending
