@@ -380,12 +380,18 @@ html, body {
 }
 
 .hold-progress-fill {
-    stroke: rgba(255, 170, 60, 0.9);
+    /* Акцент приложения — лаймовый #CCFF00 (кубы, заголовки), оранжевый был
+       чужой краской (S64, смоук 25.08). В светлой теме тот же акцент темнее. */
+    stroke: rgba(204, 255, 0, 0.95);
     stroke-linecap: round;
     /* 2πr при r=23 ≈ 144.5 */
     stroke-dasharray: 145;
     stroke-dashoffset: 145;
     animation: holdRing var(--hold-ms, 3500ms) linear forwards;
+}
+
+.light-theme .hold-progress-fill {
+    stroke: rgba(136, 204, 0, 0.95);
 }
 
 @keyframes holdDim {
