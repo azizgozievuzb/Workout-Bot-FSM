@@ -292,10 +292,6 @@ const PlayerView: React.FC = () => {
                 dropsBalance={shop?.drops_balance ?? stats.drops_balance}
                 onSpent={() => { getPlayerShop().then(setShop).catch(() => {}); }}
             />
-
-            <div className="cube-funfact">
-                Знаешь ли ты, что регулярные тренировки улучшают качество сна на 65%? Твоё тело скажет спасибо!
-            </div>
         </>
     );
 };

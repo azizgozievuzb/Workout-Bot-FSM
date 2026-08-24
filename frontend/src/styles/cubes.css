@@ -565,25 +565,9 @@
     color: #b05070;
 }
 
-/* --- Fun fact block --- */
-
-.cube-funfact {
-    border-radius: 12px;
-    padding: 14px 16px;
-    font-size: 13px;
-    line-height: 1.5;
-    font-style: italic;
-}
-
-.dark-theme .cube-funfact {
-    background: rgba(0, 122, 255, 0.08);
-    color: rgba(250, 245, 239, 0.5);
-}
-
-.light-theme .cube-funfact {
-    background: rgba(0, 100, 200, 0.05);
-    color: rgba(44, 32, 22, 0.4);
-}
+/* Плашка «Знаешь ли ты, что…» удалена (S64-12, решение юзера 24.08): факт был
+   захардкожен и место внизу Action занимал зря. Идея не отменена — живёт в
+   BACKLOG S50 п.1, вернётся после ядра Ф8. Стили удалены вместе с разметкой. */
 
 /* --- Refresh / generate button (ActionCube) --- */
 .promo-generate-btn {
