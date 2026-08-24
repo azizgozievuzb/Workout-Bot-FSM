@@ -11,8 +11,12 @@ export interface ScheduleState {
     pending_schedule_from: string | null;
     grace_until: string | null;
     in_grace: boolean;
+    // S64-13: кулдаун смены удалён — бэк всегда отдаёт can_change_now=true,
+    // next_change_available_at=null (поля живут ради совместимости).
     next_change_available_at: string | null;
     can_change_now: boolean;
+    /** Уплачено за текущую заявку (для текста «вернём N 💧»). */
+    pending_schedule_paid_drops: number | null;
     // 8b: light-режим
     light_unlocked: boolean;
     light_active: boolean;
@@ -45,6 +49,12 @@ export async function lockLight(): Promise<ScheduleState> {
 
 export async function setSchedule(mainDays: number[]): Promise<ScheduleState> {
     const { data } = await api.patch('/players/me/schedule', { main_days: mainDays });
+    return data;
+}
+
+/** S64-13: отменить заявку на смену дней до её вступления (с возвратом капель). */
+export async function cancelPendingSchedule(): Promise<ScheduleState> {
+    const { data } = await api.post('/players/me/schedule/cancel-pending');
     return data;
 }
 

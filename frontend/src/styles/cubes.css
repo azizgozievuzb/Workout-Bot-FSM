@@ -2264,11 +2264,8 @@
     color: var(--tg-theme-text-color, inherit);
 }
 
-/* Смена графика на кулдауне: кнопка серая, но живая — тап подсвечивает строку
-   с датой (смоук S63, паттерн П.9). Саму дату не дублируем вторым сообщением. */
-.sched-save-btn--muted {
-    opacity: 0.45;
-}
+/* S64-13: серое кулдаун-состояние кнопки (.sched-save-btn--muted) и подсветка
+   строки с датой (.sched-cooldown--flash) удалены вместе с кулдауном 30 дней. */
 
 /* Отложенная смена дней — не «предупреждение», а факт: держим нейтральным,
    но заметным (смоук S63). */
@@ -2282,15 +2279,6 @@
 .week-dot--leaving {
     opacity: 0.4;
     text-decoration: line-through;
-}
-
-.sched-cooldown--flash {
-    animation: schedCooldownFlash 0.9s ease;
-}
-
-@keyframes schedCooldownFlash {
-    0%, 100% { opacity: 1; }
-    20%, 60% { opacity: 1; color: var(--tg-theme-destructive-text-color, #e74c3c); }
 }
 
 .player-title-line {

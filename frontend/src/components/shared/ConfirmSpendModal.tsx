@@ -25,6 +25,9 @@ interface Props {
     /** Пояснение под ценой: что именно получит игрок. */
     note?: string;
     confirmLabel?: string;
+    /** Подпись кнопки «уйти без действия». Дефолт «Отменить» врёт там, где
+        само действие — отмена (S64-13: отмена заявки на смену графика). */
+    cancelLabel?: string;
     busy?: boolean;
     onConfirm: () => void;
     onCancel: () => void;
@@ -32,7 +35,7 @@ interface Props {
 
 const ConfirmSpendModal: React.FC<Props> = ({
     title, price, balance, freeLabel, note, confirmLabel = 'Купить',
-    busy = false, onConfirm, onCancel,
+    cancelLabel = 'Отменить', busy = false, onConfirm, onCancel,
 }) => {
     const touchStartY = useRef(0);
 
@@ -86,7 +89,7 @@ const ConfirmSpendModal: React.FC<Props> = ({
                         onClick={(e) => { e.stopPropagation(); onCancel(); }}
                         disabled={busy}
                     >
-                        Отменить
+                        {cancelLabel}
                     </button>
                     <button
                         type="button"

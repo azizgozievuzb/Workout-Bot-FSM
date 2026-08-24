@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import {
     DAY_LABELS, getSchedule, setSchedule, setMorningReminderTime,
-    type ScheduleState,
+    cancelPendingSchedule, type ScheduleState,
 } from '../../api/schedule';
 import ScheduleDaysPicker from './ScheduleDaysPicker';
 import ConfirmSpendModal from '../shared/ConfirmSpendModal';
@@ -182,13 +182,20 @@ export const MainDaysBlock: React.FC<{
     const [msg, setMsg] = useState('');
     /* П.7: смена графика вне grace — необратимая трата, окно обязательно. */
     const [confirmChange, setConfirmChange] = useState(false);
-    const [cooldownFlash, setCooldownFlash] = useState(false);
+    /* S64-13: отмена заявки — тоже окно: капли возвращаются, но действие
+       заметное (дни останутся старыми). */
+    const [confirmCancel, setConfirmCancel] = useState(false);
 
     const changePrice = sched?.schedule_change_price ?? null;
     const inGrace = sched?.in_grace ?? false;
+    /* Заявка ждёт понедельника: её дни правятся бесплатно, а сама она
+       отменяется с полным возвратом уплаченного (S64-13). */
+    const hasPending = !!(sched?.pending_main_days && sched.pending_schedule_from);
+    const refundAmount = sched?.pending_schedule_paid_drops ?? 0;
 
     const saveDays = useCallback(async () => {
         if (draftDays.length !== 3) return;
+        const wasPending = hasPending;
         setBusy(true); setMsg('');
         try {
             const res = await setSchedule(draftDays);
@@ -198,7 +205,9 @@ export const MainDaysBlock: React.FC<{
             setEditing(false);
             onSpent?.();
             if (res.pending_main_days) {
-                setMsg(`Новые дни вступят в силу с ${String(res.pending_schedule_from)}`);
+                setMsg(wasPending
+                    ? 'Выбор обновлён — капли не списались'
+                    : `Новые дни вступят в силу с ${fmtDate(String(res.pending_schedule_from))}`);
             } else {
                 setMsg('Расписание обновлено');
             }
@@ -206,39 +215,52 @@ export const MainDaysBlock: React.FC<{
             hapticNotification('error');
             const detail = e?.response?.data?.detail;
             const code = typeof detail === 'object' ? detail?.code : '';
-            if (code === 'SCHEDULE_COOLDOWN') {
-                const na = detail?.next_change_available_at;
-                setMsg(`Смена доступна с ${na ? new Date(na).toLocaleDateString() : 'позже'}`);
+            if (code === 'PENDING_ALREADY_DUE') {
+                setMsg('Выбранные дни уже вступают в силу — изменить их можно после понедельника');
             } else if (code === 'INSUFFICIENT_DROPS') {
                 setMsg(`Недостаточно капель: ${detail?.balance ?? 0}/${detail?.price ?? ''} 💧`);
             } else {
                 setMsg('Не удалось сменить дни');
             }
         } finally { setBusy(false); setConfirmChange(false); }
-    }, [draftDays, setMainDaysStore, setSched, onSpent]);
+    }, [draftDays, hasPending, setMainDaysStore, setSched, onSpent]);
 
-    /* Бесплатная смена (первичная установка / grace) окном не гейтится: тратить
-       там нечего, а лишний шаг мешал бы онбордингу. */
-    const paidChange = !inGrace && !!changePrice;
-    /* Кулдаун 30 дней (смоук S63): бэк отбивает смену 409 SCHEDULE_COOLDOWN ДО
-       списания, но кнопка этого не знала — игрок открывал окно, где обещаны
-       «Спишется 100 💧» и «вступят со следующего понедельника», жал «Сменить» и
-       получал отказ. Гейтим здесь: серая, но живая, тап называет дату (П.9). */
-    const onCooldown = !!sched && !sched.can_change_now;
+    /* S64-13: отмена заявки до вступления — полный возврат уплаченного. */
+    const doCancel = useCallback(async () => {
+        setBusy(true); setMsg('');
+        try {
+            const res = await cancelPendingSchedule();
+            setSched(res);
+            setMainDaysStore(res.main_days ?? []);
+            hapticNotification('success');
+            setEditing(false);
+            onSpent?.();
+            setMsg(refundAmount
+                ? `Смена отменена, вернули ${refundAmount} 💧`
+                : 'Смена отменена');
+        } catch (e: any) {
+            hapticNotification('error');
+            const detail = e?.response?.data?.detail;
+            const code = typeof detail === 'object' ? detail?.code : '';
+            if (code === 'PENDING_ALREADY_DUE') {
+                setMsg('Новые дни уже вступают в силу — отменить не получится');
+            } else if (code === 'NO_PENDING') {
+                setMsg('Отменять нечего — смена не заказана');
+            } else {
+                setMsg('Не удалось отменить смену');
+            }
+        } finally { setBusy(false); setConfirmCancel(false); }
+    }, [refundAmount, setMainDaysStore, setSched, onSpent]);
+
+    /* Платим только за НОВУЮ заявку. Бесплатны: первичная установка, grace и
+       правка уже оплаченной заявки (S64-13 — это правка черновика, не покупка).
+       Кулдаун 30 дней удалён вместе с серым состоянием кнопки. */
+    const paidChange = !inGrace && !!changePrice && !hasPending;
     const submitDays = useCallback(() => {
         if (draftDays.length !== 3) return;
-        if (onCooldown) {
-            /* Причину НЕ дублируем в msg: строка cooldownText висит рядом с
-               кнопкой постоянно (смоук S63 — две одинаковые фразы на экране).
-               Тап отвечает haptic-ом и подсветкой той самой строки. */
-            hapticNotification('error');
-            setCooldownFlash(true);
-            window.setTimeout(() => setCooldownFlash(false), 900);
-            return;
-        }
         if (paidChange) { setConfirmChange(true); return; }
         void saveDays();
-    }, [draftDays.length, onCooldown, paidChange, saveDays]);
+    }, [draftDays.length, paidChange, saveDays]);
 
     /* Отложенная смена (смоук S63): игрок платил 100 💧 и не видел НИКАКОГО
        следа покупки — дни на экране прежние, новых нигде нет («списали и ничего
@@ -251,10 +273,9 @@ export const MainDaysBlock: React.FC<{
               .map((d) => DAY_LABELS[d]?.[1] ?? d).join('·')
         : null;
 
-    const cooldownText = sched && !sched.can_change_now && sched.next_change_available_at
-        ? `Следующая смена доступна с ${new Date(sched.next_change_available_at).toLocaleDateString()}`
-        : sched?.in_grace ? 'Первые 14 дней — смена бесплатно и без ограничений'
-            : null;
+    /* S64-13: кулдауна больше нет — осталась только подсказка про grace. */
+    const graceText = sched?.in_grace
+        ? 'Первые 14 дней — смена бесплатно и без ограничений' : null;
 
     return (
         <div>
@@ -270,16 +291,39 @@ export const MainDaysBlock: React.FC<{
                                 {DAY_LABELS[wd]?.[1]}</div>
                         ))}
                     </div>
-                    <button
-                        className="sched-save-btn"
-                        style={{ marginTop: 10 }}
-                        onClick={() => { setDraftDays([...mainDays]); setEditing(true); }}
-                    >
-                        {/* 8c: вне grace смена платная */}
-                        {!inGrace && changePrice
-                            ? `Сменить за ${changePrice} 💧`
-                            : 'Изменить дни main-тренировок'}
-                    </button>
+                    {/* S64-13: пока заявка ждёт понедельника — два действия:
+                        поправить выбор бесплатно или отменить с возвратом. */}
+                    {hasPending ? (
+                        <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                            <button
+                                className="sched-save-btn"
+                                onClick={() => {
+                                    setDraftDays([...(sched?.pending_main_days ?? mainDays)]);
+                                    setEditing(true);
+                                }}
+                            >
+                                Изменить выбор (бесплатно)
+                            </button>
+                            <button
+                                className="sched-save-btn"
+                                style={{ background: 'rgba(255,255,255,0.12)' }}
+                                onClick={() => setConfirmCancel(true)}
+                            >
+                                {refundAmount ? `Отменить — вернём ${refundAmount} 💧` : 'Отменить смену'}
+                            </button>
+                        </div>
+                    ) : (
+                        <button
+                            className="sched-save-btn"
+                            style={{ marginTop: 10 }}
+                            onClick={() => { setDraftDays([...mainDays]); setEditing(true); }}
+                        >
+                            {/* 8c: вне grace смена платная */}
+                            {!inGrace && changePrice
+                                ? `Сменить за ${changePrice} 💧`
+                                : 'Изменить дни main-тренировок'}
+                        </button>
+                    )}
                 </>
             )}
             {editing && (
@@ -287,7 +331,7 @@ export const MainDaysBlock: React.FC<{
                     <ScheduleDaysPicker selected={draftDays} onChange={setDraftDays} disabled={busy} />
                     <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
                         <button
-                            className={`sched-save-btn${onCooldown ? ' sched-save-btn--muted' : ''}`}
+                            className="sched-save-btn"
                             disabled={busy || draftDays.length !== 3} onClick={submitDays}>
                             Сохранить
                         </button>
@@ -305,16 +349,17 @@ export const MainDaysBlock: React.FC<{
                     {paidChange && dropsBalance !== undefined && (
                         <div className="sched-cooldown">У тебя {dropsBalance} 💧</div>
                     )}
+                    {hasPending && (
+                        <div className="sched-cooldown">
+                            Правка заказанной смены — бесплатно, капли не спишутся.
+                        </div>
+                    )}
                 </>
             )}
             {pendingText && (
                 <div className="sched-cooldown sched-cooldown--pending">📅 {pendingText}</div>
             )}
-            {cooldownText && (
-                <div className={`sched-cooldown${cooldownFlash ? ' sched-cooldown--flash' : ''}`}>
-                    {cooldownText}
-                </div>
-            )}
+            {graceText && <div className="sched-cooldown">{graceText}</div>}
             {msg && <div className="sched-cooldown">{msg}</div>}
 
             {confirmChange && changePrice !== null && (
@@ -328,6 +373,22 @@ export const MainDaysBlock: React.FC<{
                     busy={busy}
                     onConfirm={() => { void saveDays(); }}
                     onCancel={() => setConfirmChange(false)}
+                />
+            )}
+
+            {/* S64-13: отмена заказанной смены — капли возвращаются полностью. */}
+            {confirmCancel && (
+                <ConfirmSpendModal
+                    title="📅 Отменить смену дней"
+                    price={null}
+                    balance={dropsBalance ?? 0}
+                    freeLabel={refundAmount ? `Вернём ${refundAmount} 💧` : 'Капли не спишутся'}
+                    note="Дни тренировок останутся прежними."
+                    confirmLabel="Отменить смену"
+                    cancelLabel="Оставить"
+                    busy={busy}
+                    onConfirm={() => { void doCancel(); }}
+                    onCancel={() => setConfirmCancel(false)}
                 />
             )}
         </div>
