@@ -195,7 +195,6 @@ export const MainDaysBlock: React.FC<{
 
     const saveDays = useCallback(async () => {
         if (draftDays.length !== 3) return;
-        const wasPending = hasPending;
         setBusy(true); setMsg('');
         try {
             const res = await setSchedule(draftDays);
@@ -205,12 +204,11 @@ export const MainDaysBlock: React.FC<{
             setEditing(false);
             onSpent?.();
             if (res.pending_main_days) {
-                /* Правку заявки НЕ комментируем строкой (решение юзера на смоуке
-                   п.3): строка «📅 С понедельника …» тут же показывает новые дни,
-                   а «капли не списались» и так очевидно — окна траты не было. */
-                setMsg(wasPending
-                    ? ''
-                    : `Новые дни вступят в силу с ${fmtDate(String(res.pending_schedule_from))}`);
+                /* Ни покупку, ни правку заявки НЕ комментируем строкой (решения
+                   юзера на смоуке, пп.3 и 6): всё, что тут можно сказать, уже
+                   сказано постоянной строкой «📅 С понедельника … : дни» —
+                   вторая строка про ту же дату была дублем. */
+                setMsg('');
             } else {
                 setMsg('Расписание обновлено');
             }
@@ -226,7 +224,7 @@ export const MainDaysBlock: React.FC<{
                 setMsg('Не удалось сменить дни');
             }
         } finally { setBusy(false); setConfirmChange(false); }
-    }, [draftDays, hasPending, setMainDaysStore, setSched, onSpent]);
+    }, [draftDays, setMainDaysStore, setSched, onSpent]);
 
     /* S64-13: отмена заявки до вступления — полный возврат уплаченного. */
     const doCancel = useCallback(async () => {
