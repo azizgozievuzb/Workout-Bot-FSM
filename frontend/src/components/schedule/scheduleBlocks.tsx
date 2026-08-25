@@ -352,11 +352,9 @@ export const MainDaysBlock: React.FC<{
                     {paidChange && dropsBalance !== undefined && (
                         <div className="sched-cooldown">У тебя {dropsBalance} 💧</div>
                     )}
-                    {hasPending && (
-                        <div className="sched-cooldown">
-                            Правка заказанной смены — бесплатно, капли не спишутся.
-                        </div>
-                    )}
+                    {/* Подсказки «правка бесплатна» тут нет: слово «(бесплатно)»
+                        стоит на самой кнопке, которая эту форму и открыла
+                        (решение юзера на смоуке п.4). */}
                 </>
             )}
             {pendingText && (
