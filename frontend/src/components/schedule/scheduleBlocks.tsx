@@ -205,8 +205,11 @@ export const MainDaysBlock: React.FC<{
             setEditing(false);
             onSpent?.();
             if (res.pending_main_days) {
+                /* Правку заявки НЕ комментируем строкой (решение юзера на смоуке
+                   п.3): строка «📅 С понедельника …» тут же показывает новые дни,
+                   а «капли не списались» и так очевидно — окна траты не было. */
                 setMsg(wasPending
-                    ? 'Выбор обновлён — капли не списались'
+                    ? ''
                     : `Новые дни вступят в силу с ${fmtDate(String(res.pending_schedule_from))}`);
             } else {
                 setMsg('Расписание обновлено');
