@@ -294,7 +294,7 @@ export const MainDaysBlock: React.FC<{
                     {/* S64-13: пока заявка ждёт понедельника — два действия:
                         поправить выбор бесплатно или отменить с возвратом. */}
                     {hasPending ? (
-                        <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                        <div className="sched-pending-actions">
                             <button
                                 className="sched-save-btn"
                                 onClick={() => {
@@ -302,7 +302,7 @@ export const MainDaysBlock: React.FC<{
                                     setEditing(true);
                                 }}
                             >
-                                Изменить выбор (бесплатно)
+                                Изменить (бесплатно)
                             </button>
                             <button
                                 className="sched-save-btn"

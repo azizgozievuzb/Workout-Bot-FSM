@@ -74,6 +74,24 @@
     font-size: 15px; font-weight: 700; cursor: pointer;
 }
 .sched-save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* S64-13: пара действий по заказанной смене («изменить» + «отменить») должна
+   стоять в ОДНУ строку — в столбик она съедала пол-экрана. Шрифт мельче
+   основной кнопки: это второстепенные действия, а не «Приступим». */
+.sched-pending-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+}
+.sched-pending-actions .sched-save-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    margin-top: 0;
+    padding: 10px 6px;
+    font-size: 12.5px;
+    font-weight: 600;
+    line-height: 1.25;
+}
 .sched-freeze-badge { font-size: 13px; color: rgba(255,255,255,0.75); }
 
 /* --- Light-режим (8b) --- */
