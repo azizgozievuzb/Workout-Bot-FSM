@@ -238,9 +238,11 @@ export const MainDaysBlock: React.FC<{
             hapticNotification('success');
             setEditing(false);
             onSpent?.();
-            setMsg(refundAmount
-                ? `Смена отменена, вернули ${refundAmount} 💧`
-                : 'Смена отменена');
+            /* Итог отмены НЕ комментируем строкой (решение юзера на смоуке):
+               возврат обещан в окне подтверждения ДО действия, а после отмены
+               строка «📅 С понедельника …» исчезает и возвращается кнопка
+               покупки — этого достаточно. */
+            setMsg('');
         } catch (e: any) {
             hapticNotification('error');
             const detail = e?.response?.data?.detail;
