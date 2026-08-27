@@ -8,6 +8,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from .subscription_lifecycle import register_subscription_jobs
 from .schedule_lifecycle import register_schedule_jobs
 from .shelf_lifecycle import register_shelf_jobs
+from .clips_lifecycle import register_clips_jobs
 
 
 def create_scheduler(bot) -> AsyncIOScheduler:
@@ -16,4 +17,5 @@ def create_scheduler(bot) -> AsyncIOScheduler:
     register_subscription_jobs(scheduler)
     register_schedule_jobs(scheduler)  # 8a: streak closure / freezes / reminders
     register_shelf_jobs(scheduler)     # 8d: promise reminders / video retention
+    register_clips_jobs(scheduler)     # Job D: ретеншн клипов workout-clips (7 дн)
     return scheduler
