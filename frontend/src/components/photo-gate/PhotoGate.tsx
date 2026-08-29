@@ -229,7 +229,7 @@ const PhotoGate: React.FC = () => {
             </p>
             <div className="pg-warnings">
               <p className="pg-warning-item">Убедитесь, что освещение достаточно яркое — фото должно быть светлым и чётким</p>
-              <p className="pg-warning-item pg-warning-item--accent">Фото делается один раз. Повторная замена будет платной</p>
+              <p className="pg-warning-item pg-warning-item--accent">Это фото станет вашим фоном — изменить его будет нельзя</p>
             </div>
             {error && <p className="pg-error">{error}</p>}
             <label className="pg-consent">
