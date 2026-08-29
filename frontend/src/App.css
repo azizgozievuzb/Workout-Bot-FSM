@@ -12,6 +12,27 @@
     outline: none !important;
 }
 
+/* ==========================================================================
+   S66 — БАЗА СОСТОЯНИЙ КНОПОК (системный проход, BACKLOG S54 №5-15 / S59 №2)
+
+   Состояния добавлялись точечно по находкам смоуков, и половина классов
+   (.tab-selector-btn, .player-menu-btn, .connections-view-btn, .ban-filter-btn,
+   .videoplayer-*, .cardflow-close, .disclaimer-cancel, .sched-save-btn,
+   .paywall-cta, .mentor-*-link и др.) осталась без видимого нажатия или без
+   видимой блокировки. Красим ЭЛЕМЕНТНЫМ селектором `button` (специфичность
+   0,0,1): любое правило класса перекрывает базу, поэтому существующий вид
+   кнопок не меняется — база лишь закрывает дыры. Редизайна нет.
+   Паттерн блёклости взят у .cube-btn-sm:disabled (8d.1).
+   ========================================================================== */
+button:active:not(:disabled) {
+    transform: scale(0.97);
+}
+
+button:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
 html, body {
     overflow: hidden;
     height: 100vh;
