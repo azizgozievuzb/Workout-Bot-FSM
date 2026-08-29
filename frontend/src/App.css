@@ -23,14 +23,19 @@ html, body {
    базовый цвет текста. Иначе всё, что покрашено var(--tg-theme-text-color)
    (имя игрока в профиле и сводке и ещё десяток мест), берёт цвет клиента
    Telegram — белый — и в светлой теме сливается с фоном. */
-.app-container.dark-theme {
+/* S66 (аудит порталов): селектор БЕЗ `.app-container` — переменные обязаны
+   доезжать и до корней порталов в body (они несут тот же класс темы, см.
+   ProfileScreen/MentorPlayerScreens/VideoPlayerModal/PromiseRecorder/
+   WorkoutScreen). Раньше блок был привязан к `.app-container`, и портал брал
+   --tg-theme-* от клиента Telegram: совпадение тем маскировало дыру (урок №17). */
+.dark-theme {
     color: #FAF5EF;
     --tg-theme-text-color: #FAF5EF;
     --tg-theme-hint-color: rgba(250, 245, 239, 0.6);
     --tg-theme-bg-color: #14161c;
 }
 
-.app-container.light-theme {
+.light-theme {
     color: #2C2016;
     --tg-theme-text-color: #2C2016;
     --tg-theme-hint-color: rgba(44, 32, 22, 0.62);

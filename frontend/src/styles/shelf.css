@@ -560,8 +560,9 @@
     justify-content: center;
 }
 
-/* Тема задаётся ТОЛЬКО tg-переменными (они на :root и работают в портале),
-   а не классами .dark-theme/.light-theme — те до портала не дотягиваются.
+/* Тема задаётся --tg-theme-* переменными. С S66 они приходят от НАШЕЙ темы:
+   класс темы висит на корне портала (VideoPlayerModal.tsx), а блок
+   .dark-theme/.light-theme в App.css больше не привязан к .app-container.
    -webkit-appearance:none обязателен, иначе iOS подменяет фон нативным. */
 .videoplayer-download {
     -webkit-appearance: none;

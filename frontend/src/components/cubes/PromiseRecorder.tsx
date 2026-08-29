@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useTheme } from '../../contexts/ThemeContext';
 import { hapticImpact, hapticNotification } from '../../utils/haptic';
 
 /* 8d (§8.8a): запись видео-обещания ≤30 сек с фронтальной камеры (MediaRecorder)
@@ -70,6 +71,7 @@ function pickMime(): string | undefined {
 const PromiseRecorder: React.FC<Props> = ({
     title, hint, confirmLabel = 'Отправить', busy = false, error, progress, onReady, onCancel,
 }) => {
+    const theme = useTheme();
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
     const recorderRef = useRef<any>(null);
@@ -194,7 +196,8 @@ const PromiseRecorder: React.FC<Props> = ({
     const sizeMb = blob ? (blob.size / 1024 / 1024).toFixed(1) : null;
 
     return createPortal(
-        <div className="cube-modal-backdrop promise-backdrop"
+        /* Класс темы — на корне портала (S66), см. VideoPlayerModal. */
+        <div className={`cube-modal-backdrop promise-backdrop ${theme}-theme`}
             onClick={(e) => { if (e.target === e.currentTarget && !busy) close(); }}>
             <div className="cube-modal-sheet promise-recorder" onClick={(e) => e.stopPropagation()}>
                 <div className="cube-modal-handle" />

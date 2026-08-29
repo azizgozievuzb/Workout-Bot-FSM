@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useTheme } from '../../contexts/ThemeContext';
 import { getItemVideoUrl } from '../../api/shelf';
 import { downloadItemVideo } from '../../utils/videoDownload';
 import { hapticImpact } from '../../utils/haptic';
@@ -27,6 +28,7 @@ interface Props {
 }
 
 const VideoPlayerModal: React.FC<Props> = ({ itemId, kind, title, onClose, onError, allowDownload = true }) => {
+    const theme = useTheme();
     const [url, setUrl] = useState('');
     const [failed, setFailed] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -54,7 +56,9 @@ const VideoPlayerModal: React.FC<Props> = ({ itemId, kind, title, onClose, onErr
     }, [saving, itemId, kind, title, onError]);
 
     return createPortal(
-        <div className="videoplayer-backdrop"
+        /* Класс темы — на корне портала (S66): иначе --tg-theme-* внутри
+           приходят от клиента Telegram, а не от нашей темы (урок №17). */
+        <div className={`videoplayer-backdrop ${theme}-theme`}
             onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
             <div className="videoplayer-window" onClick={(e) => e.stopPropagation()}>
                 <div className="videoplayer-head">

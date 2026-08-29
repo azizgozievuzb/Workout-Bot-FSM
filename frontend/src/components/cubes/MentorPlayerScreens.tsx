@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useTheme } from '../../contexts/ThemeContext';
 import { getPlayerPage } from '../../api/shelf';
 import type { PlayerPage } from '../../api/shelf';
 import MentorPlayerProfile from './MentorPlayerProfile';
@@ -30,6 +31,7 @@ interface Props {
 }
 
 const MentorPlayerScreens: React.FC<Props> = ({ playerId, initial, onClose }) => {
+    const theme = useTheme();
     const [stack, setStack] = useState<MentorPage[]>([initial]);
     const [page, setPage] = useState<PlayerPage | null>(null);
     const [loading, setLoading] = useState(true);
@@ -84,8 +86,11 @@ const MentorPlayerScreens: React.FC<Props> = ({ playerId, initial, onClose }) =>
         );
     })();
 
+    /* Класс темы — на КОРНЕ портала (S66): портал живёт в body, куда
+       .dark-theme с .app-container не достаёт, и --tg-theme-* приходили от
+       клиента Telegram. */
     return createPortal(
-        <div className="mentor-page">
+        <div className={`mentor-page ${theme}-theme`}>
             {toast && <div className="admin-toast">{toast}</div>}
             {body}
         </div>,

@@ -17,6 +17,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useTheme } from '../../contexts/ThemeContext';
 import { useWorkoutMachine } from '../../fsm/workoutSessionMachine';
 import {
   cancelWorkoutSession,
@@ -74,6 +75,9 @@ const buildAnnouncementWords = (next: ExerciseType): string[] => {
 
 const WorkoutScreen: React.FC<Props> = ({ onClose, sessionType = 'main' }) => {
   const { ctx, send } = useWorkoutMachine();
+  /* Класс темы — на корне портала (S66): .ws-root красится --tg-theme-*,
+     а в body наши переменные без класса не доезжали. */
+  const theme = useTheme();
   const isLight = sessionType === 'light';
   // Light-UI НЕ использует слово «тренировка» — только «зарядка».
   const nounAcc = isLight ? 'зарядку' : 'тренировку';  // винительный
@@ -719,7 +723,7 @@ const WorkoutScreen: React.FC<Props> = ({ onClose, sessionType = 'main' }) => {
   // leaving ~40% of the screen empty at the bottom.
   if (errState) {
     return createPortal(
-      <div className="ws-root">
+      <div className={`ws-root ${theme}-theme`}>
         <div className="ws-error-card">
           <div className="ws-error-title">Ошибка</div>
           <div className="ws-error-text">{errState.message}</div>
@@ -735,7 +739,7 @@ const WorkoutScreen: React.FC<Props> = ({ onClose, sessionType = 'main' }) => {
 
   if (!config || !sessionId) {
     return createPortal(
-      <div className="ws-root">
+      <div className={`ws-root ${theme}-theme`}>
         <div className="ws-loading">Подготовка сессии…</div>
       </div>,
       document.body,
@@ -751,7 +755,7 @@ const WorkoutScreen: React.FC<Props> = ({ onClose, sessionType = 'main' }) => {
     !earlyDone && (ctx.state === 'restAndAnalyzingPhase' || ctx.state === 'aiVerdictReview');
 
   return createPortal(
-    <div className="ws-root">
+    <div className={`ws-root ${theme}-theme`}>
       {/* --- top bar + progress rail: hidden in idle (no workout in flight there;
             Telegram's native «Закрыть» is enough). --- */}
       {ctx.state !== 'idle' && (
