@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { useAuthStore } from '../stores/authStore';
+import { dropCache, CACHE_KEYS } from './cache';
 
 let token: string | null = null;
 
@@ -25,8 +26,29 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+/* S66 (смоук 31.08). Любой НЕ-GET запрос к нашему API — это изменение состояния
+ * игрока: покупка, заморозка, смена графика, восстановление стрика. После него
+ * кэшированные баланс/витрина/расписание заведомо устарели.
+ *
+ * Почему это делается ЗДЕСЬ, а не в компонентах: раньше свежий баланс приходил в
+ * ответе и записывался через setState того экрана, где нажали «Купить». Стоило
+ * свайпнуть, не дождавшись ответа, — экран размонтировался, запись терялась, и
+ * кэш продолжал уверенно отдавать старое число (в Action висело 200 вместо 150).
+ * Перехватчик от жизненного цикла React не зависит и сработает даже если экран
+ * уже закрыт; про новые эндпоинты его не забудешь.
+ */
+const MUTATION_INVALIDATES = [
+  CACHE_KEYS.myStats,
+  CACHE_KEYS.playerShop,
+  CACHE_KEYS.schedule,
+];
+
 api.interceptors.response.use(
-  (res) => res,
+  (res) => {
+    const method = (res.config.method || 'get').toLowerCase();
+    if (method !== 'get') MUTATION_INVALIDATES.forEach((k) => dropCache(k));
+    return res;
+  },
   (err) => {
     if (err.response?.status === 401) {
       setToken(null);

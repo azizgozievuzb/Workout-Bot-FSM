@@ -25,6 +25,22 @@ interface Entry {
 }
 
 const store = new Map<string, Entry>();
+/* Подписчики на ключ. Нужны, потому что данные меняются НЕ только там, где их
+   показывают: покупка происходит в Market, а баланс висит ещё и в Action.
+   Без оповещения смонтированный экран продолжал бы держать своё старое
+   значение (смоук 31.08: купил заморозку — в Action осталось 200 вместо 150). */
+const listeners = new Map<string, Set<() => void>>();
+
+function notify(key: string): void {
+    listeners.get(key)?.forEach((fn) => fn());
+}
+
+function subscribe(key: string, fn: () => void): () => void {
+    let set = listeners.get(key);
+    if (!set) { set = new Set(); listeners.set(key, set); }
+    set.add(fn);
+    return () => { set!.delete(fn); };
+}
 /* Дедупликация: Action и портал профиля монтируются почти одновременно и оба
    зовут getMyStats. Без этого ушло бы два одинаковых запроса. */
 const inflight = new Map<string, Promise<unknown>>();
@@ -35,12 +51,20 @@ export function readCache<T>(key: string): T | undefined {
 
 export function writeCache<T>(key: string, data: T): void {
     store.set(key, { data, at: Date.now() });
+    notify(key);
 }
 
-/** Сбросить один ключ или весь кэш (без аргумента). */
+/** Сбросить один ключ или весь кэш (без аргумента). Смонтированные экраны,
+ *  которые на нём сидят, перезапросят данные сами. */
 export function dropCache(key?: string): void {
-    if (key === undefined) store.clear();
-    else store.delete(key);
+    if (key === undefined) {
+        const keys = [...store.keys()];
+        store.clear();
+        keys.forEach(notify);
+        return;
+    }
+    store.delete(key);
+    notify(key);
 }
 
 function fetchShared<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
@@ -109,11 +133,18 @@ export function useCached<T>(
         const entry = store.get(key);
         if (entry === undefined) {
             void run(true);
-            return;
+        } else {
+            setDataState(entry.data as T);
+            setLoading(false);
+            if (Date.now() - entry.at > staleMs) void run(false);
         }
-        setDataState(entry.data as T);
-        setLoading(false);
-        if (Date.now() - entry.at > staleMs) void run(false);
+        /* Кто-то обновил или сбросил этот ключ — подхватываем. Свежее значение
+           берём молча, сброшенное — перезапрашиваем. */
+        return subscribe(key, () => {
+            const now = store.get(key);
+            if (now === undefined) void run(false);
+            else setDataState(now.data as T);
+        });
     }, [key, run, staleMs]);
 
     const setData = useCallback((update: T | ((prev: T | null) => T | null)) => {
