@@ -49,11 +49,24 @@ html, body {
    ProfileScreen/MentorPlayerScreens/VideoPlayerModal/PromiseRecorder/
    WorkoutScreen). Раньше блок был привязан к `.app-container`, и портал брал
    --tg-theme-* от клиента Telegram: совпадение тем маскировало дыру (урок №17). */
+/* S66-хотфикс (живой смоук 30.08): переопределять ТРИ переменные было мало.
+   `--tg-theme-secondary-bg-color`, `-destructive-text-color` и `-link-color`
+   мы оставляли клиенту Telegram — а клиент у юзера ТЁМНЫЙ, и в нашей СВЕТЛОЙ
+   теме все блоки на secondary-bg приезжали чёрными: «чёрный прямоугольник, в
+   котором не видно текста» в модалках подтверждения (.cube-modal-empty,
+   .cube-modal-input), чёрная кнопка «⬇ Скачать» в плеере, невидимая «Отмена»
+   (.cube-modal-btn--ghost). Это ровно урок №17 второй раз: то, что мы НЕ
+   переопределяем, приходит от чужой темы.
+   `--tg-theme-button-color` / `-button-text-color` НЕ трогаем осознанно:
+   фиолетовая акцентная кнопка Telegram юзеру нравится (смоук 30.08). */
 .dark-theme {
     color: #FAF5EF;
     --tg-theme-text-color: #FAF5EF;
     --tg-theme-hint-color: rgba(250, 245, 239, 0.6);
     --tg-theme-bg-color: #14161c;
+    --tg-theme-secondary-bg-color: rgba(250, 245, 239, 0.08);
+    --tg-theme-destructive-text-color: #FF6B6B;
+    --tg-theme-link-color: #6AB7FF;
 }
 
 .light-theme {
@@ -61,6 +74,9 @@ html, body {
     --tg-theme-text-color: #2C2016;
     --tg-theme-hint-color: rgba(44, 32, 22, 0.62);
     --tg-theme-bg-color: #FAF6F1;
+    --tg-theme-secondary-bg-color: rgba(44, 32, 22, 0.06);
+    --tg-theme-destructive-text-color: #C0392B;
+    --tg-theme-link-color: #2F6FB5;
 }
 
 .app-container {
