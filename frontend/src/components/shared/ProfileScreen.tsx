@@ -2,9 +2,8 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import { getMyStats, type PlayerStats } from '../../api/stats';
 import { useCached, CACHE_KEYS } from '../../api/cache';
-import { useTheme, useThemeToggle } from '../../contexts/ThemeContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { PlayerIdentityBlock, ReminderBlock } from '../schedule/scheduleBlocks';
-import { hapticImpact } from '../../utils/haptic';
 import '../../styles/shelf.css';
 import '../../styles/profile.css';
 
@@ -34,7 +33,6 @@ function telegramFirstName(): string | null {
 
 const ProfileScreen: React.FC<Props> = ({ view, onClose }) => {
     const theme = useTheme();
-    const toggleTheme = useThemeToggle();
     /* S66 (смоук 30.08: «звание появляется чуть позже»). Экран запрашивал
        getMyStats заново, хотя Action уже держал ровно эти данные. Через общий
        кэш имя и звание есть на первом кадре; свежие приезжают в фоне. */
@@ -68,23 +66,10 @@ const ProfileScreen: React.FC<Props> = ({ view, onClose }) => {
                     {/* Напоминание — только у игрока: наставнику будить некого. */}
                     {view === 'player' && <ReminderBlock />}
 
-                    <div className="profile-row">
-                        <div>
-                            <div className="sched-row-label" style={{ marginBottom: 2 }}>Оформление</div>
-                            <div className="profile-row-hint">
-                                {theme === 'dark' ? 'Сейчас тёмная тема' : 'Сейчас светлая тема'}
-                            </div>
-                        </div>
-                        {/* Иконка показывает ЦЕЛЬ переключения (S64-4): в тёмной теме
-                            ☀️ «нажми — станет светло», в светлой 🌙. */}
-                        <button
-                            className="profile-theme-btn"
-                            onClick={(e) => { e.stopPropagation(); hapticImpact('light'); toggleTheme(); }}
-                            aria-label={theme === 'dark' ? 'Включить светлую тему' : 'Включить тёмную тему'}
-                        >
-                            {theme === 'dark' ? '☀️' : '🌙'}
-                        </button>
-                    </div>
+                    {/* S66: строка «Оформление» отсюда убрана (решение юзера 31.08).
+                        Переключатель темы переехал к кнопке «Закрыть»
+                        (ThemeCycleButton) и стал трёхпозиционным — он виден с
+                        любого экрана, а не только из профиля. */}
                 </div>
             </div>
         </div>,

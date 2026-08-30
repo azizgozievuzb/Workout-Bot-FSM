@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import Backdrop from './design/backdrop/Backdrop';
 import type { GlassCubesHandle } from './design/backdrop/GlassCubes';
 import { useAuth } from './hooks/useAuth';
+import ThemeCycleButton from './components/shared/ThemeCycleButton';
 import { prefetch, CACHE_KEYS } from './api/cache';
 import { getMyStats } from './api/stats';
 import { getSchedule } from './api/schedule';
@@ -16,7 +17,7 @@ import MarketCube from './components/cubes/MarketCube';
 import BondCube from './components/cubes/BondCube';
 import AdminCube from './components/cubes/AdminCube';
 import { ThemeContext } from './contexts/ThemeContext';
-import type { AppTheme } from './contexts/ThemeContext';
+import type { AppTheme, ThemeMode } from './contexts/ThemeContext';
 import { useAuthStore } from './stores/authStore';
 import AccessRevokedScreen from './components/shared/AccessRevokedScreen';
 import MaintenanceScreen from './components/shared/MaintenanceScreen';
@@ -52,13 +53,30 @@ const HOLD_CANCEL_PX = 24;
    не замечал; у явной кнопки он читался бы как баг. */
 const THEME_KEY = 'wb_theme';
 
-function readStoredTheme(): AppTheme {
+function readStoredMode(): ThemeMode {
     try {
         const saved = localStorage.getItem(THEME_KEY);
-        if (saved === 'dark' || saved === 'light') return saved;
+        if (saved === 'dark' || saved === 'light' || saved === 'auto') return saved;
     } catch { /* приватный режим / отключённое хранилище — молча дефолт */ }
     return 'dark';
 }
+
+/* «Как в Telegram» (S66). Клиент отдаёт свою тему в `colorScheme`; если его нет
+   (открыли в обычном браузере) — спрашиваем систему через prefers-color-scheme,
+   ровно тот же сигнал, что уже используется в index.css. */
+function detectClientTheme(): AppTheme {
+    const scheme = (window as any).Telegram?.WebApp?.colorScheme;
+    if (scheme === 'dark' || scheme === 'light') return scheme;
+    try {
+        return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    } catch { return 'dark'; }
+}
+
+const NEXT_MODE: Record<ThemeMode, ThemeMode> = {
+    light: 'dark',
+    dark: 'auto',
+    auto: 'light',
+};
 
 const carouselVariants = {
     enter: (dir: number) => ({ x: dir ? dir * 300 : 0, opacity: 0 }),
@@ -70,7 +88,9 @@ const App: React.FC = () => {
     const { isLoading, onboardingDone, photoUrl, error, role } = useAuth();
     const { is_admin, accessRevoked, banInfo, maintenanceMode, onboardingBlocked, onboardingBlockedMessage,
         subscription, has_responsible_access, has_player_access, needsScheduleSetup } = useAuthStore();
-    const [theme, setTheme] = useState<AppTheme>(readStoredTheme);
+    const [themeMode, setThemeMode] = useState<ThemeMode>(readStoredMode);
+    const [clientTheme, setClientTheme] = useState<AppTheme>(detectClientTheme);
+    const theme: AppTheme = themeMode === 'auto' ? clientTheme : themeMode;
     const [layoutMode, setLayoutMode] = useState<LayoutMode>('chaos');
     const [activeModule, setActiveModule] = useState<ModuleName | null>(null);
     /* Строка сводки «👤 Профиль» / «⚙️ Настройки» обязана открывать сам экран
@@ -121,15 +141,36 @@ const App: React.FC = () => {
         setHoldActive(false);
     }, []);
 
-    const toggleTheme = useCallback(() => {
-        setTheme(prev => {
-            const next: AppTheme = prev === 'dark' ? 'light' : 'dark';
-            try { localStorage.setItem(THEME_KEY, next); } catch { /* см. readStoredTheme */ }
+    const cycleTheme = useCallback(() => {
+        setThemeMode(prev => {
+            const next = NEXT_MODE[prev];
+            try { localStorage.setItem(THEME_KEY, next); } catch { /* см. readStoredMode */ }
             return next;
         });
     }, []);
 
-    const themeValue = useMemo(() => ({ theme, toggleTheme }), [theme, toggleTheme]);
+    /* Следим за темой клиента постоянно, а не только в режиме `auto`: человек
+       может переключить тему Telegram, не выходя из мини-аппа, и вернуться в
+       `auto` уже с новым значением. Слушаем оба источника — Telegram и систему. */
+    useEffect(() => {
+        const sync = () => setClientTheme(detectClientTheme());
+        const tg = (window as any).Telegram?.WebApp;
+        tg?.onEvent?.('themeChanged', sync);
+        let mq: MediaQueryList | null = null;
+        try {
+            mq = window.matchMedia('(prefers-color-scheme: light)');
+            mq.addEventListener('change', sync);
+        } catch { /* старые webview без addEventListener на MediaQueryList */ }
+        return () => {
+            tg?.offEvent?.('themeChanged', sync);
+            mq?.removeEventListener('change', sync);
+        };
+    }, []);
+
+    const themeValue = useMemo(
+        () => ({ theme, mode: themeMode, cycleTheme }),
+        [theme, themeMode, cycleTheme],
+    );
 
     // --- Тап/удержание на gesture-layer ---
     const handleGestureDown = useCallback((e: React.PointerEvent) => {
@@ -369,6 +410,7 @@ const App: React.FC = () => {
                         {/* === FULLSCREEN MODULE (carousel) === */}
                         {layoutMode === 'fullscreen' && activeModule && (
                             <div className="overlay-fullscreen" onPointerDown={handleGestureDown} onPointerUp={handleGestureUp} onPointerMove={handleGestureMove} onPointerCancel={clearTimers} onWheel={handleWheel}>
+                                <ThemeCycleButton />
                                 <button className="overlay-close" onClick={(e) => { e.stopPropagation(); setLayout('chaos'); setActiveModule(null); setPendingSub(null); }} aria-label="Закрыть" />
                                 <div className="overlay-title">{activeModule}</div>
                                 <AnimatePresence mode="wait" custom={swipeDir}>
@@ -408,6 +450,7 @@ const App: React.FC = () => {
                                    ТОЛЬКО крестик. Прежнее закрытие тапом по фону (S64-2г)
                                    удалено целиком, а не починено. */
                             >
+                                <ThemeCycleButton />
                                 <button className="overlay-close" onClick={(e) => { e.stopPropagation(); setLayout('chaos'); setActiveModule(null); }} aria-label="Закрыть" />
                                 <DashboardRoleSwitch />
                                 <DashboardPanel onOpen={(mod, sub) => {
