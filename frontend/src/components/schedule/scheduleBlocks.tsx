@@ -411,8 +411,9 @@ export const MainDaysBlock: React.FC<{
 
 export const LightInfoBlock: React.FC = () => (
     <div>
-        {/* 8c: покупки light переехали в витрину (MarketCube) */}
-        <div className="sched-row-label">Light-режим (лёгкая зарядка)</div>
+        {/* 8c: покупки light переехали в витрину (MarketCube).
+            Смоук 30.08: заголовок «Light-режим (лёгкая зарядка)» снят — следующая
+            строка объясняет то же самое и своими словами. */}
         <div className="sched-cooldown">
             Light — 4 упражнения-зарядки, стрик становится ежедневным.
         </div>
