@@ -3,6 +3,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import Backdrop from './design/backdrop/Backdrop';
 import type { GlassCubesHandle } from './design/backdrop/GlassCubes';
 import { useAuth } from './hooks/useAuth';
+import { prefetch, CACHE_KEYS } from './api/cache';
+import { getMyStats } from './api/stats';
+import { getSchedule } from './api/schedule';
+import { getPlayerShop } from './api/shop';
+import { getFeed } from './api/activityFeed';
 import OnboardingFlow from './components/onboarding/OnboardingFlow';
 import ScheduleGate from './components/schedule/ScheduleGate';
 import PhotoGate from './components/photo-gate/PhotoGate';
@@ -228,6 +233,21 @@ const App: React.FC = () => {
         setPendingSub(null);
         setActiveModule(nextMod(activeModule, dir));
     }, [activeModule, nextMod]);
+
+    /* Прогрев кэша (S66). Первый заход на любой куб всё равно ждал сеть: замер
+       S66 — каждый поход сервера в базу ≈0.5 с, экран Market делает два запроса.
+       Как только авторизация прошла, тянем данные всех кубов ПАРАЛЛЕЛЬНО и
+       заранее — к моменту, когда игрок доберётся до экрана, они уже в памяти.
+       Витрина и расписание есть только у игрока: у наставника эти эндпоинты
+       отвечают 403, поэтому греем их под флагом доступа. */
+    useEffect(() => {
+        if (isLoading || error || !photoUrl || !onboardingDone) return;
+        prefetch(CACHE_KEYS.feed, () => getFeed(20, 0).then((r) => r.items));
+        if (!has_player_access) return;
+        prefetch(CACHE_KEYS.myStats, getMyStats);
+        prefetch(CACHE_KEYS.schedule, getSchedule);
+        prefetch(CACHE_KEYS.playerShop, getPlayerShop);
+    }, [isLoading, error, photoUrl, onboardingDone, has_player_access]);
 
     /* Переход между кубами из вложенных блоков (смоук 30.08: строка «в магазине →»
        в расписании выглядела ссылкой, но никуда не вела). Событие вместо проброса

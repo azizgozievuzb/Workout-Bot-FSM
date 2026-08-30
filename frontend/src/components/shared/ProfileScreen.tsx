@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { createPortal } from 'react-dom';
-import { getMyStats } from '../../api/stats';
+import { getMyStats, type PlayerStats } from '../../api/stats';
+import { useCached, CACHE_KEYS } from '../../api/cache';
 import { useTheme, useThemeToggle } from '../../contexts/ThemeContext';
 import { PlayerIdentityBlock, ReminderBlock } from '../schedule/scheduleBlocks';
 import { hapticImpact } from '../../utils/haptic';
@@ -34,18 +35,12 @@ function telegramFirstName(): string | null {
 const ProfileScreen: React.FC<Props> = ({ view, onClose }) => {
     const theme = useTheme();
     const toggleTheme = useThemeToggle();
-    const [firstName, setFirstName] = useState<string | null>(telegramFirstName());
-    const [playerTitle, setPlayerTitle] = useState<string | null>(null);
-
-    useEffect(() => {
-        if (view !== 'player') return;
-        getMyStats()
-            .then((s) => {
-                setFirstName(s.first_name ?? telegramFirstName());
-                setPlayerTitle(s.player_title ?? null);
-            })
-            .catch(() => {});
-    }, [view]);
+    /* S66 (смоук 30.08: «звание появляется чуть позже»). Экран запрашивал
+       getMyStats заново, хотя Action уже держал ровно эти данные. Через общий
+       кэш имя и звание есть на первом кадре; свежие приезжают в фоне. */
+    const { data: stats } = useCached<PlayerStats>(CACHE_KEYS.myStats, getMyStats);
+    const firstName = (view === 'player' ? stats?.first_name : null) ?? telegramFirstName();
+    const playerTitle = view === 'player' ? (stats?.player_title ?? null) : null;
 
     return createPortal(
         /* Тема-класс вешаем на КОРЕНЬ портала (S64, смоук 23.08): портал живёт в

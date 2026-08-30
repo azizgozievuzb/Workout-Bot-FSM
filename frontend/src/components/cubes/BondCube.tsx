@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '../../stores/authStore';
+import { useCached, CACHE_KEYS } from '../../api/cache';
 import type { DualRoleUser } from '../../stores/authStore';
 import { canPlay, canMonitor, isDualRole } from '../../utils/roles';
 import { getFeed, markAsRead } from '../../api/activityFeed';
@@ -144,19 +145,19 @@ const BondCube: React.FC<BondCubeProps> = ({ initialSub = null }) => {
 /* ---------- PLAYER BOND ---------- */
 
 const PlayerBond: React.FC<{ onOpenProfile: () => void }> = ({ onOpenProfile }) => {
-    const [feed, setFeed] = useState<FeedItem[]>([]);
-    const [loading, setLoading] = useState(true);
+    /* S66: лента — на общем кэше (api/cache.ts). Она зависит только от юзера,
+       не от активной роли (бэк `activity_feed.py` смотрит на токен), поэтому
+       ключ один на оба вида Bond. Отметка «прочитано» уехала в эффект: он
+       срабатывает на каждую свежую порцию, повтор безвреден. */
+    const { data: feedItems, loading } =
+        useCached<FeedItem[]>(CACHE_KEYS.feed, () => getFeed(20, 0).then(r => r.items));
+    const feed = feedItems ?? [];
 
     useEffect(() => {
-        getFeed(20, 0)
-            .then((res) => {
-                setFeed(res.items);
-                const unread = res.items.filter(i => !i.is_read).map(i => i.id);
-                if (unread.length > 0) markAsRead(unread).catch(() => {});
-            })
-            .catch(() => {})
-            .finally(() => setLoading(false));
-    }, []);
+        const unread = (feedItems ?? []).filter(i => !i.is_read).map(i => i.id);
+        if (unread.length > 0) markAsRead(unread).catch(() => {});
+    }, [feedItems]);
+
 
     return (
         <>
@@ -323,23 +324,23 @@ const InvitesPanel: React.FC<{ refreshKey?: number }> = ({ refreshKey = 0 }) => 
 /* ---------- RESPONSIBLE BOND ---------- */
 
 const ResponsibleBond: React.FC<{ onOpenProfile: () => void }> = ({ onOpenProfile }) => {
-    const [feed, setFeed] = useState<FeedItem[]>([]);
-    const [loading, setLoading] = useState(true);
+    /* S66: лента — на общем кэше (api/cache.ts). Она зависит только от юзера,
+       не от активной роли (бэк `activity_feed.py` смотрит на токен), поэтому
+       ключ один на оба вида Bond. Отметка «прочитано» уехала в эффект: он
+       срабатывает на каждую свежую порцию, повтор безвреден. */
+    const { data: feedItems, loading } =
+        useCached<FeedItem[]>(CACHE_KEYS.feed, () => getFeed(20, 0).then(r => r.items));
+    const feed = feedItems ?? [];
+
+    useEffect(() => {
+        const unread = (feedItems ?? []).filter(i => !i.is_read).map(i => i.id);
+        if (unread.length > 0) markAsRead(unread).catch(() => {});
+    }, [feedItems]);
     const [showBilling, setShowBilling] = useState(false);
     // Bumped when the billing overlay closes → InvitesPanel refetches «Мои игроки»
     // (a downgrade with eviction changes the list).
     const [playersRefreshKey, setPlayersRefreshKey] = useState(0);
 
-    useEffect(() => {
-        getFeed(20, 0)
-            .then((res) => {
-                setFeed(res.items);
-                const unread = res.items.filter(i => !i.is_read).map(i => i.id);
-                if (unread.length > 0) markAsRead(unread).catch(() => {});
-            })
-            .catch(() => {})
-            .finally(() => setLoading(false));
-    }, []);
 
     return (
         <>

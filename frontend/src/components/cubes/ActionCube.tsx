@@ -4,6 +4,7 @@ import type { DualRoleUser } from '../../stores/authStore';
 import { canPlay, canMonitor, isDualRole } from '../../utils/roles';
 import api from '../../api/client';
 import { getMyStats } from '../../api/stats';
+import { useCached, CACHE_KEYS } from '../../api/cache';
 import type { PlayerStats } from '../../api/stats';
 import { getMyPlayers } from '../../api/partnerships';
 import type { MyPlayer } from '../../api/partnerships';
@@ -75,22 +76,23 @@ const PlayerView: React.FC = () => {
     const gender = useAuthStore((s) => s.gender);
     const setRestDaysRemaining = useAuthStore((s) => s.setRestDaysRemaining);
 
-    const [stats, setStats] = useState<PlayerStats | null>(null);
-    const [loading, setLoading] = useState(true);
+    /* S66: три запроса экрана переведены на общий кэш (api/cache.ts). Те же
+       ключи читают Market (shop+schedule) и профиль (stats) — при свайпе данные
+       уже в памяти, экран рисуется мгновенно и молча обновляется в фоне. */
+    const { data: stats, loading, setData: setStats } =
+        useCached<PlayerStats>(CACHE_KEYS.myStats, getMyStats);
+    const { data: sched, setData: setSched } =
+        useCached<ScheduleState>(CACHE_KEYS.schedule, getSchedule);
+    // 8c: витрина-агрегат — restore-офер после слома стрика
+    const { data: shop, setData: setShop } =
+        useCached<PlayerShopState>(CACHE_KEYS.playerShop, getPlayerShop);
+
     const [restDayInFlight, setRestDayInFlight] = useState(false);
     const [restDayToast, setRestDayToast] = useState('');
     const [workoutType, setWorkoutType] = useState<SessionType | null>(null);
-    const [sched, setSched] = useState<ScheduleState | null>(null);
-    // 8c: витрина-агрегат — restore-офер после слома стрика
-    const [shop, setShop] = useState<PlayerShopState | null>(null);
     const [restoreConfirm, setRestoreConfirm] = useState(false);
     const [restoreBusy, setRestoreBusy] = useState(false);
     const [restoreToast, setRestoreToast] = useState('');
-
-    useEffect(() => {
-        getSchedule().then(setSched).catch(() => {});
-        getPlayerShop().then(setShop).catch(() => {});
-    }, []);
 
     const doRestore = useCallback(async () => {
         if (restoreBusy) return;
@@ -121,9 +123,6 @@ const PlayerView: React.FC = () => {
         setWorkoutType(type);
     }, []);
 
-    useEffect(() => {
-        getMyStats().then(setStats).catch(() => {}).finally(() => setLoading(false));
-    }, []);
 
     const handleUseRestDay = useCallback(async (e: React.MouseEvent) => {
         e.stopPropagation();

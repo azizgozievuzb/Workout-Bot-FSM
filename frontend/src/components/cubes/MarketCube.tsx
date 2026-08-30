@@ -3,6 +3,7 @@ import { useAuthStore } from '../../stores/authStore';
 import type { DualRoleUser } from '../../stores/authStore';
 import { canPlay, canMonitor, isDualRole } from '../../utils/roles';
 import { buyFreeze, getPlayerShop } from '../../api/shop';
+import { useCached, dropCache, CACHE_KEYS } from '../../api/cache';
 import type { PlayerShopState } from '../../api/shop';
 import { attachShelfReport, buyShelfItem, fulfillShelfItem, hideShelfItem } from '../../api/shelf';
 import type { ShelfItem } from '../../api/shelf';
@@ -139,10 +140,16 @@ const ShopSkeleton: React.FC = () => (
  * видео смотрим во встроенном плеере (П.6a), кнопки покупок — по иерархии (П.8c).
  */
 const PlayerShop: React.FC = () => {
-    const [shop, setShop] = useState<PlayerShopState | null>(null);
-    const [sched, setSched] = useState<ScheduleState | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [fetchError, setFetchError] = useState(false);
+    /* S66 (жалоба 30.08: «магазин очень долго грузится»). Оба запроса — те же,
+       что делает Action, и раньше они уходили заново при каждом свайпе. Теперь
+       через общий кэш: пришёл из Action — витрина уже на экране. */
+    const { data: shop, loading: shopLoading, error: shopError,
+            reload: reloadShop, setData: setShop } =
+        useCached<PlayerShopState>(CACHE_KEYS.playerShop, getPlayerShop);
+    const { data: sched, reload: reloadSched, setData: setSched } =
+        useCached<ScheduleState>(CACHE_KEYS.schedule, getSchedule);
+    const loading = shopLoading;
+    const fetchError = shopError;
     const [toast, setToast] = useState('');
     const [busy, setBusy] = useState(false);
     // {id, action} — иначе «…» садилось на «Купить» при любом действии с лотом
@@ -168,19 +175,16 @@ const PlayerShop: React.FC = () => {
     }, []);
 
     const load = useCallback(() => {
-        setLoading(true);
-        setFetchError(false);
-        Promise.all([getPlayerShop(), getSchedule()])
-            .then(([s, sc]) => { setShop(s); setSched(sc); })
-            .catch(() => setFetchError(true))
-            .finally(() => setLoading(false));
-    }, []);
+        void Promise.all([reloadShop(), reloadSched()]);
+    }, [reloadShop, reloadSched]);
 
-    useEffect(() => { load(); }, [load]);
-
+    /* Витрину перезапрашивают ровно после движения капель — значит и `my-stats`
+       (баланс, заморозки) стал неверным. Сбрасываем его, чтобы Action не показал
+       старый баланс из кэша. */
     const refreshShop = useCallback(() => {
-        getPlayerShop().then(setShop).catch(() => {});
-    }, []);
+        dropCache(CACHE_KEYS.myStats);
+        void reloadShop();
+    }, [reloadShop]);
 
     const failToast = useCallback((e: any, fallback: string) => {
         hapticNotification('error');
