@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { useAuthStore } from '../stores/authStore';
-import { dropCache, CACHE_KEYS } from './cache';
+import { dropCache, patchCache, markStale, CACHE_KEYS } from './cache';
 
 let token: string | null = null;
 
@@ -43,10 +43,44 @@ const MUTATION_INVALIDATES = [
   CACHE_KEYS.schedule,
 ];
 
+/* Поля, которые бэк кладёт в ответ на покупку и которые же лежат в кэше витрины
+ * и статистики. Список явный: подстановка «всех совпадающих имён» однажды
+ * перенесёт не то поле, и ловить это будет некому. */
+const MONEY_FIELDS = [
+  'drops_balance',
+  'paid_freezes',
+  'free_freezes_left',
+  'current_streak',
+] as const;
+
 api.interceptors.response.use(
   (res) => {
     const method = (res.config.method || 'get').toLowerCase();
-    if (method !== 'get') MUTATION_INVALIDATES.forEach((k) => dropCache(k));
+    if (method === 'get') return res;
+
+    /* Ответ на покупку УЖЕ содержит новый баланс. Раньше мы его выбрасывали и
+     * шли за ним второй раз — отсюда «100 держалось ещё 3 секунды» (смоук 31.08):
+     * секунда на покупку плюс секунда на лишний перезапрос. Забираем цифры прямо
+     * из ответа: экран обновляется в момент прихода ответа, лишнего похода в сеть
+     * нет, и показанное число — настоящее, а не предположение. */
+    const body = res.data as Record<string, unknown> | undefined;
+    const patch: Record<string, unknown> = {};
+    for (const f of MONEY_FIELDS) {
+      if (body && typeof body[f] === 'number') patch[f] = body[f];
+    }
+
+    if (Object.keys(patch).length > 0) {
+      for (const key of [CACHE_KEYS.myStats, CACHE_KEYS.playerShop]) {
+        patchCache<Record<string, unknown>>(key, (prev) => ({ ...prev, ...patch }));
+        /* Остальные поля ответом не покрыты — помечаем несвежими, чтобы при
+           следующем открытии экрана они подтянулись в фоне. */
+        markStale(key);
+      }
+      dropCache(CACHE_KEYS.schedule);
+      return res;
+    }
+
+    MUTATION_INVALIDATES.forEach((k) => dropCache(k));
     return res;
   },
   (err) => {

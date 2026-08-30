@@ -165,6 +165,23 @@ export function useCached<T>(
     return { data, loading, error, reload, setData };
 }
 
+/** Точечно поправить уже лежащие данные, не сбрасывая их.
+ *  Возвращает false, если кэша по ключу нет (правим нечего). */
+export function patchCache<T>(key: string, updater: (prev: T) => T): boolean {
+    const entry = store.get(key);
+    if (entry === undefined) return false;
+    store.set(key, { data: updater(entry.data as T), at: entry.at });
+    notify(key);
+    return true;
+}
+
+/** Пометить данные несвежими: показывать можно, но при следующем заходе
+ *  на экран они молча перезапросятся. */
+export function markStale(key: string): void {
+    const entry = store.get(key);
+    if (entry !== undefined) store.set(key, { data: entry.data, at: 0 });
+}
+
 /** Прогрев: сходить за данными заранее, если их ещё нет и никто уже не идёт.
  *  Ошибки глушим — это фон, экран о нём знать не должен. */
 export function prefetch<T>(key: string, fetcher: () => Promise<T>): void {
