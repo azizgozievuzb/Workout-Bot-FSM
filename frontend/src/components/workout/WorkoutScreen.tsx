@@ -620,14 +620,21 @@ const WorkoutScreen: React.FC<Props> = ({ onClose, sessionType = 'main' }) => {
     onClose();
   }, [ctx.state, earlyDone, onClose, releaseWakeLock, sessionId, stopCamera, unlockTelegramChrome]);
 
-  /* Выход с экрана «Готовы?» до старта: та же отмена, что и в handleClose, но с
-     видимой блокировкой кнопки на время запроса (правило S66: состояние есть в
-     логике — покажи глазу). */
-  const handleIdleCancel = useCallback(async () => {
+  /* Выход с экрана «Готовы?» до старта. Смоук 30.08 (2-й заход): ждать ответа
+     /cancel было ~3 секунды — на экране висело «Отменяем…». Тренировка ещё не
+     началась, терять нечего: закрываем СРАЗУ, а отмену сессии дошиваем в фоне.
+     Если запрос не дойдёт — брошенная `in_progress`-строка не мешает начать
+     заново (проверено в S65, запись в BACKLOG 2026-08-27 п.1). */
+  const handleIdleCancel = useCallback(() => {
     if (cancelling) return;
     setCancelling(true);
-    try { await handleClose(); } finally { setCancelling(false); }
-  }, [cancelling, handleClose]);
+    hapticImpact('light');
+    unlockTelegramChrome();
+    stopCamera();
+    releaseWakeLock();
+    if (sessionId) cancelWorkoutSession(sessionId).catch(() => {});
+    onClose();
+  }, [cancelling, onClose, releaseWakeLock, sessionId, stopCamera, unlockTelegramChrome]);
 
   // 8c: «Закончить досрочно» — останавливаем цикл и зовём /finish: бэк засчитает
   // загруженные упражнения по (done/N)^0.65; день закроет только полная сессия.

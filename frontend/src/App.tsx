@@ -90,6 +90,7 @@ const App: React.FC = () => {
        «сильно свайпнул, карусель прокрутилась на 3-4 экрана». Пока идёт анимация
        перехода (0.25 с), новые свайпы игнорируем. */
     const wheelCooldown = useRef(false);
+    const wheelQuietTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 
     const MODULES: ModuleName[] = is_admin
@@ -201,16 +202,31 @@ const App: React.FC = () => {
         }
     }, [clearTimers, setLayout, activeModule, nextMod]);
 
+    /* Тачпад — не палец: один жест порождает поток wheel-событий, который живёт
+       ещё 1–2 секунды на инерции. Фиксированный кулдаун 400 мс истекал ПОСРЕДИ
+       инерции, и остаток того же жеста прокручивал следующий экран, и следующий
+       (смоук 30.08: «на тачпаде промотало несколько экранов, с телефона нормально»).
+       Лечится не длиной кулдауна, а его сбросом: таймер перезапускается на КАЖДОМ
+       событии, поэтому замок снимается только через 250 мс ТИШИНЫ — то есть когда
+       жест реально закончился, а не когда истёк отсчёт. */
     const handleWheel = useCallback((e: React.WheelEvent) => {
-        if (layoutModeRef.current !== 'fullscreen' || !activeModule || wheelCooldown.current) return;
+        if (layoutModeRef.current !== 'fullscreen' || !activeModule) return;
         const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : 0;
         if (Math.abs(delta) < 30) return;
+
+        const wasLocked = wheelCooldown.current;
         wheelCooldown.current = true;
+        if (wheelQuietTimer.current) clearTimeout(wheelQuietTimer.current);
+        wheelQuietTimer.current = setTimeout(() => {
+            wheelCooldown.current = false;
+            wheelQuietTimer.current = null;
+        }, 250);
+        if (wasLocked) return;
+
         const dir: 1 | -1 = delta > 0 ? 1 : -1;
         setSwipeDir(dir);
         setPendingSub(null);
         setActiveModule(nextMod(activeModule, dir));
-        setTimeout(() => { wheelCooldown.current = false; }, 400);
     }, [activeModule, nextMod]);
 
     /* Переход между кубами из вложенных блоков (смоук 30.08: строка «в магазине →»
