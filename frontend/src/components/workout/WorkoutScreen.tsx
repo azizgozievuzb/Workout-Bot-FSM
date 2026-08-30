@@ -82,6 +82,7 @@ const WorkoutScreen: React.FC<Props> = ({ onClose, sessionType = 'main' }) => {
   // Light-UI НЕ использует слово «тренировка» — только «зарядка».
   const nounAcc = isLight ? 'зарядку' : 'тренировку';  // винительный
   const nounGen = isLight ? 'зарядки' : 'тренировки';  // родительный
+  const [cancelling, setCancelling] = useState(false);
   const [config, setConfig] = useState<WorkoutConfig | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [phaseSecLeft, setPhaseSecLeft] = useState<number>(0);
@@ -619,6 +620,15 @@ const WorkoutScreen: React.FC<Props> = ({ onClose, sessionType = 'main' }) => {
     onClose();
   }, [ctx.state, earlyDone, onClose, releaseWakeLock, sessionId, stopCamera, unlockTelegramChrome]);
 
+  /* Выход с экрана «Готовы?» до старта: та же отмена, что и в handleClose, но с
+     видимой блокировкой кнопки на время запроса (правило S66: состояние есть в
+     логике — покажи глазу). */
+  const handleIdleCancel = useCallback(async () => {
+    if (cancelling) return;
+    setCancelling(true);
+    try { await handleClose(); } finally { setCancelling(false); }
+  }, [cancelling, handleClose]);
+
   // 8c: «Закончить досрочно» — останавливаем цикл и зовём /finish: бэк засчитает
   // загруженные упражнения по (done/N)^0.65; день закроет только полная сессия.
   const handleEarlyFinish = useCallback(async () => {
@@ -854,6 +864,14 @@ const WorkoutScreen: React.FC<Props> = ({ onClose, sessionType = 'main' }) => {
               Поставьте телефон вертикально, камера должна видеть вас полностью.
             </div>
             <button className="ws-btn ws-btn--primary" onClick={handleStart}>Начать</button>
+            {/* Смоук 30.08: из этого экрана не было выхода — верхняя панель с
+                «Закончить досрочно» в idle скрыта, а нативное «Закрыть» Telegram
+                схлопывает всё мини-приложение. Своя «Отмена» отменяет только
+                сессию (/cancel) и возвращает в Action. */}
+            <button className="ws-btn ws-btn--secondary" onClick={handleIdleCancel}
+              disabled={cancelling}>
+              {cancelling ? 'Отменяем…' : 'Отмена'}
+            </button>
           </div>
         </div>
       )}

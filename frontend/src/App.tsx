@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Backdrop from './design/backdrop/Backdrop';
 import type { GlassCubesHandle } from './design/backdrop/GlassCubes';
@@ -86,6 +86,9 @@ const App: React.FC = () => {
     const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const holdFired = useRef<boolean>(false);
     const layoutModeRef = useRef<LayoutMode>('chaos');
+    /* Один жест — один экран. Кулдаун общий для колеса и пальца: смоук 30.08 —
+       «сильно свайпнул, карусель прокрутилась на 3-4 экрана». Пока идёт анимация
+       перехода (0.25 с), новые свайпы игнорируем. */
     const wheelCooldown = useRef(false);
 
 
@@ -172,6 +175,9 @@ const App: React.FC = () => {
         // --- Горизонтальный свайп в fullscreen → карусель ---
         if (layoutModeRef.current === 'fullscreen' && activeModule
             && elapsed < 500 && Math.abs(deltaX) > 50 && Math.abs(deltaX) > Math.abs(deltaY)) {
+            if (wheelCooldown.current) return;
+            wheelCooldown.current = true;
+            setTimeout(() => { wheelCooldown.current = false; }, 400);
             const dir: 1 | -1 = deltaX < 0 ? 1 : -1;
             setSwipeDir(dir);
             setPendingSub(null);
@@ -206,6 +212,22 @@ const App: React.FC = () => {
         setActiveModule(nextMod(activeModule, dir));
         setTimeout(() => { wheelCooldown.current = false; }, 400);
     }, [activeModule, nextMod]);
+
+    /* Переход между кубами из вложенных блоков (смоук 30.08: строка «в магазине →»
+       в расписании выглядела ссылкой, но никуда не вела). Событие вместо проброса
+       колбэка через три уровня — навигация карусели живёт только здесь. */
+    useEffect(() => {
+        const go = (e: Event) => {
+            const target = (e as CustomEvent<string>).detail as ModuleName;
+            if (!MODULES.includes(target)) return;
+            setSwipeDir(0);
+            setPendingSub(null);
+            setLayout('fullscreen');
+            setActiveModule(target);
+        };
+        window.addEventListener('app:goto-module', go);
+        return () => window.removeEventListener('app:goto-module', go);
+    }, [setLayout]);
 
     // Пока auth не ответил — нейтральный лоадер (без мелькания кубов/контента).
     if (isLoading && !error) {

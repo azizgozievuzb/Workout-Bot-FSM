@@ -283,17 +283,24 @@ export const MainDaysBlock: React.FC<{
     return (
         <div>
             <div className="sched-row-label">Дни main-тренировок</div>
+            {/* Смоук 30.08: полоска вт·чт·сб здесь дублировала блок «Твоя неделя»
+                выше — те же дни, второй раз подряд. В обычном виде оставляем
+                только заголовок и кнопку смены; полоска нужна лишь когда ждём
+                понедельника (там она показывает УХОДЯЩИЕ дни, которых в «Твоей
+                неделе» не видно). */}
             {!editing && (
                 <>
-                    <div className="week-strip">
-                        {mainDays.map((wd) => (
-                            <div key={wd}
-                                className={`week-dot main${
-                                    sched?.pending_main_days
-                                    && !sched.pending_main_days.includes(wd) ? ' week-dot--leaving' : ''}`}>
-                                {DAY_LABELS[wd]?.[1]}</div>
-                        ))}
-                    </div>
+                    {hasPending && (
+                        <div className="week-strip">
+                            {mainDays.map((wd) => (
+                                <div key={wd}
+                                    className={`week-dot main${
+                                        sched?.pending_main_days
+                                        && !sched.pending_main_days.includes(wd) ? ' week-dot--leaving' : ''}`}>
+                                    {DAY_LABELS[wd]?.[1]}</div>
+                            ))}
+                        </div>
+                    )}
                     {/* S64-13: пока заявка ждёт понедельника — два действия:
                         поправить выбор бесплатно или отменить с возвратом. */}
                     {hasPending ? (
@@ -404,8 +411,16 @@ export const LightInfoBlock: React.FC = () => (
         <div className="sched-row-label">Light-режим (лёгкая зарядка)</div>
         <div className="sched-cooldown">
             Light — 4 упражнения-зарядки, стрик становится ежедневным.
-            Открыть или закрыть light-режим можно в магазине: Магазин →
         </div>
+        {/* Смоук 30.08: «Магазин →» выглядел ссылкой, но не нажимался. Теперь это
+            настоящая кнопка: событие ловит App и переключает карусель на Market. */}
+        <button
+            className="sched-goto-market"
+            onClick={() => window.dispatchEvent(
+                new CustomEvent('app:goto-module', { detail: 'Market' }))}
+        >
+            Открыть или закрыть light-режим — в магазине →
+        </button>
     </div>
 );
 

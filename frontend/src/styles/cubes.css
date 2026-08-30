@@ -2684,11 +2684,23 @@
 
 /* --- List container --- */
 
+/* Смоук 30.08: список не листался. Грузим до 50 уведомлений, а высоту список
+   не ограничивал — прокрутка целиком зависела от внешних скроллеров
+   (.overlay-body → .cube-module, два вложенных). Даём списку СВОЮ высоту и
+   СВОЙ скролл: он листается сам, не зависит от родителей и больше не выдавливает
+   «Ленту» и «Профиль» за экран. `overscroll-behavior: contain` не даёт прокрутке
+   перескочить на внешний контейнер, `touch-action: pan-y` — отдать жест
+   горизонтальному свайпу карусели. */
 .notif-list {
     display: flex;
     flex-direction: column;
     gap: 0;
     padding: 0 6px 8px;
+    max-height: 46vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
 }
 
 /* --- Individual row --- */
