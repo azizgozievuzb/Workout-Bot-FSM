@@ -158,6 +158,12 @@ body.workout-active #root {
   box-sizing: border-box;
 }
 
+/* S67: свободная тренировка — камеры нет, демо занимает весь экран.
+   Один ряд вместо 6fr/4fr: «половинки» пустого места не остаётся. */
+.ws-stage--nocam {
+  grid-template-rows: 1fr;
+}
+
 .ws-cam-top {
   position: relative;
   width: 100%;

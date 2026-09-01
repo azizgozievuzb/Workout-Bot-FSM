@@ -78,7 +78,14 @@ const WorkoutScreen: React.FC<Props> = ({ onClose, sessionType = 'main' }) => {
   /* Класс темы — на корне портала (S66): .ws-root красится --tg-theme-*,
      а в body наши переменные без класса не доезжали. */
   const theme = useTheme();
-  const isLight = sessionType === 'light';
+  /* S67: свободная тренировка (день вне плана) — без камеры и без Gemini.
+     Решает СЕРВЕР (/workout/start), а не проп: клиент не должен уметь объявить
+     свободный день плановым. Живёт в контексте FSM (`graded`), чтобы чертёж 200
+     и код оставались 1:1; здесь — только чтение. До ответа сервера экран
+     стартовать нечем (кнопка «Начать» ждёт config+sessionId). */
+  const isFree = !ctx.graded;
+  const [effectiveType, setEffectiveType] = useState<SessionType>(sessionType);
+  const isLight = effectiveType === 'light';
   // Light-UI НЕ использует слово «тренировка» — только «зарядка».
   const nounAcc = isLight ? 'зарядку' : 'тренировку';  // винительный
   const nounGen = isLight ? 'зарядки' : 'тренировки';  // родительный
@@ -139,8 +146,17 @@ const WorkoutScreen: React.FC<Props> = ({ onClose, sessionType = 'main' }) => {
           startWorkoutSession(sessionType),
         ]);
         if (cancelled) return;
-        setConfig(cfg);
-        send({ type: 'SET_TOTAL', total: cfg.total_exercises });
+        // Сервер мог сменить тип (свободный день → light). Расписание на экране
+        // могло устареть — тогда догружаем конфиг под РЕАЛЬНЫЙ тип сессии,
+        // иначе счётчик упражнений и тайминги разъедутся с бэком.
+        const realCfg = sess.session_type && sess.session_type !== sessionType
+          ? await getWorkoutConfig(sess.session_type)
+          : cfg;
+        if (cancelled) return;
+        setEffectiveType(sess.session_type ?? sessionType);
+        setConfig(realCfg);
+        send({ type: 'SET_TOTAL', total: realCfg.total_exercises });
+        send({ type: 'SET_GRADED', graded: !sess.is_free });
         setSessionId(sess.session_id);
       } catch (e) {
         if (cancelled) return;
@@ -458,12 +474,14 @@ const WorkoutScreen: React.FC<Props> = ({ onClose, sessionType = 'main' }) => {
   // --- FSM transition drivers -------------------------------------
   const handlePrepareEnd = useCallback(() => {
     hapticImpact('medium');
-    startRecording();
+    if (!isFree) startRecording();
     send({ type: 'TIMER_END' });
-  }, [send, startRecording]);
+  }, [isFree, send, startRecording]);
 
   const handleExerciseEnd = useCallback(async () => {
     hapticImpact('heavy');
+    // S67: свободная тренировка — ни записи, ни загрузки, ни Gemini.
+    if (isFree) { send({ type: 'TIMER_END' }); return; }
     // 8b: клип мог быть уже снят во время work-hold (light). Иначе — снимаем сейчас.
     if (holdTimeoutRef.current) { window.clearTimeout(holdTimeoutRef.current); holdTimeoutRef.current = null; }
     // BUG-3: stopRecording MUST complete before TIMER_END (which triggers stopCamera on rest entry).
@@ -487,7 +505,7 @@ const WorkoutScreen: React.FC<Props> = ({ onClose, sessionType = 'main' }) => {
     } catch {
       send({ type: 'AI_ERROR' });
     }
-  }, [ctx.currentExercise, send, sessionId, stopRecording]);
+  }, [ctx.currentExercise, isFree, send, sessionId, stopRecording]);
 
   const handleRestEnd = useCallback(() => {
     hapticNotification('success');
@@ -501,7 +519,7 @@ const WorkoutScreen: React.FC<Props> = ({ onClose, sessionType = 'main' }) => {
     if (ctx.state === 'preparePhase') {
       (async () => {
         // Re-acquire camera if it was released during rest (or first prepare after handleStart).
-        if (!streamRef.current) {
+        if (!isFree && !streamRef.current) {
           const ok = await initCamera();
           if (cancelled) return;
           if (!ok) {
@@ -519,7 +537,7 @@ const WorkoutScreen: React.FC<Props> = ({ onClose, sessionType = 'main' }) => {
       runPhaseTimer(config.work_sec, handleExerciseEnd);
       clipHandledRef.current = false;
       clipBlobRef.current = null;
-      if (config.work_sec > config.exercise_sec) {
+      if (!isFree && config.work_sec > config.exercise_sec) {
         holdTimeoutRef.current = window.setTimeout(async () => {
           clipBlobRef.current = await stopRecording();
           clipHandledRef.current = true;
@@ -548,19 +566,21 @@ const WorkoutScreen: React.FC<Props> = ({ onClose, sessionType = 'main' }) => {
   const handleConfirmStart = useCallback(async () => {
     setShowSwipeWarning(false);
     if (!config || !sessionId) return;
-    const ok = await initCamera();
-    if (!ok) {
-      setErrState({
-        message: 'Нет доступа к камере. Откройте приложение заново и разрешите камеру.',
-        retry: () => { setErrState(null); /* user re-clicks Начать */ },
-      });
-      return;
+    if (!isFree) {
+      const ok = await initCamera();
+      if (!ok) {
+        setErrState({
+          message: 'Нет доступа к камере. Откройте приложение заново и разрешите камеру.',
+          retry: () => { setErrState(null); /* user re-clicks Начать */ },
+        });
+        return;
+      }
     }
     hapticImpact('medium');
     // BUG-5: lock Telegram chrome AFTER user gesture so swipe/× can't kill the workout.
     lockTelegramChrome();
     send({ type: 'START_WORKOUT' });
-  }, [config, initCamera, lockTelegramChrome, send, sessionId]);
+  }, [config, initCamera, isFree, lockTelegramChrome, send, sessionId]);
 
   const handleNext = useCallback(() => {
     hapticImpact('light');
@@ -571,7 +591,7 @@ const WorkoutScreen: React.FC<Props> = ({ onClose, sessionType = 'main' }) => {
   // so the stream is already live when the split layout mounts. Eliminates the
   // visible "gap" between rest end and demo+camera appearing.
   useEffect(() => {
-    if (ctx.state !== 'restAndAnalyzingPhase' || earlyDone) return;
+    if (ctx.state !== 'restAndAnalyzingPhase' || earlyDone || isFree) return;
     if (!config) return;
     const earlyInitMs = Math.max(0, (config.rest_sec - 5) * 1000);
     const t = window.setTimeout(() => {
@@ -580,7 +600,7 @@ const WorkoutScreen: React.FC<Props> = ({ onClose, sessionType = 'main' }) => {
       }
     }, earlyInitMs);
     return () => window.clearTimeout(t);
-  }, [ctx.state, config, initCamera, earlyDone]);
+  }, [ctx.state, config, initCamera, earlyDone, isFree]);
 
   // BUG-2 fix: auto-advance through aiVerdictReview — no popup, no tap.
   // Keep a brief beat (review_sec from config, default 1.5s) so haptic + state settle,
@@ -803,28 +823,40 @@ const WorkoutScreen: React.FC<Props> = ({ onClose, sessionType = 'main' }) => {
 
       {/* --- split layout (top 60% camera / bottom 40% demo) — only during prepare/exercise --- */}
       {showDemoAndCam && (
-        <div className="ws-stage">
-          <div className="ws-cam-top">
-            <video
-              ref={camCallbackRef}
-              playsInline
-              muted
-              autoPlay
-            />
+        /* S67: в свободной тренировке превью камеры нет — демо занимает всю
+           высоту, HUD переезжает на него. Половинки пустого места не остаётся. */
+        <div className={`ws-stage${isFree ? ' ws-stage--nocam' : ''}`}>
+          {!isFree && (
+            <div className="ws-cam-top">
+              <video
+                ref={camCallbackRef}
+                playsInline
+                muted
+                autoPlay
+              />
 
-            {/* HUD: phase badge + countdown + REC dot — top-right of camera */}
-            {currentExercise && (
+              {/* HUD: phase badge + countdown + REC dot — top-right of camera */}
+              {currentExercise && (
+                <div className="ws-hud">
+                  <div className={`ws-phase-badge ws-phase-${ctx.state}`}>
+                    {ctx.state === 'preparePhase' ? 'Приготовьтесь' : 'Выполняйте'}
+                  </div>
+                  <div className="ws-countdown">{phaseSecLeft}</div>
+                  {ctx.state === 'exercisingPhase' && <div className="ws-rec-dot" aria-label="Запись" />}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="ws-demo-bottom">
+            {isFree && currentExercise && (
               <div className="ws-hud">
                 <div className={`ws-phase-badge ws-phase-${ctx.state}`}>
                   {ctx.state === 'preparePhase' ? 'Приготовьтесь' : 'Выполняйте'}
                 </div>
                 <div className="ws-countdown">{phaseSecLeft}</div>
-                {ctx.state === 'exercisingPhase' && <div className="ws-rec-dot" aria-label="Запись" />}
               </div>
             )}
-          </div>
-
-          <div className="ws-demo-bottom">
             {currentExercise && (
               <video
                 ref={demoVideoRef}
@@ -867,8 +899,10 @@ const WorkoutScreen: React.FC<Props> = ({ onClose, sessionType = 'main' }) => {
           <div className="ws-center-card">
             <div className="ws-title">Готовы?</div>
             <div className="ws-subtitle">
-              {config.total_exercises} упражнений · ~{Math.round((config.total_exercises * (config.prepare_sec + config.work_sec + config.rest_sec + config.review_sec)) / 60)} минут.<br />
-              Поставьте телефон вертикально, камера должна видеть вас полностью.
+              {config.total_exercises} упражнений · ~{Math.round((config.total_exercises * (config.prepare_sec + config.work_sec + config.rest_sec + config.review_sec)) / 60)} минут.
+              {/* S67: в свободной тренировке камеры нет — про неё не врём.
+                  Новых строк не добавляем (урок №21), правим существующую. */}
+              {!isFree && <><br />Поставьте телефон вертикально, камера должна видеть вас полностью.</>}
             </div>
             <button className="ws-btn ws-btn--primary" onClick={handleStart}>Начать</button>
             {/* Смоук 30.08: из этого экрана не было выхода — верхняя панель с
@@ -923,7 +957,14 @@ const WorkoutScreen: React.FC<Props> = ({ onClose, sessionType = 'main' }) => {
           <div className="ws-center-card">
             <div className="ws-title">Готово 🎉</div>
             {result ? (
-              result.repeat ? (
+              /* S67: свободная тренировка — цифр нет вообще, только фраза
+                 поддержки (как у повторной сессии). Про «без наград» экран уже
+                 сказал кнопкой запуска — второй раз не повторяем (урок №21). */
+              result.is_free ? (
+                <div className="ws-subtitle" style={{ fontSize: 18 }}>
+                  {result.support_phrase || 'Ты молодец!'}
+                </div>
+              ) : result.repeat ? (
                 /* 8c антифарм: повторная сессия дня — без цифр, фраза поддержки */
                 <>
                   <div className="ws-subtitle" style={{ fontSize: 18 }}>
@@ -935,8 +976,17 @@ const WorkoutScreen: React.FC<Props> = ({ onClose, sessionType = 'main' }) => {
                 </>
               ) : (
                 <>
-                  <div className="ws-result-row"><span>XP</span><span className="ws-result-val">XP {result.avg_score}</span></div>
+                  {/* S67: «Техника» — средний балл Gemini (до S67 он уезжал сюда
+                      с подписью «XP» и врал). «XP» — реальное начисление. */}
+                  <div className="ws-result-row"><span>Техника</span><span className="ws-result-val">{result.avg_score}</span></div>
+                  <div className="ws-result-row"><span>XP</span><span className="ws-result-val">+{result.xp_earned}</span></div>
                   <div className="ws-result-row"><span>Капли</span><span className="ws-result-val">💧 {result.drops_earned}</span></div>
+                  {result.level_ups?.length > 0 && (
+                    <div className="ws-subtitle">
+                      🎉 Уровень {result.level_ups[result.level_ups.length - 1]}!
+                      {result.freezes_granted > 0 && ` +${result.freezes_granted} ❄️`}
+                    </div>
+                  )}
                   {!result.completed_full && (
                     <div className="ws-subtitle">
                       Засчитано {result.exercises_done} из {result.total_exercises}.

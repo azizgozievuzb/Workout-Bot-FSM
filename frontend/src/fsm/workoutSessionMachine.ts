@@ -16,6 +16,10 @@ export type WorkoutState =
 export interface WorkoutContext {
   currentExercise: number;          // 0..total-1
   total: number;                    // 16 (main) | 4 (light)
+  /* S67: false — свободная тренировка (день вне плана): камера не поднимается,
+     клип не пишется, Gemini не зовётся, начислений нет. Граф состояний тот же,
+     различаются только эффекты — см. чертёж 200. */
+  graded: boolean;
   globalTimeElapsedMs: number;
   aiScores: number[];               // length `total`, 0..100
   aiFeedbacks: (string | null)[];   // length `total`
@@ -26,6 +30,7 @@ export interface WorkoutContext {
 export type WorkoutEvent =
   | { type: 'START_WORKOUT' }
   | { type: 'SET_TOTAL'; total: number }   // 8b: параметризация main(16)/light(4)
+  | { type: 'SET_GRADED'; graded: boolean } // S67: свободная тренировка
   | { type: 'TIMER_END' }
   | { type: 'AI_VERDICT'; score: number; feedback: string }
   | { type: 'AI_ERROR' }
@@ -39,6 +44,7 @@ const initial = (): WorkoutContext & { state: WorkoutState } => ({
   state: 'idle',
   currentExercise: 0,
   total: DEFAULT_TOTAL,
+  graded: true,
   globalTimeElapsedMs: 0,
   aiScores: Array(DEFAULT_TOTAL).fill(0),
   aiFeedbacks: Array(DEFAULT_TOTAL).fill(null),
@@ -62,6 +68,12 @@ function reducer(ctx: FullState, event: WorkoutEvent): FullState {
         aiScores: Array(event.total).fill(0),
         aiFeedbacks: Array(event.total).fill(null),
       };
+    }
+
+    case 'SET_GRADED': {
+      // Как и SET_TOTAL — только в idle: режим сессии фиксируется до старта.
+      if (ctx.state !== 'idle') return ctx;
+      return { ...ctx, graded: event.graded };
     }
 
     case 'TICK':
