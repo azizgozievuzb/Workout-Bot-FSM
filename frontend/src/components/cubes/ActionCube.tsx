@@ -199,18 +199,34 @@ const PlayerView: React.FC = () => {
             {/* 8c: restore-плашка — 72ч после слома стрика.
                 П.7: подтверждение переехало в общее окно траты — свой
                 inline-диалог здесь больше не нужен, форма у всех трат одна. */}
-            {shop?.restore && (
-                <div className="restore-plate">
-                    💔 Стрик {shop.restore.lost_streak_len} дн. сгорел.
-                    <button
-                        className="cube-btn-sm"
-                        style={{ display: 'block' }}
-                        onClick={(e) => { e.stopPropagation(); hapticImpact('light'); setRestoreConfirm(true); }}
-                    >
-                        Восстановить за {shop.restore.price} 💧
-                    </button>
-                </div>
-            )}
+            {/* S67: пока стрик сломан и восстановление доступно, плашка висит
+                ПОСТОЯННО (урок №13c: важное состояние живёт строкой, не
+                транзиентом). Гаснет сама — по текущей механике restore: после
+                восстановления (RPC чистит lost_streak_*) или по концу окна 72ч.
+                При нехватке капель кнопки НЕТ, но цена названа (урок №13b:
+                серверное «нельзя» имеет парную проекцию в UI). */}
+            {shop?.restore && (() => {
+                const price = shop.restore.price;
+                const enough = shop.drops_balance >= price;
+                return (
+                    <div className="restore-plate">
+                        💔 Стрик прервался (было {shop.restore.lost_streak_len}).
+                        {enough ? (
+                            <button
+                                className="cube-btn-sm"
+                                style={{ display: 'block' }}
+                                onClick={(e) => { e.stopPropagation(); hapticImpact('light'); setRestoreConfirm(true); }}
+                            >
+                                Восстановить — {price} 💧
+                            </button>
+                        ) : (
+                            <div className="restore-plate-note">
+                                Восстановить стоит {price} 💧 — сейчас не хватает
+                            </div>
+                        )}
+                    </div>
+                );
+            })()}
             {restoreConfirm && shop?.restore && (
                 <ConfirmSpendModal
                     title="🔥 Восстановить стрик"
@@ -243,8 +259,16 @@ const PlayerView: React.FC = () => {
             {(() => {
                 const todayType = sched?.today_session_type ?? null;
                 const lightActive = sched?.light_active ?? false;
-                const primaryType: SessionType = todayType === 'light' ? 'light' : 'main';
-                const primaryLabel = primaryType === 'light' ? '☀️ Лёгкая зарядка' : 'Приступим';
+                /* S67: день вне плана — свободная тренировка (light без камеры,
+                   без оценки и без наград). Правду говорит САМА кнопка: новых
+                   строк и плашек не добавляем (решение юзера 02.09, урок №21).
+                   `!!sched` обязателен: пока расписание не приехало, null здесь
+                   значит «не знаем», а не «свободный день». */
+                const isFreeDay = !!sched && todayType === null;
+                const primaryType: SessionType = (todayType === 'light' || isFreeDay) ? 'light' : 'main';
+                const primaryLabel = isFreeDay
+                    ? 'Тренировка без оценки'
+                    : primaryType === 'light' ? '☀️ Лёгкая зарядка' : 'Приступим';
                 // Сверхплановый запуск другого типа не блокируем (только если light активен).
                 const secondaryType: SessionType | null = lightActive
                     ? (primaryType === 'light' ? 'main' : 'light')
@@ -277,6 +301,26 @@ const PlayerView: React.FC = () => {
                         {stats.current_streak} {stats.current_streak === 1 ? 'день' : stats.current_streak < 5 ? 'дня' : 'дней'}
                     </span>
                 </div>
+                {/* S67: XP не спорит со стриком цифрой — идёт полосой до
+                    следующего уровня. Шкала обнуляется на каждом уровне;
+                    и уровень, и остаток считает бэк (округление одно на всех). */}
+                {(() => {
+                    const cost = stats.level_cost ?? 0;
+                    if (cost <= 0) return null;
+                    const inLevel = stats.xp_in_level ?? 0;
+                    const pct = Math.max(0, Math.min(100, Math.round((inLevel / cost) * 100)));
+                    return (
+                        <div className="xp-level">
+                            <div className="xp-level-row">
+                                <span>Уровень {stats.level ?? 0}</span>
+                                <span className="xp-level-nums">{inLevel} / {cost}</span>
+                            </div>
+                            <div className="xp-level-rail">
+                                <div className="xp-level-fill" style={{ width: `${pct}%` }} />
+                            </div>
+                        </div>
+                    );
+                })()}
             </div>
 
             {/* S64-3: расписание переехало сюда из скрытой сводки — неделя,

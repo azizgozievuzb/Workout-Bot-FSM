@@ -119,8 +119,11 @@ const MentorPlayerProfile: React.FC<Props> = ({
                 </div>
             </div>
 
-            {/* Три плитки с расшифровками (П.3b). XP-прогресс-бар удалён (Д4):
-                системы уровней в игре нет, шкала «до кратного 1000» была выдуманной. */}
+            {/* Три плитки с расшифровками (П.3b). В 8d.1 (Д4) прогресс-бар отсюда
+                убрали — уровней в игре не было, шкала «до кратного 1000» была
+                выдуманной. В S67 уровни появились: полоса вернулась настоящей,
+                её считает бэк. Баланс капель игрока наставнику не показываем —
+                инвариант №1; §8.7 разрешает ровно уровень и XP-прогресс. */}
             <div className="mentor-tiles">
                 {TILES.map((t) => (
                     <div key={t.key} className={`mentor-tile${t.muted ? ' mentor-tile--muted' : ''}`}>
@@ -136,6 +139,21 @@ const MentorPlayerProfile: React.FC<Props> = ({
                     </div>
                 ))}
             </div>
+
+            {page.level_cost > 0 && (
+                <div className="xp-level">
+                    <div className="xp-level-row">
+                        <span>Уровень {page.level}</span>
+                        <span className="xp-level-nums">{page.xp_in_level} / {page.level_cost}</span>
+                    </div>
+                    <div className="xp-level-rail">
+                        <div
+                            className="xp-level-fill"
+                            style={{ width: `${Math.max(0, Math.min(100, Math.round((page.xp_in_level / page.level_cost) * 100)))}%` }}
+                        />
+                    </div>
+                </div>
+            )}
 
             {/* Дарение. Остаток пула виден прямо здесь + шорткат «Пополнить» (Д2):
                 иначе пустой пул превращался в тупик — кнопка есть, подарить нечем. */}

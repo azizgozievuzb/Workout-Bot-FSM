@@ -170,6 +170,54 @@
 .light-theme .cube-stat { color: rgba(44, 32, 22, 0.62); }
 .light-theme .cube-stat-value { color: #2C2016; }
 
+/* --- S67: полоса прогресса до следующего уровня (Action) ---
+   Цвета заданы для ОБЕИХ тем явно (урок №23): «как у клиента Telegram»
+   ничего не доказывает — у юзера тёмный клиент, светлая тема ловит чёрное. */
+.xp-level {
+    margin-top: 10px;
+}
+
+.xp-level-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 13px;
+    margin-bottom: 6px;
+}
+
+.xp-level-nums {
+    font-variant-numeric: tabular-nums;
+}
+
+.xp-level-rail {
+    height: 6px;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.xp-level-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 320ms ease;
+}
+
+.dark-theme .xp-level-row { color: rgba(250, 245, 239, 0.6); }
+.dark-theme .xp-level-nums { color: rgba(250, 245, 239, 0.85); }
+.dark-theme .xp-level-rail { background: rgba(250, 245, 239, 0.14); }
+.dark-theme .xp-level-fill { background: #E8B23A; }
+
+.light-theme .xp-level-row { color: rgba(44, 32, 22, 0.62); }
+.light-theme .xp-level-nums { color: #2C2016; }
+.light-theme .xp-level-rail { background: rgba(44, 32, 22, 0.12); }
+.light-theme .xp-level-fill { background: #C98A12; }
+
+/* Нехватка капель на восстановление: та же плашка, но без кнопки —
+   цена названа, кнопки нет (урок №13b). */
+.restore-plate-note {
+    margin-top: 6px;
+    opacity: 0.85;
+}
+
 /* --- Locked role screen --- */
 
 .cube-locked {
