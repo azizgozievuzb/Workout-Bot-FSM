@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from ...core.deps import get_current_user
 from ...db.client import get_supabase
+from ...services import leveling
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,14 @@ class PlayerStatsResponse(BaseModel):
     # приезжает с лотом `title` полки наставника; None — звания нет.
     first_name: str | None = None
     player_title: str | None = None
+    # S67: XP и уровень. xp == global_score (одно поле в БД, два имени в ответе:
+    # global_score оставлен для совместимости, xp — человеческое имя).
+    # xp_in_level / level_cost — шкала текущего уровня: она визуально
+    # обнуляется на каждом уровне, а счётчик в БД остаётся один.
+    xp: int = 0
+    level: int = 0
+    xp_in_level: int = 0
+    level_cost: int = 0
 
 
 class PartnerStatsResponse(BaseModel):
@@ -94,8 +103,16 @@ async def get_my_stats(user: dict = Depends(get_current_user)):
         d = stats_data or {}
         logger.info("[/stats/me] Building response from: %s", d)
 
+        xp = int(d.get("global_score") or 0)
+        xp_settings = await leveling.get_settings(db)
+        level, xp_in_level, level_cost = leveling.level_from_xp(xp, xp_settings)
+
         response = PlayerStatsResponse(
             global_score=d.get("global_score", 0),
+            xp=xp,
+            level=level,
+            xp_in_level=xp_in_level,
+            level_cost=level_cost,
             three_day_score=d.get("three_day_score", 0),
             current_streak=d.get("current_streak", 0),
             best_streak=d.get("best_streak", 0),

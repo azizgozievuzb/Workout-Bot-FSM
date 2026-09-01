@@ -78,6 +78,10 @@ export interface PlayerPage {
     profile_chips: ProfileChip[];
     gender: string | null;
     xp: number;
+    /* S67: уровень и шкала. Баланс капель игрока наставнику НЕ отдаётся (§8.7). */
+    level: number;
+    xp_in_level: number;
+    level_cost: number;
     current_streak: number;
     best_streak: number;
     last_workout_date: string | null;

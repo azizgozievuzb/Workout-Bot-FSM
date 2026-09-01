@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field
 from ...core.access import compute_access, parse_dt
 from ...core.deps import get_bot, get_current_user
 from ...db.client import get_supabase
+from ...services import leveling
 from ...services import shelf as shelf_svc
 from ...services.bot_notify import send_bot_message
 from ...services.notifications import emit_notification
@@ -138,6 +139,11 @@ class PlayerPageResp(BaseModel):
     profile_chips: list[ProfileChip] = []
     gender: str | None = None
     xp: int
+    # S67: уровень и прогресс шкалы. §8.7 это наставнику РАЗРЕШАЕТ —
+    # запрещён только баланс капель игрока (инвариант №1), его тут нет и не было.
+    level: int = 0
+    xp_in_level: int = 0
+    level_cost: int = 0
     current_streak: int
     best_streak: int
     last_workout_date: str | None = None
@@ -508,6 +514,10 @@ async def player_page(
     sub_days_left = _days_left(me.get("_sub_expires_at"))
     blocked = await _blocked_keys(db, str(player_id), partnership_id)
     catalog = [c for c in await _catalog(db) if c.key not in blocked]
+    xp_val = int(stats.get("global_score") or 0)
+    p_level, p_xp_in_level, p_level_cost = leveling.level_from_xp(
+        xp_val, await leveling.get_settings(db)
+    )
     # NB: drops_balance игрока Ответственному не отдаём (§8.7).
     return PlayerPageResp(
         player_id=str(player_id),
@@ -519,7 +529,10 @@ async def player_page(
             ProfileChip(**c) for c in shelf_svc.profile_chips(player, sub_days_left)
         ],
         gender=player.get("gender"),
-        xp=int(stats.get("global_score") or 0),
+        xp=xp_val,
+        level=p_level,
+        xp_in_level=p_xp_in_level,
+        level_cost=p_level_cost,
         current_streak=int(stats.get("current_streak") or 0),
         best_streak=int(stats.get("best_streak") or 0),
         last_workout_date=stats.get("last_workout_date"),

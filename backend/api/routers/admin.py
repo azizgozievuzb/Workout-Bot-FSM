@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from ...core.deps import get_current_user, require_admin
 from ...db.client import get_supabase
+from ...services import leveling
 
 logger = logging.getLogger(__name__)
 
@@ -869,3 +870,90 @@ async def list_special_users(admin: dict = Depends(require_admin)):
         .execute()
     )
     return [AdminUserCard(**{k: r.get(k) for k in AdminUserCard.model_fields}) for r in (res.data or [])]
+
+
+# ===========================================================================
+# XP и уровни — админ (S67)
+# ===========================================================================
+# Семь чисел вместо таблицы уровней: уровни бесконечны, таблицу не заполнить, а
+# в таблице легко сделать 7-й уровень дешевле 6-го и не заметить. Предпросмотр
+# первых 10 уровней считает БЭК — это защита от бессмысленных значений и
+# гарантия, что админ видит ровно ту лестницу, по которой живут игроки
+# (округление в Python «к чётному» с JS Math.round не совпадает).
+
+class LevelPreviewRow(BaseModel):
+    level: int
+    cost: int
+    cumulative: int
+    freezes: int
+
+
+class XpSettingsResp(BaseModel):
+    xp_mult_main: float
+    xp_mult_light: float
+    level_base: int
+    level_early_step: float
+    level_late_step: float
+    level_boundary: int
+    level_freeze_rewards: dict[str, int]
+    preview: list[LevelPreviewRow]
+
+
+class UpdateXpSettingsReq(BaseModel):
+    xp_mult_main: float | None = Field(default=None, ge=0, le=100)
+    xp_mult_light: float | None = Field(default=None, ge=0, le=100)
+    level_base: int | None = Field(default=None, ge=1, le=1_000_000)
+    level_early_step: float | None = Field(default=None, ge=1, le=10)
+    level_late_step: float | None = Field(default=None, ge=1, le=10)
+    level_boundary: int | None = Field(default=None, ge=1, le=100)
+    level_freeze_rewards: dict[str, int] | None = None
+
+
+def _xp_resp(row: dict) -> XpSettingsResp:
+    s = leveling.normalize(row)
+    return XpSettingsResp(
+        **{k: s[k] for k in (
+            "xp_mult_main", "xp_mult_light", "level_base",
+            "level_early_step", "level_late_step", "level_boundary",
+            "level_freeze_rewards",
+        )},
+        preview=[LevelPreviewRow(**r) for r in leveling.ladder_preview(s, 10)],
+    )
+
+
+@general_router.get("/xp-settings", response_model=XpSettingsResp)
+async def get_xp_settings(admin: dict = Depends(require_admin)):
+    db = await get_supabase()
+    res = await (
+        db.table("app_settings").select(leveling.SETTINGS_COLS)
+        .eq("id", 1).maybe_single().execute()
+    )
+    return _xp_resp(res.data if res else None)
+
+
+@general_router.patch("/xp-settings", response_model=XpSettingsResp)
+async def update_xp_settings(
+    body: UpdateXpSettingsReq,
+    admin: dict = Depends(require_admin),
+):
+    db = await get_supabase()
+    update: dict = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    for col in (
+        "xp_mult_main", "xp_mult_light", "level_base",
+        "level_early_step", "level_late_step", "level_boundary",
+        "level_freeze_rewards",
+    ):
+        val = getattr(body, col)
+        if val is not None:
+            update[col] = val
+    if len(update) == 1:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+    if isinstance(update.get("level_freeze_rewards"), dict):
+        bad = [k for k in update["level_freeze_rewards"] if not k.isdigit()]
+        if bad:
+            raise HTTPException(status_code=400, detail=f"Bad level keys: {bad}")
+
+    res = await db.table("app_settings").update(update).eq("id", 1).execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="app_settings row missing")
+    return _xp_resp(res.data[0])

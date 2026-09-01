@@ -16,6 +16,11 @@ export interface PlayerStats {
     /** Эконом-патч №1: имя + звание для шапки главного экрана игрока. */
     first_name?: string | null;
     player_title?: string | null;
+    /** S67: XP и уровень. Лестницу считает БЭК — фронт только рисует. */
+    xp?: number;
+    level?: number;
+    xp_in_level?: number;
+    level_cost?: number;
 }
 
 export interface PartnerStats {

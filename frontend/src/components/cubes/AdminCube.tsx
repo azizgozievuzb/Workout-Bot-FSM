@@ -16,10 +16,12 @@ import {
     listPayments, refundPayment, listStarProducts, updateStarProduct, getStarsBalance,
 } from '../../api/adminPayments';
 import type { AdminPaymentRow, AdminStarProduct } from '../../api/adminPayments';
+import { getXpSettings, updateXpSettings } from '../../api/adminXp';
+import type { XpSettings, XpSettingsPatch } from '../../api/adminXp';
 import BanUserModal from '../shared/BanUserModal';
 import '../../styles/cubes.css';
 
-type AdminTab = 'promos' | 'connections' | 'settings' | 'bans' | 'payments';
+type AdminTab = 'promos' | 'connections' | 'settings' | 'bans' | 'payments' | 'xp';
 
 // ---------------------------------------------------------------------------
 // SettingsPanel
@@ -815,6 +817,104 @@ const SpecialUsersSection: React.FC = () => {
     );
 };
 
+// ---------------------------------------------------------------------------
+// XpSettingsSection (S67) — семь чисел экономики XP + предпросмотр лестницы
+// ---------------------------------------------------------------------------
+// Таблицы уровней здесь нет намеренно: уровни бесконечны, таблицу не заполнить,
+// а в ней легко сделать 7-й уровень дешевле 6-го и не заметить. Числа задают
+// лестницу разом, а предпросмотр (его считает БЭК той же формулой, что живёт
+// у игроков) показывает, что из них получилось.
+
+const XP_FIELDS: [keyof XpSettingsPatch, string, string][] = [
+    ['xp_mult_main', 'Множитель XP · main', 'XP = сумма баллов Gemini × это число'],
+    ['xp_mult_light', 'Множитель XP · light', 'то же для лёгкой зарядки'],
+    ['level_base', 'База 1-го уровня', 'сколько XP стоит первый уровень'],
+    ['level_early_step', 'Шаг до перелома', 'во сколько раз дорожает каждый ранний уровень'],
+    ['level_late_step', 'Шаг после перелома', 'во сколько раз дорожают дальние уровни'],
+    ['level_boundary', 'Уровень перелома', 'после него включается второй шаг'],
+];
+
+const XpSettingsSection: React.FC = () => {
+    const [data, setData] = useState<XpSettings | null>(null);
+    const [edits, setEdits] = useState<Record<string, string>>({});
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [toast, setToast] = useState('');
+    const show = (m: string) => { setToast(m); setTimeout(() => setToast(''), 2500); };
+
+    const apply = useCallback((s: XpSettings) => {
+        setData(s);
+        setEdits(Object.fromEntries(XP_FIELDS.map(([k]) => [k, String(s[k as keyof XpSettings])])));
+    }, []);
+
+    useEffect(() => {
+        getXpSettings().then(apply).catch(() => {}).finally(() => setLoading(false));
+    }, [apply]);
+
+    const save = async () => {
+        const patch: XpSettingsPatch = {};
+        for (const [key] of XP_FIELDS) {
+            const v = Number(edits[key as string]);
+            if (!Number.isFinite(v) || v < 0) { show('Числа должны быть неотрицательными'); return; }
+            if ((key === 'level_base' || key === 'level_boundary') && v < 1) { show('База и перелом ≥ 1'); return; }
+            if ((key === 'level_early_step' || key === 'level_late_step') && v < 1) { show('Шаги ≥ 1'); return; }
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (patch as any)[key] = v;
+        }
+        setSaving(true);
+        try { apply(await updateXpSettings(patch)); hapticNotification('success'); show('Сохранено'); }
+        catch { hapticNotification('error'); show('Ошибка сохранения'); }
+        finally { setSaving(false); }
+    };
+
+    if (loading) return <div className="cube-section-title" style={{ textAlign: 'center' }}>Загрузка…</div>;
+    if (!data) return <div className="cube-section-title" style={{ textAlign: 'center' }}>Не удалось загрузить</div>;
+
+    return (
+        <>
+            <div className="cube-card" style={{ marginBottom: 10 }}>
+                {XP_FIELDS.map(([key, label, hint]) => (
+                    <div key={key as string} className="settings-row" style={{ gap: 8 }}>
+                        <div className="settings-row-info">
+                            <div className="cube-player-name">{label}</div>
+                            <div className="cube-player-meta">{hint}</div>
+                        </div>
+                        <input className="admin-generator-select" style={{ width: 90 }} type="number" step="any" min={0}
+                            value={edits[key as string] ?? ''}
+                            onChange={(ev) => setEdits(s => ({ ...s, [key as string]: ev.target.value }))}
+                            onClick={(ev) => ev.stopPropagation()} />
+                    </div>
+                ))}
+                <button className="cube-btn-primary" disabled={saving}
+                    onClick={(e) => { e.stopPropagation(); save(); }}>
+                    {saving ? 'Сохраняем…' : '💾 Сохранить'}
+                </button>
+            </div>
+
+            {/* Живой предпросмотр: что получилось из чисел. Приезжает с сервера
+                вместе с ответом — то есть считан той же формулой, что у игроков. */}
+            <div className="cube-section-title">Первые 10 уровней</div>
+            <div className="cube-card">
+                <div className="settings-row" style={{ gap: 8, opacity: 0.6 }}>
+                    <div className="settings-row-info"><div className="cube-player-meta">уровень</div></div>
+                    <div className="cube-player-meta" style={{ width: 80, textAlign: 'right' }}>стоит</div>
+                    <div className="cube-player-meta" style={{ width: 90, textAlign: 'right' }}>всего XP</div>
+                    <div className="cube-player-meta" style={{ width: 40, textAlign: 'right' }}>❄️</div>
+                </div>
+                {data.preview.map(r => (
+                    <div key={r.level} className="settings-row" style={{ gap: 8 }}>
+                        <div className="settings-row-info"><div className="cube-player-name">{r.level}</div></div>
+                        <div style={{ width: 80, textAlign: 'right' }}>{r.cost}</div>
+                        <div style={{ width: 90, textAlign: 'right', opacity: 0.7 }}>{r.cumulative}</div>
+                        <div style={{ width: 40, textAlign: 'right', opacity: 0.7 }}>{r.freezes || '—'}</div>
+                    </div>
+                ))}
+            </div>
+            {toast && <div className="admin-toast">{toast}</div>}
+        </>
+    );
+};
+
 const PromosPanel: React.FC = () => {
     const [sub, setSub] = useState<'coupons' | 'tiers' | 'pricing' | 'special'>('coupons');
     return (
@@ -1024,12 +1124,14 @@ const AdminCube: React.FC = () => {
                 <button className={`tab-selector-btn${activeTab === 'promos' ? ' active' : ''}`} onClick={switchTab('promos')}>Купоны</button>
                 <button className={`tab-selector-btn${activeTab === 'connections' ? ' active' : ''}`} onClick={switchTab('connections')}>Соединения</button>
                 <button className={`tab-selector-btn${activeTab === 'payments' ? ' active' : ''}`} onClick={switchTab('payments')}>⭐ Платежи</button>
+                <button className={`tab-selector-btn${activeTab === 'xp' ? ' active' : ''}`} onClick={switchTab('xp')}>XP</button>
                 <button className={`tab-selector-btn${activeTab === 'settings' ? ' active' : ''}`} onClick={switchTab('settings')}>Настройки</button>
                 <button className={`tab-selector-btn${activeTab === 'bans' ? ' active' : ''}`} onClick={switchTab('bans')}>Баны</button>
             </div>
             {activeTab === 'promos' && <PromosPanel />}
             {activeTab === 'connections' && <ConnectionsPanel />}
             {activeTab === 'payments' && <PaymentsPanel />}
+            {activeTab === 'xp' && <XpSettingsSection />}
             {activeTab === 'settings' && <SettingsPanel />}
             {activeTab === 'bans' && <BanHistoryPanel />}
         </div>

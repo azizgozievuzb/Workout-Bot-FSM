@@ -27,6 +27,9 @@ export interface WorkoutConfig {
 export interface StartSessionResponse {
   session_id: string;
   started_at: string;
+  /** S67: тип и «свободность» решает сервер — фронт подстраивается под ответ. */
+  session_type: SessionType;
+  is_free: boolean;
 }
 
 export interface ClipResponse {
@@ -47,6 +50,14 @@ export interface FinishSessionResponse {
   day_closed: boolean;
   repeat: boolean;
   support_phrase: string | null;
+  /** S67: avg_score — это ТЕХНИКА (средний балл Gemini), xp_earned — начисление. */
+  xp_earned: number;
+  level: number;
+  xp_in_level: number;
+  level_cost: number;
+  level_ups: number[];
+  freezes_granted: number;
+  is_free: boolean;
 }
 
 export async function getWorkoutConfig(sessionType: SessionType = 'main'): Promise<WorkoutConfig> {
