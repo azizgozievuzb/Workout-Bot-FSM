@@ -956,4 +956,5 @@ async def update_xp_settings(
     res = await db.table("app_settings").update(update).eq("id", 1).execute()
     if not res.data:
         raise HTTPException(status_code=404, detail="app_settings row missing")
+    leveling.invalidate_cache()   # иначе минуту жила бы старая лестница
     return _xp_resp(res.data[0])

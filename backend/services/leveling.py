@@ -19,6 +19,7 @@ JS Math.round округляет .5 вверх и разошёлся бы на �
 from __future__ import annotations
 
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -75,16 +76,33 @@ def normalize(row: dict | None) -> dict:
     }
 
 
+# Кэш настроек (TTL 60 c). Их читает КАЖДЫЙ /stats/me — самый горячий эндпоинт
+# игрока, а один поход Railway→Supabase стоит ≈0.5 с (замер S66). Числа меняет
+# только админ, поэтому минута расхождения безопасна; PATCH зовёт invalidate().
+_CACHE: dict = {}
+_CACHE_TTL = 60.0
+
+
+def invalidate_cache() -> None:
+    _CACHE.clear()
+
+
 async def get_settings(db) -> dict:
-    """Читает настройки XP из app_settings (id=1). Ошибка → дефолты."""
+    """Настройки XP из app_settings (id=1), с кэшом. Ошибка → дефолты."""
+    now = time.monotonic()
+    if _CACHE.get("_ts", 0.0) + _CACHE_TTL > now and "data" in _CACHE:
+        return _CACHE["data"]
     try:
         res = await (
             db.table("app_settings").select(SETTINGS_COLS).eq("id", 1).maybe_single().execute()
         )
-        return normalize(res.data if res else None)
+        data = normalize(res.data if res else None)
     except Exception as e:  # настройки не должны валить тренировку
         logger.warning("[leveling] settings read failed → defaults: %s", e)
-        return normalize(None)
+        data = normalize(None)
+    _CACHE["data"] = data
+    _CACHE["_ts"] = now
+    return data
 
 
 def xp_for_session(total_score: int, session_type: str, s: dict) -> int:
