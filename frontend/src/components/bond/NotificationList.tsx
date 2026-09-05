@@ -83,7 +83,24 @@ export const NotificationList: React.FC = () => {
                     >
                         <span className={`notif-dot${isUnread ? ' notif-dot--unread' : ' notif-dot--read'}`} />
                         <div className="notif-row-content">
-                            <NotificationRenderer type={n.type} payload={n.payload} />
+                            {/* S67-fix: бэк уже пишет готовые русские title/message (с
+                                эмодзи) в одном месте с логикой — показываем их. Раньше
+                                список их игнорировал и собирал текст заново из
+                                type+payload, из-за чего тексты жили в двух местах и
+                                разъезжались: `level_up` в словаре не было вовсе (экран
+                                печатал «level_up: {"level":1,...}» по-английски), а у
+                                `freeze_consumed` из джобы 8c payload другой, чем ждёт
+                                рендерер («стрик ? дн.»). Рендерер оставлен запасным —
+                                на записи без текста. */}
+                            {(n.title || n.message) ? (
+                                <div className="notif-body">
+                                    {n.title && <strong>{n.title}</strong>}
+                                    {n.title && n.message ? ' ' : null}
+                                    {n.message}
+                                </div>
+                            ) : (
+                                <NotificationRenderer type={n.type} payload={n.payload} />
+                            )}
                             <div className="notif-ts">{formatTs(n.created_at)}</div>
                         </div>
                     </div>
