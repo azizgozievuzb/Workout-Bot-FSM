@@ -56,7 +56,7 @@
 
 ## 📐 Architecture & Standards
 
-- **Source of Truth:** XState machines (`/fsm_blueprints/`). Python backend handlers MUST map 1:1 to these machines.
+- **Источник правды — код и живая БД.** `/fsm_blueprints/` — **FSM-карта**: 8 XState-чертежей потоков; они НЕ исполняются (xstate нет ни во фронте, ни в бэке), только читаются. **Решение юзера 2026-09-02: карта обязана быть правдивой.** Любой коммит, меняющий поток (состояния, переходы, кнопки, гейты, guards), обновляет чертёж этого потока **в том же коммите**; расхождение карты с кодом — баг, чинится как баг. Зачем карта: 1,4 тыс. строк вместо 32 тыс. кода — дешёвый вход в потоки для постановок и смоуков. Это не второй источник правды (PLAYBOOK §5-4), а производная от кода, сверяемая с ним (урок №24).
 - **DB Relations:** Use `partnerships` table (1 Responsible : N Players).
 - **Frontend:** Vanilla CSS (no Tailwind). `@telegram-apps/sdk-react`, `zustand`, `axios`.
 - **Backend:** `Pydantic` for validation, `APScheduler` for cron.
@@ -74,7 +74,7 @@
 | `BACKLOG.md` | Парк идей/фич «на потом». Читается перед постановкой новой фазы. См. Workflow Protocol. |
 | **Схема БД** | НЕ в файлах-планах. Источник правды: живая БД через `my-supabase` (`list_tables`) + код (`backend/db`, `backend/models`, роутеры). `PLAN.md` удалён, `ROADMAP.md` → `_archive/` (апрель-2026, там ложь про boosts/shop_items/star_balance — S61). |
 | `frontend/public/orientation-lis81hed2ymoso80.html` | «Панель возвращения» юзера (человеческая сводка проекта в браузере). **Файл ОДИН, лежит в `frontend/public/` под неугадываемым именем** (решение юзера 2026-08-13): после пуша Vercel отдаёт его по прямой ссылке — юзер открывает с телефона. В корне репо `ORIENTATION.html` больше НЕТ, копий не заводить. Команда юзера **«обнови ORIENTATION.html»** = переписать ЭТОТ файл под текущее состояние: где мы, что сделано, что дальше, карта файлов, риски, **+ дописать строку в секцию «📜 Хроника»**. Также обновлять при закрытии крупной задачи вместе с SESSION_STATUS.md. Имя файла не менять — оно в закладках телефона; `<meta robots noindex>` в шапке не удалять. |
-| `fsm_blueprints/` | Core logic (8 XState machines). *Do not read all at once!* |
+| `fsm_blueprints/` | FSM-карта: 8 XState-чертежей потоков (документация, не исполняется). Читать чертёж нужного потока вместо кода; обязана совпадать с кодом — правило в Architecture. *Do not read all at once!* |
 
 **FSM Index (Reference only, read specific file on demand):**
 `000_rootMachine` (Router), `100_paymentMachine` (Stars/Coupons), `101_onboardingMachine` (Reg/Pairing), `102_adminMachine` (Panel), `103_workoutGateMachine` (Lobby), `104_responsibleMachine` (Mentor panel), `105_playerShopMachine` (Shop), `200_workoutSessionMachine` (Camera/AI/Timer).
@@ -89,7 +89,7 @@
    - Если в текущем плане есть подходящее место (зона проработана) → встрой фичу в план, удали из BACKLOG.
    - Если места нет (зона не готова) → оставь в BACKLOG, не трогай.
 5. Execute the task concisely.
-6. If writing code, verify against FSM logic. Если код/постановка задевает ИНВАРИАНТ (секция выше) — СТОП, вопрос юзеру.
+6. If writing code, verify against FSM logic. **Код меняет поток → чертёж обновляется в том же коммите** (правило FSM-карты, Architecture). Если код/постановка задевает ИНВАРИАНТ (секция выше) — СТОП, вопрос юзеру.
 7. Update `SESSION_STATUS.md` upon task completion. При закрытии смоука/сессии — добавь урок в `PLAYBOOK.md` («симптом → фикс», только реально ломавшееся); при закрытии фазы — ревизия PLAYBOOK.md.
 8. Если по ходу сессии родилась новая идея «на потом» — добавь в `BACKLOG.md` (3-5 строк: контекст + что делать + когда).
 9. Stop generating text immediately after the technical objective is met.
