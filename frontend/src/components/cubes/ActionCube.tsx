@@ -313,7 +313,10 @@ const PlayerView: React.FC = () => {
                         <div className="xp-level">
                             <div className="xp-level-row">
                                 <span>Уровень {stats.level ?? 0}</span>
-                                <span className="xp-level-nums">{inLevel} / {cost}</span>
+                                {/* Единица обязательна: без неё «0 / 625» — число ни о
+                                    чём, а на экране итога рядом живёт «XP +42»
+                                    (находка юзера на смоуке S67, 05.09). */}
+                                <span className="xp-level-nums">{inLevel} / {cost} XP</span>
                             </div>
                             <div className="xp-level-rail">
                                 <div className="xp-level-fill" style={{ width: `${pct}%` }} />
